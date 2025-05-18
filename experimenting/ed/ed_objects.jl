@@ -1,72 +1,43 @@
 # lattice #
-struct Lattice
-    lattice::AbstractGraph
-    type::String
-    dimensions::Vector
-end
-function create_rectangular_lattice(n, m)
-    return Lattice(Graphs.grid((n,m)), "rectangular", [n,m])
-end
-function create_square_lattice(n)
-    return Lattice(Graphs.grid((n,n)), "square", [n, n])
-end
-function neighbors(lattice::Lattice, v)
-    return Graphs.neighbors(lattice.lattice, v)
-end
-function nv(lattice::Lattice)
-    return Graphs.nv(lattice.lattice)
-end
-function reflection_mapping(lattice::Lattice, kind::Int)
+function reflection_mapping(lattice::AbstractLattice, dims)
     # kind is an integer specifying which axis the reflection is on. 
     # this number ranges from 1 to (whatever the rotational symmetry of lattice)
     d = Dict()
-    if lattice.type == "rectangular" || (lattice.type == "square" && kind <= 2)
-        xdim, ydim = lattice.dimensions
-        for iy ∈ 0:ydim-1
-            for ix ∈ 0:xdim-1
-                if kind == 1 # horizontal reflection
-                    d[iy*xdim + ix + 1] = iy*xdim + (xdim - ix)
-                else # vertical reflection
-                    d[iy*xdim + ix + 1] = (ydim-1 - iy)*xdim + ix + 1
-                end
-            end
-        end
-    elseif lattice.type == "square"
-        dim, _ = lattice.dimensions
-        for iy ∈ 0:dim-1
-            for ix ∈ 0:dim-1
-                if kind == 3 # diagonal reflection
-                    d[iy*dim + ix + 1] = ix*dim + iy + 1
-                else 
-                    d[iy*dim + ix + 1] = (dim-1 - ix)*dim + dim - iy
-                end
-            end
-        end
+    for (s, sp) ∈ zip(sites(lattice), reverse(collect(sites(lattice)), dims=dims))
+        d[s] = sp
     end
-
-
     return d
 end
-function rotation_mapping(lattice::Lattice)
+function rotation_mapping(lattice::AbstractLattice)
     d = Dict()
-    # rotates by 
-    if lattice.type == "rectangular"
-
+    for (s,sp) ∈ zip(_s, mapslices(rotr90, collect(sites(lattice)), dims=[1,2]))
+        d[s] = sp
     end
     return d
 end
 
+# defining comparing of coordinates
+for (k,op) in enumerate([:>, :isless, :<, :>=, :<=])
+    @eval function Base.$op(x::Coordinate{N}, y::Coordinate{N}) where N 
+        for (a,b) ∈ zip(x.coordinates, y.coordinates)
+            if a != b
+                return $op(a, b)
+            end
+        end
+        return $(k>3) # true if >= or <= otherwise not
+    end
+end
 struct HubbardSubspace
     N_up
     N_down
     N::Int
-    lattice::Lattice
+    lattice::AbstractLattice
 
-    function HubbardSubspace(N_up, N_down, lattice::Lattice)
+    function HubbardSubspace(N_up, N_down, lattice::AbstractLattice)
         N = -1
         new(N_up, N_down, N, lattice)
     end
-    function HubbardSubspace(N::Int, lattice::Lattice)
+    function HubbardSubspace(N::Int, lattice::AbstractLattice)
         new(-1, -1, N, lattice)
     end
 end
@@ -85,7 +56,7 @@ struct HubbardModel
     half_filling::Bool
 end
 
-function _combination_indexer!(a::Vector{T}, b::T, c::T, idx::Int, comb_dict, inv_comb_dict) where T
+function _combination_indexer!(a::Vector{T}, b::Int, c::Int, idx::Int, comb_dict, inv_comb_dict) where T
     for comb1 in combinations(a, b)
         set1 = Set(comb1)
         for comb2 in combinations(a, c)
@@ -140,7 +111,7 @@ struct CombinationIndexer{T}
     end
 end
 function get_subspace_dimension(Hs::HubbardSubspace)
-    L = nv(Hs.lattice)
+    L = prod(size(Hs.lattice))
     if Hs.N == -1
         total = 0 
         for n_up in Hs.N_up
@@ -170,6 +141,7 @@ end
 function index(self::CombinationIndexer, comb1::Set, comb2::Set)
     return self.comb_dict[(comb1, comb2)]  # Use tuple as key
 end
+
 
 
 

@@ -4,8 +4,8 @@ function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bo
     ### a and b (where a could be larger or less than b). lower_eq and upper_eq specify
     ### whether the upper/lower bound is an equality or an inequality
     count = 0
-    upper_bound = maximum([a,b]) 
-    lower_bound = minimum([a,b])
+    upper_bound = max(a,b) 
+    lower_bound = min(a,b)
     for elem in s
         if lower_eq
             cond1 = lower_bound <= elem
@@ -27,7 +27,7 @@ function create_cicj(Hs::HubbardSubspace)
     # c^dagger_i c_j 
 
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:nv(Hs.lattice)), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(collect(1:prod(size((Hs.lattice)))), get_subspace_info(Hs)...)
     cicj = [spzeros(Float64, dim, dim) for _ in 1:length(indexer.a), _ in 1:length(indexer.a), _ in 1:2]
     for (i1, conf1) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
@@ -69,7 +69,7 @@ function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
         end
     end
 end
-function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; iequalsj::Bool=false, NN::Union{Missing, AbstractGraph}=missing)
+function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; iequalsj::Bool=false, NN::Union{Missing, AbstractLattice}=missing)
     if iequalsj
         create_chemical_potential!(rows, cols, vals, 1/4*magnitude, indexer)
         create_hubbard_interaction!(rows, cols, vals, -1/2*magnitude, false, indexer)
@@ -94,7 +94,7 @@ function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
         push!(vals, total/4*magnitude)
     end
 end
-function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractGraph}=missing)
+function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing)
     # This is for i!=j
     # c+_{i,up}c_{i,down}c+_{j,down}c_{j,up}
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
@@ -125,14 +125,14 @@ function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
     create_SiSj!(rows, cols, vals, magnitude, indexer)
 
 end
-function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Float64, lattice::Lattice, indexer::CombinationIndexer)
+function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Float64, lattice::AbstractLattice, indexer::CombinationIndexer)
     for (i1, conf1) in enumerate(indexer.inv_comb_dict)
         # if length(intersect(conf1[1], conf1[2])) > 0 
         #     continue
         # end
         for σ ∈ [1, 2]
             for site_index1 ∈ conf1[σ]
-                for site_index2 ∈ neighbors(lattice, site_index1)
+                for site_index2 ∈ Set(neighbors(lattice, site_index1))
                     if site_index2 ∉ conf1[σ]
                         new_conf = replace(conf1[σ], site_index1=>site_index2)
                         # if length(intersect(new_conf, conf1[3-σ])) > 0 
@@ -198,17 +198,18 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
     # hermitian and unitary matrix that reflects across the x axis
     for (i, conf) in enumerate(indexer.inv_comb_dict)
         push!(rows, i)
+        # println(conf[1])
+        # println(mapping)
         new_conf1 = replace(conf[1], mapping...)
         new_conf2 = replace(conf[2], mapping...)
         push!(cols, index(indexer, new_conf1, new_conf2))
-        println()
         push!(vals, magnitude)
     end
 end
 
 function create_operator(Hs::HubbardSubspace)
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:nv(Hs.lattice)), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(collect(1:prod(size(Hs.lattice))), get_subspace_info(Hs)...)
 
     rows = Int[]
     cols = Int[]
@@ -225,7 +226,7 @@ end
 function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:nv(Hs.lattice)), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
 
     rows = Int[]
     cols = Int[]
@@ -254,7 +255,7 @@ end
 function create_Heisenberg(t,J, Hs::HubbardSubspace)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:nv(Hs.lattice)), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(collect(1:prod(size(Hs.lattice))), get_subspace_info(Hs)...)
 
     rows = Int[]
     cols = Int[]
