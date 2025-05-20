@@ -15,7 +15,15 @@ function rotation_mapping(lattice::AbstractLattice)
     end
     return d
 end
-
+function translation_mapping(lattice::AbstractLattice, dims)
+    d = Dict()
+    shift = zeros(length(size(sites(lattice))))
+    shift[dims] = 1
+    for (s,sp) ∈ zip(sites(lattice), circshift(collect(sites(lattice)), shift))
+        d[s] = sp
+    end
+    return d
+end
 # defining comparing of coordinates
 for (k,op) in enumerate([:>, :isless, :<, :>=, :<=])
     @eval function Base.$op(x::Coordinate{N}, y::Coordinate{N}) where N 

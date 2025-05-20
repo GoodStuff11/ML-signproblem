@@ -1,4 +1,71 @@
+function permutation_parity(a::Vector)
+    p = sortperm(a, alg=MergeSort)
+    visited = falses(length(p))
+    parity = 0
+    for i in eachindex(p)
+        if !visited[i]
+            len = 0
+            j = i
+            while !visited[j]
+                visited[j] = true
+                j = p[j]
+                len += 1
+            end
+            parity += len - 1  # Each cycle of length `len` contributes (len - 1) swaps
+        end
+    end
+    return parity % 2
+end
 
+function reordered_electron_parity(conf1::Vector, conf2::Vector, mapping)
+    # given configurations of spin up and spin down electrons,
+    # first map them to their new locations and find the number of 
+    # permutations requires to reorder them. 1 if even, -1 if odd.
+    arr = sort(vcat(conf1, conf2))
+    for i in eachindex(arr)
+        arr[i] = mapping[arr[i]]
+    end
+    parity = permutation_parity(arr)
+    return 1-2*parity
+
+end
+function degeneracy_count(E)
+    Ediff = diff(E)
+    Ediff[abs.(Ediff) .< 1e-10] .= 0
+    degen_tally = Dict()
+    count = 0
+    for d ∈ Ediff
+        if d == 0
+            count += 1
+        elseif count > 0
+            if haskey(degen_tally, count+1)
+                degen_tally[count+1] += 1
+            else
+                degen_tally[count+1] = 1
+            end
+            count = 0
+        end
+    end
+    if count > 0
+        if haskey(degen_tally, count+1)
+            degen_tally[count+1] += 1
+        else
+            degen_tally[count+1] = 1
+        end
+    end
+    return degen_tally
+end
+function filter_matrix_by_vector(M::AbstractMatrix, v::AbstractVector, target::Real; atol=1e-8)
+    # Ensure v has the same length as the number of rows and columns of M
+    size(M, 1) == size(M, 2) || error("Matrix must be square to filter rows and columns equally.")
+    length(v) == size(M, 1) || error("Length of vector must match the dimensions of the matrix.")
+
+    # Find indices in v approximately equal to the target value
+    idx = findall(x -> isapprox(x, target; atol=atol), v)
+
+    # Filter both rows and columns using the found indices
+    return M[idx, idx]
+end
 function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bool=true) where T
     ### given a set of numbers s, counts the number of elements that are between
     ### a and b (where a could be larger or less than b). lower_eq and upper_eq specify
@@ -57,6 +124,11 @@ function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
     for (i1, conf) in enumerate(indexer.inv_comb_dict) 
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
+                site_index = Set([site_index])
+                # println(conf[1])
+                # println(site_index)
+                # println(union(conf[1], site_index))
+                # println(indexer)
                 if σ == 1
                     i2 = index(indexer, setdiff(conf[1], site_index), union(conf[2], site_index))
                 else
@@ -126,29 +198,29 @@ function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
 
 end
 function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Float64, lattice::AbstractLattice, indexer::CombinationIndexer)
-    for (i1, conf1) in enumerate(indexer.inv_comb_dict)
-        # if length(intersect(conf1[1], conf1[2])) > 0 
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        # if length(intersect(conf[1], conf[2])) > 0 
         #     continue
         # end
         for σ ∈ [1, 2]
-            for site_index1 ∈ conf1[σ]
+            for site_index1 ∈ conf[σ]
                 for site_index2 ∈ Set(neighbors(lattice, site_index1))
-                    if site_index2 ∉ conf1[σ]
-                        new_conf = replace(conf1[σ], site_index1=>site_index2)
-                        # if length(intersect(new_conf, conf1[3-σ])) > 0 
+                    if site_index2 ∉ conf[σ]
+                        new_conf = replace(conf[σ], site_index1=>site_index2)
+                        # if length(intersect(new_conf, conf[3-σ])) > 0 
                         #     continue
                         # end
                         if σ == 1
-                            i2 = index(indexer, new_conf, conf1[2])
+                            i2 = index(indexer, new_conf, conf[2])
                         else
-                            i2 = index(indexer, conf1[1], new_conf)
+                            i2 = index(indexer, conf[1], new_conf)
                         end
                         # evaluating this sign is likely the source of any error
                         # sign from jordan-wigner string. assuming i<j, c+_i c_j gives a positive sign times (-1)^(# electrons between sites i and j)
                         # if j < i, then there's an extra negative sign
                         # sign = (-1)^count_in_range(new_conf, site_index1, site_index2)
-                        sign = (-1)^(count_in_range(conf1[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
-                                    count_in_range(if (σ == 2) new_conf else conf1[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
+                        sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
+                                    count_in_range(if (σ == 2) new_conf else conf[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
                                     (site_index1 > site_index2))
                         # println(sign)
                         push!(rows, i1)
@@ -164,7 +236,6 @@ end
 function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer)
     if half_filling
         for (i, conf) in enumerate(indexer.inv_comb_dict)
-            total_U = 0
             num_negative = length(setdiff(union(conf[1], conf[2]), intersect(conf[1], conf[2])))
             num_positive = length(indexer.a) - num_negative
             push!(rows, i)
@@ -202,22 +273,56 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
         # println(mapping)
         new_conf1 = replace(conf[1], mapping...)
         new_conf2 = replace(conf[2], mapping...)
+        sign = reordered_electron_parity(collect(conf[1]), collect(conf[2]), mapping)
         push!(cols, index(indexer, new_conf1, new_conf2))
-        push!(vals, magnitude)
+        push!(vals, magnitude*sign)
     end
 end
+function create_L2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
+    # sum Sz^2 operator
+    create_hubbard_interaction!(rows, cols, vals, magnitude, false, indexer)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        Nup = length(conf[1])
+        Ndown = length(conf[2])
+        n = length(indexer.a)
+        push!(rows, i1)
+        push!(cols, i1)
+        push!(vals, magnitude*((Nup+Ndown-n)^2/4-(Nup+Ndown-n)))
 
-function create_operator(Hs::HubbardSubspace)
+        # L+L-  +  L-L+
+        for site_index1 ∈ intersect(conf[1], conf[2])
+            for site_index2 ∈ setdiff(indexer.a, union(conf[1], conf[2]))
+                i2 = index(indexer, replace(conf[1], site_index1=>site_index2), replace(conf[2], site_index1=>site_index2))
+                push!(rows, i1)
+                push!(cols, i2)
+                push!(vals, magnitude*(-1)^(sum(site_index1.coordinates) + sum(site_index2.coordinates)))
+            end
+        end
+    end
+
+end
+
+function create_operator(Hs::HubbardSubspace, op; kind=1)
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:prod(size(Hs.lattice))), get_subspace_info(Hs)...)
-
+    indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
     rows = Int[]
     cols = Int[]
     vals = Float64[]
 
     #insert stuff here
-    mapping = reflection_mapping(Hs.lattice, 1)
-    create_transform!(rows, cols, vals, 1.0, mapping, indexer)
+    if op == :σ
+        mapping = reflection_mapping(Hs.lattice, kind)
+        create_transform!(rows, cols, vals, 1.0, mapping, indexer)
+    elseif op == :Sx
+        create_Sx!(rows, cols, vals, 1.0, indexer)
+    elseif op == :S2
+        create_S2!(rows, cols, vals, 1.0, indexer)
+    elseif op == :L2
+        create_L2!(rows, cols, vals, 1.0, indexer)
+    elseif op == :T
+        mapping = translation_mapping(Hs.lattice, kind)
+        create_transform!(rows, cols, vals, 1.0, mapping, indexer)
+    end
 
     H = sparse(rows, cols, vals, dim, dim)
     
@@ -237,10 +342,13 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bo
     create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer)
     create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
     if perturbations
-        create_Sz!(rows, cols, vals, sqrt(2)*1e-5, indexer)
-        create_S2!(rows, cols, vals, sqrt(3)*1e-5, indexer)
-        mapping = reflection_mapping(Hs.lattice, 1)
-        create_transform!(rows, cols, vals, sqrt(5)*1e-5, mapping, indexer)
+        # create_Sx!(rows, cols, vals, sqrt(2)*1e-5, indexer)
+        # create_S2!(rows, cols, vals, sqrt(3)*1e-5, indexer)
+        create_L2!(rows, cols, vals, sqrt(5)*1e-5, indexer)
+        # for dim ∈ [1,2]
+        #     mapping = reflection_mapping(Hs.lattice, dim)
+        #     create_transform!(rows, cols, vals, sqrt(1+sqrt(dim+1))*1e-5, mapping, indexer)
+        # end
     end
     # create_SziSzj!(rows, cols, vals, 0.021, indexer; iequalsj=true)
     # create_operator!(rows, cols, vals, 1e-2, indexer)
