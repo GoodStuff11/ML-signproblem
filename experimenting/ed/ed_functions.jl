@@ -55,17 +55,93 @@ function degeneracy_count(E)
     end
     return degen_tally
 end
-function filter_matrix_by_vector(M::AbstractMatrix, v::AbstractVector, target::Real; atol=1e-8)
-    # Ensure v has the same length as the number of rows and columns of M
-    size(M, 1) == size(M, 2) || error("Matrix must be square to filter rows and columns equally.")
-    length(v) == size(M, 1) || error("Length of vector must match the dimensions of the matrix.")
-
-    # Find indices in v approximately equal to the target value
+function eigenvalue_of_qn(vec::Vector; atol::Real=1e-8)
+    unique_vals = []
+    for x in vec
+        if all(y -> abs(x - y) > atol, unique_vals)
+            push!(unique_vals, x)
+        end
+    end
+    return unique_vals
+end
+function eigenvalue_mask(v::AbstractVector, qn::Int; atol=1e-8)
+    target = eigenvalue_of_qn(v)[qn]
     idx = findall(x -> isapprox(x, target; atol=atol), v)
 
-    # Filter both rows and columns using the found indices
-    return M[idx, idx]
+    return idx, target
 end
+
+# block diagonalization 
+function build_block_graph(A; tol=1e-12)
+    n = size(A, 1)
+    G = Graphs.SimpleGraph(n)
+    for i in 1:n, j in 1:n
+        if abs(A[i,j]) > tol && i != j
+            Graphs.add_edge!(G, i, j)
+        end
+    end
+    return G
+end
+
+# Find connected components (blocks)
+function find_nonadjacent_blocks(A; tol=1e-12)
+    G = build_block_graph(A; tol=tol)
+    comps = Graphs.connected_components(G)
+    a = filter(x->length(x)!=1,comps)
+    b = filter(x->length(x)==1,comps)
+    if length(b) > 0
+        return a,reduce(vcat, b)
+    else
+        return a, []
+    end
+end
+# end of block diagonalization
+
+function filter_subspace(H, op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
+    # Ensure inputs are complex
+    h_tmp = ComplexF64.(copy(H))
+    op_list_tmp = [ComplexF64.(copy(op)) for op in op_list]
+    n = size(H, 1)
+
+    # Initialize total basis transform as identity
+    V_total = Matrix{ComplexF64}(I, n, n)
+    indices = collect(1:n)
+    eigenvalues = []
+
+    for (i, op) in enumerate(op_list_tmp)
+        # Restrict operator and Hamiltonian to current subspace
+        V_total = V_total[:, indices]
+        op_sub = V_total'*op*V_total
+  # restrict total basis transform too
+
+        blocks, others = find_nonadjacent_blocks(op_sub)
+        all_eigenvalues = zeros(ComplexF64, length(indices))
+        if length(others) > 0
+            all_eigenvalues[others] = diag(op_sub)[others]
+        end
+        indices = []
+        for block in blocks
+            # Diagonalize current operator
+            # println(sum(abs.(op_sub' - op_sub)))
+            _, V, E = schur(op_sub[block, block]) # diagonalizes normal matrices
+            # println(sum(abs.(V'*V - I)))
+            # println()
+            all_eigenvalues[block] = E
+            V_total[:, block] += V_total[:, block] * (V-I)
+        end
+        sort!(indices)
+        idx_mask, selected_eigs = eigenvalue_mask(all_eigenvalues, qn_list[i]; atol=atol)
+        push!(eigenvalues, selected_eigs)
+        append!(indices, idx_mask)
+        # Apply current transform
+    end
+    V_total = V_total[:, indices]
+    # println(sum(abs.(V_total'*V_total - I)))
+    h_tmp = V_total'*h_tmp*V_total
+
+    return h_tmp, eigenvalues, indices, V_total
+end
+
 function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bool=true) where T
     ### given a set of numbers s, counts the number of elements that are between
     ### a and b (where a could be larger or less than b). lower_eq and upper_eq specify
