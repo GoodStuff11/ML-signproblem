@@ -97,11 +97,10 @@ function find_nonadjacent_blocks(A; tol=1e-12)
 end
 # end of block diagonalization
 
-function filter_subspace(H, op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
+function filter_subspace(op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
     # Ensure inputs are complex
-    h_tmp = ComplexF64.(copy(H))
     op_list_tmp = [ComplexF64.(copy(op)) for op in op_list]
-    n = size(H, 1)
+    n = size(op_list[1], 1)
 
     # Initialize total basis transform as identity
     V_total = Matrix{ComplexF64}(I, n, n)
@@ -135,11 +134,39 @@ function filter_subspace(H, op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
         append!(indices, idx_mask)
         # Apply current transform
     end
+     # this matrix is composed of a unitary and a projector. It's unitary property is ensured
     V_total = V_total[:, indices]
     # println(sum(abs.(V_total'*V_total - I)))
-    h_tmp = V_total'*h_tmp*V_total
 
-    return h_tmp, eigenvalues, indices, V_total
+    return V_total, eigenvalues
+end
+function count_degeneracies_per_subspace(H, ops)
+    # returns a dictionary where the input is the quantum number, which maps to
+    # a tuple containing the a dict containing the number of degeneracies and 
+    # the dimension of the subspace
+    degen = Dict()
+    n = length(ops)
+    indices = ones(Int64, n)
+    while true
+        try
+            V, _ = filter_subspace(ops, indices)
+            H_sub = V'*H*V
+            degen[copy(indices)] = [degeneracy_count(real.(eigvals(H_sub))), size(H_sub)[1]]
+            indices[end] += 1
+        catch BoundsError
+            if all(indices[2:end] .== 1)
+                break
+            end
+            for j in n:-1:2
+                if indices[j] > 1
+                    indices[j] = 1
+                    indices[j-1] += 1
+                    break
+                end
+            end
+        end
+    end
+    return degen
 end
 
 function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bool=true) where T
@@ -212,7 +239,7 @@ function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
                 end
                 push!(rows, i1)
                 push!(cols, i2)
-                push!(vals, magnitude)
+                push!(vals, magnitude/2)
             end
         end
     end
