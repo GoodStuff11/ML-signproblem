@@ -482,4 +482,51 @@ function create_Heisenberg(t,J, Hs::HubbardSubspace)
     return H, indexer
 end
 
+function compute_conf_differences(s1::Tuple{Set, Set}, s2::Tuple{Set, Set})
+    """
+    The weight is the number of differences between two sets. Also,
+    this is twice the number of swaps required to turn one set into the other
+    """
+    creation = Tuple([setdiff(s2[i], s1[i]) for i=1:2])
+    annihilation = Tuple([setdiff(s1[i], s2[i]) for i=1:2])
+    return creation, annihilation, sum([length(k) for k in creation])
+end
 
+function collect_all_conf_differences(indexer::CombinationIndexer)
+    """
+    returns a dictionary weights and dictionary weight_inv. weights maps 
+    a tuple of indices (sorted) to their corresponding weight. weight_inv
+    maps a weight to an array of all pairs with that weight.
+    """
+    difference_dict = Dict()
+    for (i, s1) in enumerate(indexer.inv_comb_dict)
+        for (j, s2) in enumerate(indexer.inv_comb_dict[i+1:end])
+            j += i
+            creation, annihilation, N = compute_conf_differences(s1, s2)
+            if haskey(difference_dict, N)
+                if haskey(difference_dict[N], (creation, annihilation))
+                    push!(difference_dict[N][(creation, annihilation)], (i,j))
+                else
+                    difference_dict[N][(creation, annihilation)] = [(i,j)]
+                end
+            else
+                difference_dict[N] = Dict((creation, annihilation)=>[(i,j)])
+            end
+        end
+    end
+    return difference_dict
+end
+function find_N_body_interactions(U::AbstractArray, indexer::CombinationIndexer)
+    H = -1im*log(U)
+    difference_dict = collect_all_conf_differences(indexer)
+    for (N, N_diff_dict) in difference_dict
+        for (site_diff, index_pairs) in N_diff_dict
+            creation, annihilation = site_diff
+            for (i,j) in index_pairs
+                common_sites = [intersect(indexer.inv_comb_dict[i][k], indexer.inv_comb_dict[j][k]) for k=1:2]
+                H[i,j] #unfinished
+            end
+        end
+    end
+
+end
