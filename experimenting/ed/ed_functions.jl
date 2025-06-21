@@ -519,14 +519,207 @@ end
 function find_N_body_interactions(U::AbstractArray, indexer::CombinationIndexer)
     H = -1im*log(U)
     difference_dict = collect_all_conf_differences(indexer)
-    for (N, N_diff_dict) in difference_dict
+
+    n_electrons = sum([length(indexer.inv_comb_dict[1][j]) for j=1:2])
+    second_quantized_order_labels = Dict()
+    n_electrons = sum([length(indexer.inv_comb_dict[1][j]) for j=1:2])
+    # defining range of indices in the second quantized representation
+    d = length(indexer.a)*2
+    m = 1
+    for order ∈ 1:n_electrons
+        if order == 1
+            second_quantized_order_labels[order] = 1:d^(2*order)
+            m = (length(indexer.a)*2)^(2*order)
+        else
+            second_quantized_order_labels[order] = (m+1):(m+d^(2*order))
+            m += d^(2*order)
+        end
+    end
+    second_quantized_dimension = sum(length(s) for s in values(second_quantized_order_labels))
+    second_quantized_solution = spzeros(ComplexF64, second_quantized_dimension)
+    second_quantized_nullspace = []
+    site_indexer = merge(Dict((s,:up)=>k for (k,s) in enumerate(indexer.a)), 
+                        Dict((s,:down)=>k+length(indexer.a) for (k,s) in enumerate(indexer.a)))
+    # inv_site_indexer = [[(s,:up) for s in indexer.a]; [(s,:down) for s in indexer.a]]
+
+    # difference_dict = collect_all_conf_differences(indexer)
+    for (swaps, N_diff_dict) in difference_dict
+        # println(swaps)
         for (site_diff, index_pairs) in N_diff_dict
             creation, annihilation = site_diff
+
+            params = binomial(2*length(indexer.a) - 2*swaps, n_electrons-swaps)
+            variables = cumsum([binomial(2*length(indexer.a) - 2*swaps, k) for k in 0:n_electrons-swaps])
+            min_order = argmax(variables .- params .>= 0)
+
+            # this maps an index to a combination of sites (not including the hopping ones) which
+            # have n_i applied on them
+            variable_mapping = [] 
+            inverse_variable_mapping = Dict()
+            
+            # defining variable_mapping and inverse_variable_mapping
+            var_index = 1
+            sites_available = [setdiff(setdiff(indexer.a, creation[σ]), annihilation[σ]) for σ in 1:2]
+            for n_operators in 0:min_order-1
+                for n_up in 0:n_operators
+                    n_down = n_operators - n_up
+                    up_site_combs = [Set(s) for s in combinations(sites_available[1], n_up)]
+                    down_site_combs = [Set(s) for s in combinations(sites_available[2], n_down)]
+                    for filled_sites in Iterators.product(up_site_combs, down_site_combs)
+                        push!(variable_mapping, filled_sites)
+                        inverse_variable_mapping[filled_sites] = var_index
+                        var_index += 1
+                    end
+                end
+            end
+
+
+            matrix = zeros(ComplexF64, (params,variables[min_order]))
+            vector = zeros(ComplexF64, params)
+            # break
+            row_index = 1
             for (i,j) in index_pairs
                 common_sites = [intersect(indexer.inv_comb_dict[i][k], indexer.inv_comb_dict[j][k]) for k=1:2]
-                H[i,j] #unfinished
+                for (col_index, s) in enumerate(variable_mapping)
+                    # col_index = inverse_variable_mapping[Tuple(common_sites)]
+                    if issubset(s[1], common_sites[1]) && issubset(s[2], common_sites[2])
+                        matrix[row_index, col_index] = 1
+                    end
+                end
+                vector[row_index] = H[i,j]
+                row_index += 1
             end
+
+            nullspace_solution  = nullspace(matrix)
+            particular_solution = matrix \ vector
+            if length(nullspace_solution) >0 
+                push!(second_quantized_nullspace,spzeros(ComplexF64,second_quantized_dimension))
+            end
+
+            # put solution into a sparse matrix form in second quantized
+            #figure out the indices for the sites, map it to an index and assign it to the sparse vector
+            creation_index_list = []
+            annihilation_index_list = []
+            for (σ_i, σ) ∈ enumerate([:up, :down])
+                for create_site in creation[σ_i]
+                    push!(creation_index_list,site_indexer[(create_site, σ)])
+                end
+                for annihilate_site in annihilation[σ_i]
+                    push!(annihilation_index_list,site_indexer[(annihilate_site, σ)])
+                end
+            end
+            indices = [sort(creation_index_list) sort(annihilation_index_list)]'[:]
+
+            for (k,s) in enumerate(variable_mapping)
+                _indices = copy(indices)
+                for (σ_i, σ) in enumerate([:up, :down])
+                    for site in s[σ_i]
+                        push!(_indices,site_indexer[(site, σ)])
+                        push!(_indices,site_indexer[(site, σ)])
+                    end
+                end
+                order = swaps + length(s[1]) + length(s[2])
+                # println("order: $order swaps: $swaps indices: $_indices k: $k")
+                starting_index = minimum(second_quantized_order_labels[order])
+                i = sum((_indices[n] - 1)*d^(n-1) for n in eachindex(_indices))
+                second_quantized_solution[starting_index + i] = particular_solution[k]
+                if length(nullspace_solution) > 0 
+                    second_quantized_nullspace[end][starting_index + i] = nullspace_solution[k]
+                end
+            end
+        end
+
+    end
+    return second_quantized_solution, second_quantized_nullspace, second_quantized_order_labels
+
+end
+
+
+function greedy_col_permutation_for_diag(A::AbstractMatrix)
+    @assert size(A, 1) == size(A, 2) "Matrix must be square"
+
+    n = size(A, 1)
+    assigned_cols = falses(n)
+    permutation = zeros(Int, n)
+
+    for row in 1:n
+        best_col = 0
+        best_val = -Inf
+
+        for col in 1:n
+            if !assigned_cols[col] && abs(A[row, col]) > best_val
+                best_val = abs(A[row, col])
+                best_col = col
+            end
+        end
+
+        if best_col == 0
+            error("Failed to assign col for row $row — no unassigned cols left.")
+        end
+
+        permutation[row] = best_col
+        assigned_cols[best_col] = true
+    end
+
+    A_permuted = A[:, permutation]
+    return permutation, A_permuted
+end
+function create_consistent_basis(H::Vector, ops::Vector)
+    degen = count_degeneracies_per_subspace(H[1], ops)
+    return create_consistent_basis(H, degen)
+end
+function create_consistent_basis(H::Vector, degen::Dict)
+    """
+    H is a list of hamiltonians (matrices) where adjacent elements are
+    sufficiently close to each other so that energy eigenstates with adjacent
+    Hamiltonians should have high overlap.
+
+    degen comes from the output of count_degeneracies_per_subspace()
+
+    Returns a vector of unitary operators which diagonalize the Hamiltonian,
+    with the property that V[i]'*V[i+1] approx diagonal.
+
+    """
+    degen_rm_U = []
+    transforms = Dict()
+    for (indices, val) in degen
+        prev_perm = nothing
+        prev_phases = nothing
+        for (h_i, h) in enumerate(H) # assumes these hamiltonians are sorted
+            # println(indices)
+            if indices in keys(transforms)
+                basis_transform = transforms[indices]
+            else
+                basis_transform, _ = filter_subspace(ops, indices)
+                transforms[indices] = basis_transform
+            end
+            # algorithm for uncrossing eigenstates
+            _, V1, _ = schur(basis_transform'*h*basis_transform)
+            if isnothing(prev_perm)
+                prev_perm = 1:size(V1, 2)
+                prev_phases = ones(size(V1,2))
+            end
+            if h_i == 1
+                perm = 1:size(V1, 2)
+                phases = I
+            else
+                _, V0, _ = schur(basis_transform'*H[h_i-1]*basis_transform)
+                perm, mat = greedy_col_permutation_for_diag((V0[:,prev_perm]*prev_phases)'*V1)
+                phases = diagm(abs.(diag(mat)) ./diag(mat))
+                # println(diag(phases*mat))
+            end
+            
+
+            if length(degen_rm_U) < h_i
+                push!(degen_rm_U,basis_transform*V1[:,perm]*phases)
+            else
+                degen_rm_U[h_i] = hcat(degen_rm_U[h_i],basis_transform*V1[:,perm]*phases)
+            end
+            prev_perm = perm
+            prev_phases = phases
         end
     end
 
+
+    return degen_rm_U
 end

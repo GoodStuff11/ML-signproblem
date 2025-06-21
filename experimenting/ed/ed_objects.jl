@@ -77,6 +77,7 @@ function _combination_indexer!(a::Vector{T}, b::Int, c::Int, idx::Int, comb_dict
     end
     return idx
 end
+
 struct CombinationIndexer{T}
     # Given a vector of labels a (typically these would correspond to site numberings),
     # this object associates each permutation of spin up and spin down dirac fermions
@@ -136,6 +137,7 @@ function get_subspace_dimension(Hs::HubbardSubspace)
         end
     return total
 end
+
 
 # function index(CI::CombinationIndexer, comb::Vector)
 #     return CI.comb_dict[Set(comb)]
