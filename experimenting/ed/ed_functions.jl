@@ -29,6 +29,22 @@ function reordered_electron_parity(conf1::Vector, conf2::Vector, mapping)
     return 1-2*parity
 
 end
+function degenerate_subspaces(E)
+    # assumes that the energy eigenstates are sorted
+    Ediff = diff(E)
+    Ediff[abs.(Ediff) .< 1e-10] .= 0
+    subspaces = []
+    starting_index = 1
+    for i ∈ eachindex(Ediff)
+        if Ediff[i] != 0 
+            push!(subspaces, starting_index:i)
+            starting_index = i+1
+        end
+    end
+    push!(subspaces, starting_index:length(Ediff)+1)
+
+    return subspaces
+end
 function degeneracy_count(E)
     Ediff = diff(E)
     Ediff[abs.(Ediff) .< 1e-10] .= 0
@@ -139,6 +155,14 @@ function filter_subspace(op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
     # println(sum(abs.(V_total'*V_total - I)))
 
     return V_total, eigenvalues
+end
+function filter_degenerate_subspace(H_unpert, H_pert, unperturbed_eigenstates)
+    unpert_E = real.(diag(unperturbed_eigenstates'*H_unpert*unperturbed_eigenstates))
+    subspaces = degenerate_subspaces(unpert_E)
+    H_pert_eff = unperturbed_eigenstates'*H_pert*unperturbed_eigenstates
+    for subspace in subspaces
+        println(H_pert_eff[subspace, subspace])
+    end
 end
 function count_degeneracies_per_subspace(H, ops)
     # returns a dictionary where the input is the quantum number, which maps to
@@ -300,35 +324,40 @@ function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
     create_SiSj!(rows, cols, vals, magnitude, indexer)
 
 end
-function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Float64, lattice::AbstractLattice, indexer::CombinationIndexer)
+function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64, AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer)
+    if isa(t, Number) 
+        t = [t]
+    end
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         # if length(intersect(conf[1], conf[2])) > 0 
         #     continue
         # end
         for σ ∈ [1, 2]
             for site_index1 ∈ conf[σ]
-                for site_index2 ∈ Set(neighbors(lattice, site_index1))
-                    if site_index2 ∉ conf[σ]
-                        new_conf = replace(conf[σ], site_index1=>site_index2)
-                        # if length(intersect(new_conf, conf[3-σ])) > 0 
-                        #     continue
-                        # end
-                        if σ == 1
-                            i2 = index(indexer, new_conf, conf[2])
-                        else
-                            i2 = index(indexer, conf[1], new_conf)
+                for order in eachindex(t)
+                    for site_index2 ∈ neighbors(lattice, site_index1,order)
+                        if site_index2 ∉ conf[σ]
+                            new_conf = replace(conf[σ], site_index1=>site_index2)
+                            # if length(intersect(new_conf, conf[3-σ])) > 0 
+                            #     continue
+                            # end
+                            if σ == 1
+                                i2 = index(indexer, new_conf, conf[2])
+                            else
+                                i2 = index(indexer, conf[1], new_conf)
+                            end
+                            # evaluating this sign is likely the source of any error
+                            # sign from jordan-wigner string. assuming i<j, c+_i c_j gives a positive sign times (-1)^(# electrons between sites i and j)
+                            # if j < i, then there's an extra negative sign
+                            # sign = (-1)^count_in_range(new_conf, site_index1, site_index2)
+                            sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
+                                        count_in_range(if (σ == 2) new_conf else conf[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
+                                        (site_index1 > site_index2))
+                            # println(sign)
+                            push!(rows, i1)
+                            push!(cols, i2)
+                            push!(vals, -0.5*t[order]*sign)# 0.5 due to double counting from neighbors for some reason
                         end
-                        # evaluating this sign is likely the source of any error
-                        # sign from jordan-wigner string. assuming i<j, c+_i c_j gives a positive sign times (-1)^(# electrons between sites i and j)
-                        # if j < i, then there's an extra negative sign
-                        # sign = (-1)^count_in_range(new_conf, site_index1, site_index2)
-                        sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
-                                    count_in_range(if (σ == 2) new_conf else conf[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
-                                    (site_index1 > site_index2))
-                        # println(sign)
-                        push!(rows, i1)
-                        push!(cols, i2)
-                        push!(vals, -t*sign)
                     end
                 end
             end
@@ -664,8 +693,8 @@ function greedy_col_permutation_for_diag(A::AbstractMatrix)
     A_permuted = A[:, permutation]
     return permutation, A_permuted
 end
-function create_consistent_basis(H::Vector, ops::Vector)
-    degen = count_degeneracies_per_subspace(H[1], ops)
+function create_consistent_basis(H::Vector, ops::Vector; reference_index::Int64=1)
+    degen = count_degeneracies_per_subspace(H[reference_index], ops)
     return create_consistent_basis(H, degen)
 end
 function create_consistent_basis(H::Vector, degen::Dict)
@@ -682,7 +711,7 @@ function create_consistent_basis(H::Vector, degen::Dict)
     """
     degen_rm_U = []
     transforms = Dict()
-    for (indices, val) in degen
+    for indices in keys(degen)
         prev_perm = nothing
         prev_phases = nothing
         for (h_i, h) in enumerate(H) # assumes these hamiltonians are sorted

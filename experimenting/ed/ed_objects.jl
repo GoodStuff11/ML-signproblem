@@ -58,7 +58,7 @@ function get_subspace_info(hs::HubbardSubspace)
 end
 # hubbard model #
 struct HubbardModel
-    t::Float64
+    t::Union{Float64, AbstractArray{Float64}}
     U::Float64
     μ::Float64
     half_filling::Bool
