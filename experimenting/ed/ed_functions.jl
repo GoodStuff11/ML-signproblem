@@ -192,7 +192,92 @@ function count_degeneracies_per_subspace(H, ops)
     end
     return degen
 end
+# function compute_sign(conf, sorted_sites::Vector{T}, creation_operators::Vector{Tuple{T,Int}}, annihilation_operators::Vector{Tuple{T,Int}}) where T
+#     # c_{up,j} = F_{1} F_{2} ... F_{j-1} a_{up,j}
+#     # c_{down,j} = F_{1} F_{2} ... F_{j} a_{down,j}
+#     # F_i = (-1)^{n_i}, n_i = n_{up,i} + n_{down,i}
+#     # where c^dagger_{i2,σ2} c_{i1,σ1} and assuming i2 >= i1 (if not, add negative sign)
+        
+#     # we assume that the sites in creation_operators/annihilation_operators are in sorted order (normal order)
+#     creation_upper_site_bounds = Int[]
+#     annihilation_upper_site_bounds = Int[]
+#     for (op,list) in zip([creation_operators,annihilation_operators],[creation_upper_site_bounds,annihilation_upper_site_bounds])
+#         for (s,σ) in op
+#             i = findfirst(==(s),sorted_sites)
+#             push!(list, i - (σ==1))
+#         end
+#     end
+#     # find list of sites to count the electrons at
+#     electron_count_sites = nothing
+#     for (i, j) in zip(creation_upper_site_bounds, annihilation_upper_site_bounds)
+#         (i,j) = sort([i,j])
+#         if isnothing(electron_count_sites)
+#             electron_count_sites = i:j
+#         else
+#             electron_count_sites = symdiff(electron_count_sites, i:j)
+#         end
+#     end
 
+#     # count the number of electrons at the sites
+#     swap_count = 0
+#     for s in electron_count_sites
+#         for c in conf
+#             for occupation in c
+#                 if sorted_sites[s] == occupation
+#                     swap_count += 1
+#                     break
+#                 end
+#             end
+#         end
+#     end
+
+#     # adjust swap count to account for the creation and annihilation operators
+
+
+#     return (-1)^swap_count
+# end
+function compute_jw_sign(
+    conf::Tuple{Set{T}, Set{T}}, 
+    sorted_sites::Vector{T}, 
+    ops::Vector{Tuple{T,Int,Symbol}}
+) where T
+    # Precompute occupation dictionary: (site, spin) => occupied (Bool)
+    occ = Dict{Tuple{T, Int}, Bool}()
+    for s in sorted_sites
+        occ[(s, 1)] = s in conf[1]  # spin up
+        occ[(s, 2)] = s in conf[2] # spin down
+    end
+
+    # Flatten total sorted basis: (site, spin) pairs in order
+    full_basis = [(s, σ) for s in sorted_sites for σ in (1, 2)]
+
+    # Build occupation vector: vector of 0s and 1s in JW order
+    occ_vec = [occ[(s, σ)] for (s, σ) in full_basis]
+
+    # For each operator in `ops`, determine how many fermions it "passes"
+    sign = -1
+    for n in 1:length(ops)
+        site_n, spin_n, _ = ops[n]
+        idx_n = findfirst(==((site_n, spin_n)), full_basis)
+        
+        # Count number of occupied fermions before idx_n not in the operator itself
+        for m in 1:idx_n-1
+            # site_m, spin_m = full_basis[m]
+            # Exclude if it's the same operator acting (i.e., operator site)
+            if occ_vec[m] == 1
+                sign *= -1
+            end
+        end
+
+        # Toggle occupancy as if the op has acted (important for consistency when ops repeat)
+        # But only update if not the last operator
+        if n < length(ops)
+            occ_vec[idx_n] ⊻= 1
+        end
+    end
+
+    return sign
+end
 function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bool=true) where T
     ### given a set of numbers s, counts the number of elements that are between
     ### a and b (where a could be larger or less than b). lower_eq and upper_eq specify
@@ -324,36 +409,111 @@ function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
     create_SiSj!(rows, cols, vals, magnitude, indexer)
 
 end
+function general_single_body!(
+    rows::Vector{Int}, 
+    cols::Vector{Int}, 
+    vals::Vector{Float64}, 
+    t::Dict,  
+    indexer::CombinationIndexer
+)
+    sorted_sites = sort(indexer.a)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        for (σ1,σ2) ∈ Iterators.product(1:2,1:2) # 1=up 2=down
+            for site_index1 ∈ conf[σ1]
+                possible_sites = setdiff(indexer.a, conf[σ2])
+                if σ1 == σ2
+                    possible_sites = union(possible_sites, [site_index1])
+                end
+                for site_index2 ∈ possible_sites
+                    if Set([(site_index1, σ1), (site_index2, σ2)]) ∉ keys(t)
+                        continue
+                    end
+
+                    # annihilate site_index1 and create site_index2
+                    new_conf = [Set(), Set()]
+                    if σ1 == σ2
+                        new_conf[σ1] = replace(conf[σ1], site_index1=>site_index2)
+                        new_conf[3-σ1] = conf[3-σ1]
+                    else
+                        new_conf[σ1] = setdiff(conf[σ1], [site_index1])
+                        new_conf[σ2] = union(conf[σ2], [site_index2])
+                    end
+                    i2 = index(indexer, new_conf[1], new_conf[2])
+
+                    sign = compute_jw_sign(conf, sorted_sites, [(site_index2,σ2,:create), (site_index1,σ1,:annihilate)])
+                    push!(rows, i1)
+                    push!(cols, i2)
+                    push!(vals, t[Set([(site_index1, σ1), (site_index2, σ2)])]*sign)
+                end
+            end
+        end
+    end
+end
+function general_n_body!(
+    rows::Vector{Int}, 
+    cols::Vector{Int}, 
+    vals::Vector{Float64}, 
+    t::Dict{Vector{Tuple{T,Int,Symbol}}, Float64}, 
+    indexer::CombinationIndexer
+) where T
+    sorted_sites = sort(indexer.a)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        for ops in keys(t)
+            # Clone the config
+            conf_new = [copy(conf[1]), copy(conf[2])]
+            valid = true
+
+            # Apply ops in reverse: annihilate first (right-to-left)
+            for (site, spin, op) in reverse(ops)
+                if op == :annihilate
+                    if site ∉ conf_new[spin]
+                        valid = false
+                        break
+                    end
+                    delete!(conf_new[spin], site)
+                elseif op == :create
+                    if site ∈ conf_new[spin]
+                        valid = false
+                        break
+                    end
+                    push!(conf_new[spin], site)
+                else
+                    error("Invalid operator symbol: $op")
+                end
+            end
+
+            if !valid
+                continue
+            end
+
+            i2 = index(indexer, conf_new[1], conf_new[2])
+
+            sign = compute_jw_sign(conf, sorted_sites, ops)
+            push!(rows, i1)
+            push!(cols, i2)
+            push!(vals, t[ops] * sign)
+        end
+    end
+end
 function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64, AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer)
     if isa(t, Number) 
         t = [t]
     end
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        # if length(intersect(conf[1], conf[2])) > 0 
-        #     continue
-        # end
         for σ ∈ [1, 2]
             for site_index1 ∈ conf[σ]
                 for order in eachindex(t)
                     for site_index2 ∈ neighbors(lattice, site_index1,order)
                         if site_index2 ∉ conf[σ]
                             new_conf = replace(conf[σ], site_index1=>site_index2)
-                            # if length(intersect(new_conf, conf[3-σ])) > 0 
-                            #     continue
-                            # end
                             if σ == 1
                                 i2 = index(indexer, new_conf, conf[2])
                             else
                                 i2 = index(indexer, conf[1], new_conf)
                             end
-                            # evaluating this sign is likely the source of any error
-                            # sign from jordan-wigner string. assuming i<j, c+_i c_j gives a positive sign times (-1)^(# electrons between sites i and j)
-                            # if j < i, then there's an extra negative sign
-                            # sign = (-1)^count_in_range(new_conf, site_index1, site_index2)
                             sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
                                         count_in_range(if (σ == 2) new_conf else conf[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
                                         (site_index1 > site_index2))
-                            # println(sign)
                             push!(rows, i1)
                             push!(cols, i2)
                             push!(vals, -0.5*t[order]*sign)# 0.5 due to double counting from neighbors for some reason
@@ -431,7 +591,6 @@ function create_L2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
             end
         end
     end
-
 end
 
 function create_operator(Hs::HubbardSubspace, op; kind=1)
