@@ -449,21 +449,23 @@ function general_single_body!(
         end
     end
 end
-function general_n_body!(
-    rows::Vector{Int}, 
-    cols::Vector{Int}, 
-    vals::Vector{Float64}, 
-    t::Dict{Vector{Tuple{T,Int,Symbol}}, Float64}, 
+function build_n_body_structure(
+    t::Dict{Vector{Tuple{T,Int,Symbol}}, U},
     indexer::CombinationIndexer
-) where T
+) where {T, U<:Number}
     sorted_sites = sort(indexer.a)
+    rows = Int[]
+    cols = Int[]
+    signs = U[]
+    ops_list = Vector{Vector{Tuple{T,Int,Symbol}}}()
+
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for ops in keys(t)
             # Clone the config
             conf_new = [copy(conf[1]), copy(conf[2])]
             valid = true
 
-            # Apply ops in reverse: annihilate first (right-to-left)
+            # Apply operators
             for (site, spin, op) in reverse(ops)
                 if op == :annihilate
                     if site ∉ conf_new[spin]
@@ -487,14 +489,56 @@ function general_n_body!(
             end
 
             i2 = index(indexer, conf_new[1], conf_new[2])
-
-            sign = compute_jw_sign(conf, sorted_sites, ops)
+            if i1 > i2 #only considering upper diagonal so ensure hermiticity
+                continue
+            end
+            s = compute_jw_sign(conf, sorted_sites, ops)
             push!(rows, i1)
             push!(cols, i2)
-            push!(vals, t[ops] * sign)
+            push!(signs, s)
+            push!(ops_list, ops)
         end
     end
+
+    return rows, cols, signs, ops_list
 end
+function update_values(
+    signs::Vector{U},
+    ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
+    t::Dict{Vector{Tuple{T,Int,Symbol}}, U}, 
+) where {T, U<:Number}
+    return [t[ops_list[i]]*signs[i] for i in eachindex(signs)]
+end
+function general_n_body!(
+    rows::Vector{Int}, 
+    cols::Vector{Int}, 
+    vals::Vector{U}, 
+    t::Dict{Vector{Tuple{T,Int,Symbol}}, U}, 
+    indexer::CombinationIndexer
+) where {T, U<:Number}
+    # requires applying Hermitian to the resulting sparse matrix
+    _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer)
+    println(U)
+    _vals = update_values(signs, ops_list, t)
+    append!(rows, _rows)
+    append!(cols, _cols)
+    append!(vals, _vals)
+end
+function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::Float64=1e-3)
+    t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, ComplexF64}()
+    site_list = sort(indexer.a) #ensuring normal ordering
+    all_ops(label) = combinations([(s, σ,label) for s in site_list for σ in 1:2],n)
+    for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
+        key = [ops_create; ops_annihilate]
+        if key ∉ keys(t_dict)
+            t_dict[key] = rand()*magnitude
+        else
+            t_dict[key] += rand()*magnitude
+        end
+    end
+    return t_dict
+end
+
 function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64, AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer)
     if isa(t, Number) 
         t = [t]
