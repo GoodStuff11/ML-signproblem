@@ -177,7 +177,10 @@ function count_degeneracies_per_subspace(H, ops)
             H_sub = V'*H*V
             degen[copy(indices)] = [degeneracy_count(real.(eigvals(H_sub))), size(H_sub)[1]]
             indices[end] += 1
-        catch BoundsError
+        catch e
+            if !(e isa BoundsError)
+                rethrow(e)
+            end
             if all(indices[2:end] .== 1)
                 break
             end
@@ -241,38 +244,41 @@ function compute_jw_sign(
     sorted_sites::Vector{T}, 
     ops::Vector{Tuple{T,Int,Symbol}}
 ) where T
-    # Precompute occupation dictionary: (site, spin) => occupied (Bool)
-    occ = Dict{Tuple{T, Int}, Bool}()
-    for s in sorted_sites
-        occ[(s, 1)] = s in conf[1]  # spin up
-        occ[(s, 2)] = s in conf[2] # spin down
+    # Full JW order over sites and spins
+    jw_order = [(s, σ) for s in sorted_sites for σ in (1, 2)]
+
+    # Map each mode to its index in JW order
+    jw_index = Dict{Tuple{T, Int}, Int}((sσ, i) for (i, sσ) in enumerate(jw_order))
+
+    # Initial occupation vector (ordered)
+    occupied_modes = Set{Tuple{T, Int}}()
+    for (s, σ) in jw_order
+        if s ∈ conf[σ]
+            push!(occupied_modes, (s, σ))
+        end
     end
 
-    # Flatten total sorted basis: (site, spin) pairs in order
-    full_basis = [(s, σ) for s in sorted_sites for σ in (1, 2)]
+    # Compute sign by counting how many occupied modes come before each operator
+    sign = 1
 
-    # Build occupation vector: vector of 0s and 1s in JW order
-    occ_vec = [occ[(s, σ)] for (s, σ) in full_basis]
+    # Process from right to left (annihilate first)
+    for (site, spin, op) in reverse(ops)
+        mode = (site, spin)
+        idx = jw_index[mode]
 
-    # For each operator in `ops`, determine how many fermions it "passes"
-    sign = -1
-    for n in 1:length(ops)
-        site_n, spin_n, _ = ops[n]
-        idx_n = findfirst(==((site_n, spin_n)), full_basis)
-        
-        # Count number of occupied fermions before idx_n not in the operator itself
-        for m in 1:idx_n-1
-            # site_m, spin_m = full_basis[m]
-            # Exclude if it's the same operator acting (i.e., operator site)
-            if occ_vec[m] == 1
-                sign *= -1
-            end
-        end
+        # Count how many occupied modes come *before* this mode
+        n_occupied_before = count(m -> jw_index[m] < idx, occupied_modes)
+        sign *= (-1)^n_occupied_before
 
-        # Toggle occupancy as if the op has acted (important for consistency when ops repeat)
-        # But only update if not the last operator
-        if n < length(ops)
-            occ_vec[idx_n] ⊻= 1
+        # Update occupation based on op
+        if op == :annihilate
+            # Fermion is removed — no longer present
+            delete!(occupied_modes, mode)
+        elseif op == :create
+            # Fermion is added — affects future operators
+            push!(occupied_modes, mode)
+        else
+            error("Unknown operator: $op")
         end
     end
 
@@ -301,36 +307,6 @@ function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bo
         end
     end
     return count
-end
-function create_cicj(Hs::HubbardSubspace)
-    # c^dagger_i c_j 
-
-    dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:prod(size((Hs.lattice)))), get_subspace_info(Hs)...)
-    cicj = [spzeros(Float64, dim, dim) for _ in 1:length(indexer.a), _ in 1:length(indexer.a), _ in 1:2]
-    for (i1, conf1) in enumerate(indexer.inv_comb_dict)
-        for σ ∈ [1, 2]
-            for site_index1 ∈ conf1[σ]
-                for site_index2 ∈ [setdiff(indexer.a, conf1[σ]); site_index1]
-                    new_conf = copy(conf1[σ])
-                    delete!(new_conf, site_index1)
-                    push!(new_conf, site_index2)
-                    if σ == 1
-                        i2 = index(indexer, new_conf, conf1[2])
-                    else
-                        i2 = index(indexer, conf1[1], new_conf)
-                    end
-                    # sign from jordan-wigner string. assuming i<j, c+_i c_j gives a positive sign times (-1)^(# electrons between sites i and j)
-                    # if j < i, then there's an extra negative sign
-                    sign = (-1)^(count_in_range(conf1[1], site_index1, site_index2; lower_eq=true, upper_eq=false) + 
-                        count_in_range(if (σ == 2) new_conf else conf1[2] end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
-                        (site_index1 > site_index2))
-                    cicj[site_index1, site_index2, σ][i1, i2] += sign
-                end
-            end
-        end
-    end
-    return cicj
 end
 function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
     for (i1, conf) in enumerate(indexer.inv_comb_dict) 
@@ -451,7 +427,8 @@ function general_single_body!(
 end
 function build_n_body_structure(
     t::Dict{Vector{Tuple{T,Int,Symbol}}, U},
-    indexer::CombinationIndexer
+    indexer::CombinationIndexer;
+    skip_lower_triangular::Bool=false
 ) where {T, U<:Number}
     sorted_sites = sort(indexer.a)
     rows = Int[]
@@ -489,7 +466,7 @@ function build_n_body_structure(
             end
 
             i2 = index(indexer, conf_new[1], conf_new[2])
-            if i1 > i2 #only considering upper diagonal so ensure hermiticity
+            if skip_lower_triangular && i1 > i2 #only considering upper diagonal so ensure hermiticity
                 continue
             end
             s = compute_jw_sign(conf, sorted_sites, ops)
@@ -517,23 +494,82 @@ function general_n_body!(
     indexer::CombinationIndexer
 ) where {T, U<:Number}
     # requires applying Hermitian to the resulting sparse matrix
-    _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer)
-    println(U)
+    _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false)
     _vals = update_values(signs, ops_list, t)
     append!(rows, _rows)
     append!(cols, _cols)
     append!(vals, _vals)
 end
-function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::Float64=1e-3)
-    t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, ComplexF64}()
+function compute_correlation(state::Vector, order::Int, indexer::CombinationIndexer; correlation_args=nothing)
+    # computes γ_ij = ⟨ψ|c†_i c_j|ψ⟩ (generalized to more than single body)
+    if isnothing(correlation_args)
+        mats, unique_sites = correlation_matrix(order, indexer)
+    else
+        mats, unique_sites = correlation_args
+    end
+
+    correlation = Matrix{ComplexF64}(undef, length(unique_sites), length(unique_sites))
+    for j in axes(mats, 2)
+        for i in axes(mats, 1)
+            correlation[i,j] = state'*mats[i,j]*state
+        end
+    end
+    return correlation
+end
+function correlation_matrix(order::Int, indexer::CombinationIndexer)
+    # computes the matrix of operators c†_i c_j
+    t_dict = create_randomized_nth_order_operator(order, indexer)
+    dim = length(indexer.inv_comb_dict)
+    rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer; skip_lower_triangular=false)
+    unique_sites = unique([[o[1:2] for o in op][1:length(op)÷2] for op in ops_list])
+    unique_ops = unique(ops_list)
+    site_to_index = Dict(s => i for (i, s) in enumerate(unique_sites))
+
+    mats = Matrix{AbstractArray}(undef, length(unique_sites), length(unique_sites))
+
+    for op in unique_ops
+        indices = findall(x->x==op, ops_list)
+        s1 = [o[1:2] for o in op][1:length(op)÷2]
+        s2 = [o[1:2] for o in op][length(op)÷2+1:end]
+        # println(s1)
+        mats[site_to_index[s1], site_to_index[s2]] = sparse(rows[indices], cols[indices], signs[indices],dim,dim)
+    end
+    return mats, unique_sites
+end
+function create_nearest_neighbor_operator(t::Float64, subspace::HubbardSubspace, indexer::CombinationIndexer)
+    t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, Float64}()
+
+    for σ in 1:2
+        for s1 in indexer.a
+            for s2 in neighbors(subspace.lattice,s1)
+                if [(s1, σ,:create), (s2, σ, :annihilate)] ∉ keys(t_dict)
+                    t_dict[[(s1, σ,:create), (s2, σ, :annihilate)]] = 0.5*t
+                else
+                    t_dict[[(s1, σ,:create), (s2, σ, :annihilate)]] += 0.5*t
+                end
+            end
+        end
+    end
+    return t_dict
+end
+function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_value::Bool=false, correlation_args=nothing)
+    γ = compute_correlation(state, 1, indexer; correlation_args=correlation_args)
+    val = sum(abs.(γ^2-γ))
+    if get_value
+        return val
+    end
+    return val < 1e-10
+end
+function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::T=1e-3+0im) where T
+    t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, T}()
     site_list = sort(indexer.a) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ,label) for s in site_list for σ in 1:2],n)
     for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
         key = [ops_create; ops_annihilate]
         if key ∉ keys(t_dict)
-            t_dict[key] = rand()*magnitude
+            t_dict[key] = (2*rand()-1)/2*magnitude
         else
-            t_dict[key] += rand()*magnitude
+            t_dict[key] += (2*rand()-1)/2*magnitude
         end
     end
     return t_dict
@@ -860,7 +896,6 @@ function find_N_body_interactions(U::AbstractArray, indexer::CombinationIndexer)
                 end
             end
         end
-
     end
     return second_quantized_solution, second_quantized_nullspace, second_quantized_order_labels
 
