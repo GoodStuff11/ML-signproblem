@@ -933,9 +933,9 @@ function greedy_col_permutation_for_diag(A::AbstractMatrix)
 end
 function create_consistent_basis(H::Vector, ops::Vector; reference_index::Int64=1)
     degen = count_degeneracies_per_subspace(H[reference_index], ops)
-    return create_consistent_basis(H, degen)
+    return create_consistent_basis(H, ops, degen)
 end
-function create_consistent_basis(H::Vector, degen::Dict)
+function create_consistent_basis(H::Vector, ops::Vector, degen::Dict)
     """
     H is a list of hamiltonians (matrices) where adjacent elements are
     sufficiently close to each other so that energy eigenstates with adjacent

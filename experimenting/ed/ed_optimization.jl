@@ -152,7 +152,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 mat += p
             end
             loss = 1-abs2(state2'*expv(1im,mat,state1))
-            # println(loss)
+            println(loss)
             return loss
         end
         function f(t_vals, p=nothing)
@@ -180,13 +180,20 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         if optimization == :gradient
             opt = OptimizationOptimisers.Adam(learning_rate)
-            @time sol = solve(prob, opt, maxiters = maxiters)
+            @time sol = solve(prob, opt, maxiters=maxiters)
+            new_tvals = sol.u
         else
-            sol = solve(prob, Optim.ParticleSwarm())
+            function prob_func(prob, i, repeat)
+                remake(prob, u0 = t_vals)
+            end
+
+            ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
+            @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters)
+            new_tvals = sol[argmin([s.objectives for s in sol])].u
         end
         
-        vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
-        loss = f(sol.u, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
+        vals = update_values(signs, ops_list, Dict(zip(t_keys,new_tvals)))
+        loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         push!(computed_matrices,Hermitian(sparse(rows, cols, vals, dim, dim)))
         println("Finished order $order")
         push!(losses, loss) 
@@ -198,7 +205,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 end
 
 
-function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer; maxiters=100, optimization=:zygote)
+function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer; maxiters=100, optimization=:gradient)
     # meta_data = Dict("starting state"=>Dict("U index"=>1, "levels"=>1:5),
     #             "ending state"=>Dict("U index"=>5, "levels"=>1),
     #             "electron count"=>3, "sites"=>"2x3", "bc"=>"periodic", "basis"=>"adiabatic", 
@@ -211,15 +218,20 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
             computed_matrices, losses = optimize_unitary(state1, state2, indexer; 
                     maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization)
+            println(0)
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
+            println(1)
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
+            println(2)
             push!(data_dict["loss_metrics"], losses)
+            println(3)
             push!(data_dict["labels"], Dict(
                 "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 
                 "ending state"=> Dict("level"=>j, "U index"=>instructions["ending state"]["U index"]))
             )
         end
     end
+    println(4)
     return data_dict
 end
 
