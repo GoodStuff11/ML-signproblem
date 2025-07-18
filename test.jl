@@ -1,5 +1,5 @@
 using Optimization, OptimizationOptimisers, OptimizationOptimJL
-using Base.Threads, ThreadsX, NLSolvers
+using Base.Threads, ThreadsX, NLSolvers, Zygote
 
 
 function f(x,p=nothing)
@@ -17,8 +17,9 @@ function (@main)(ARGS)
         remake(prob, u0 = rand(2))
     end
 
-    ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
-    @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=parse(Int,ARGS[1]))
+    # ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
+    # @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=parse(Int,ARGS[1]))
+    sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=parse(Int,ARGS[1]))
     # @show findmin(i -> sol[i].objective, 1:4)[1]
     i = argmin([s.objective for s in sol])
     println(sol[i].u)

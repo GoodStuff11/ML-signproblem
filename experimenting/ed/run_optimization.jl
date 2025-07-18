@@ -27,7 +27,7 @@ function (@main)(ARGS)
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 5
+    N = 3
     half_filling = false
     lattice_dimension = (2,3)
     bc = "periodic"
@@ -44,6 +44,7 @@ function (@main)(ARGS)
     # end
     # U_values = [0.00001,0.01,0.2, 1,1.001,3,4,5,7,10, 100]
     U_values = [0.00001; LinRange(2.1,9,20)]
+    U_values = sort([U_values; 10.0 .^LinRange(-3,2,40)])
     for U in U_values
         # println(t)
         push!(models,HubbardModel(t,U,μ,half_filling))
@@ -77,13 +78,17 @@ function (@main)(ARGS)
 
 
     # optimization
-    meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
-                    "U_values"=>U_values, "maxiters"=>2)
-    instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>16),
-                    "ending state"=>Dict("U index"=>10, "levels"=>54), "max_order"=>2)
-    data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient)
-    data_dict_tmp["meta_data"] = meta_data
-    println("Hey")
-    append_to_json_files(data_dict_tmp, "data/unitary_map_N=5")
-    println("done")
+    for level1 in [8,58]
+        for level2 in [5,58]
+            for u_index in 2:length(U_values)
+                meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
+                                "U_values"=>U_values, "maxiters"=>200)
+                instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
+                                "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>2)
+                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient)
+                data_dict_tmp["meta_data"] = meta_data
+                append_to_json_files(data_dict_tmp, "data/unitary_map_N=$N")
+            end
+        end
+    end
 end
