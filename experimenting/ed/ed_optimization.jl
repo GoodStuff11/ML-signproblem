@@ -126,12 +126,12 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     dim = length(indexer.inv_comb_dict)
     
     loss = 1-abs2(state1'*state2)
-    losses = [loss]
+    losses = Float64[loss]
+    loss_std = Float64[0.0]
     if loss < 1e-8
         println("States are already equal")
         return [], losses
     end
-
 
     for order = 1:max_order
         magnitude_esimate = loss/2
@@ -143,7 +143,17 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         t_vals = collect(values(t_dict))
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
 
-
+        
+        tmp_losses = []
+        function callback(args...)
+            N = 20
+            push!(tmp_losses, args[end]) 
+            if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
+                println("std: $(std(tmp_losses[end-N:end]))")
+                return true
+            end
+            return false
+        end
 
         function f_nongradient(t_vals, p=nothing)
             vals = update_values(signs, ops_list, Dict(zip(t_keys,t_vals)))
@@ -167,41 +177,44 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
 
         if optimization == :gradient
-            optf = OptimizationFunction(f, Optimization.AutoZygote())
+            optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
         else
-            optf = OptimizationFunction(f_nongradient)
+            optf = Optimization.OptimizationFunction(f_nongradient)
         end
 
         if length(computed_matrices) > 0
-            prob = OptimizationProblem(optf, t_vals,sum(computed_matrices))
+            prob = Optimization.OptimizationProblem(optf, t_vals,sum(computed_matrices))
         else
-            prob = OptimizationProblem(optf, t_vals)
+            prob = Optimization.OptimizationProblem(optf, t_vals)
         end
 
         if optimization == :gradient
-            opt = OptimizationOptimisers.Adam(learning_rate)
-            @time sol = solve(prob, opt, maxiters=maxiters)
-            new_tvals = sol.u
+            # opt = OptimizationOptimisers.Adam(learning_rate)
+            @time sol = Optimization.solve(prob, Optimization.LBFGS(), maxiters=maxiters, callback=callback)
+            s = sol
         else
             function prob_func(prob, i, repeat)
                 remake(prob, u0 = t_vals)
             end
 
             ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
-            @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters)
-            new_tvals = sol[argmin([s.objectives for s in sol])].u
+            @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters, callback=callback)
+            s = sol[argmin([s.objectives for s in sol])]
         end
         
-        vals = update_values(signs, ops_list, Dict(zip(t_keys,new_tvals)))
-        loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
+        vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
+        # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
+        loss = sol.objective
         push!(computed_matrices,Hermitian(sparse(rows, cols, vals, dim, dim)))
         println("Finished order $order")
         push!(losses, loss) 
+        push!(loss_std, std(last(tmp_losses,20)))
+        println("loss std: $(loss_std[end])")
         # if loss < ϵ
         #     break
         # end
     end
-    return computed_matrices, losses
+    return computed_matrices, losses, loss_std
 end
 
 
@@ -211,20 +224,17 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
     #             "electron count"=>3, "sites"=>"2x3", "bc"=>"periodic", "basis"=>"adiabatic", 
     #             "U_values"=>U_values)
     data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
-                    "loss_metrics"=>[], "labels"=>[])
+                    "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[])
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
-            computed_matrices, losses = optimize_unitary(state1, state2, indexer; 
+            computed_matrices, losses, loss_std = optimize_unitary(state1, state2, indexer; 
                     maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization)
-            println(0)
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
-            println(1)
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
-            println(2)
             push!(data_dict["loss_metrics"], losses)
-            println(3)
+            push!(data_dict["loss_std_metrics"], loss_std)
             push!(data_dict["labels"], Dict(
                 "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 
                 "ending state"=> Dict("level"=>j, "U index"=>instructions["ending state"]["U index"]))
