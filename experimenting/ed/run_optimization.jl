@@ -78,9 +78,9 @@ function (@main)(ARGS)
 
 
     # optimization
-    for level1 in [8,58]
-        for level2 in [5,58]
-            for u_index in 2:length(U_values)
+    for level1 in [8]
+        for level2 in [8]
+            for u_index in length(U_values):-1:2
                 meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
                                 "U_values"=>U_values, "maxiters"=>200)
                 instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
