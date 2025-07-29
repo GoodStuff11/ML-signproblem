@@ -1,0 +1,14 @@
+ERROR: BoundsError: attempt to access Tuple{Vector{Any}, Vector{Float64}} at index [3]
+Stacktrace:
+ [1] indexed_iterate
+   @ ./tuple.jl:159 [inlined]
+ [2] test_map_to_state(degen_rm_U::Vector{Any}, instructions::Dict{String, Any}, indexer::CombinationIndexer{Coordinate{2, Int64}}; maxiters::Int64, optimization::Symbol)
+   @ Main ~/research/ML-signproblem/experimenting/ed/ed_optimization.jl:232
+ [3] main(ARGS::Vector{String})
+   @ Main ~/research/ML-signproblem/experimenting/ed/run_optimization.jl:88
+ [4] #invokelatest#2
+   @ ./essentials.jl:1055 [inlined]
+ [5] invokelatest
+   @ ./essentials.jl:1052 [inlined]
+ [6] _start()
+   @ Base ./client.jl:536

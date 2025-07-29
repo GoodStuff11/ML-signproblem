@@ -121,16 +121,21 @@ function optimize_sd_sum_2(goal_state::Vector, indexer::CombinationIndexer, sd_c
 end
 
 
-function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; maxiters=10, ϵ=1e-5, max_order=2, optimization=:gradient)
+function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; 
+    maxiters=10, ϵ=1e-5, max_order=2, optimization=:gradient, metric_functions::Dict{String, Any}=Dict())
     computed_matrices = []
     dim = length(indexer.inv_comb_dict)
     
+    metrics = Dict{String,Vector{Any}}()
     loss = 1-abs2(state1'*state2)
-    losses = Float64[loss]
-    loss_std = Float64[0.0]
+    metrics["loss"] = Float64[loss]
+    metrics["loss_std"] = Float64[0.0]
+    for k in keys(metric_functions)
+        metrics[k] = Any[]
+    end
     if loss < 1e-8
         println("States are already equal")
-        return [], losses
+        return [], metrics
     end
 
     for order = 1:max_order
@@ -207,34 +212,42 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         loss = sol.objective
         push!(computed_matrices,Hermitian(sparse(rows, cols, vals, dim, dim)))
         println("Finished order $order")
-        push!(losses, loss) 
-        push!(loss_std, std(last(tmp_losses,20)))
+        push!(metrics["loss"], loss) 
+        push!(metrics["loss_std"], std(last(tmp_losses,20)))
+        for (k,func) in metric_functions
+            push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
+        end
         println("loss std: $(loss_std[end])")
         # if loss < ϵ
         #     break
         # end
     end
-    return computed_matrices, losses, loss_std
+    return computed_matrices, metrics
 end
 
 
-function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer; maxiters=100, optimization=:gradient)
+function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer; maxiters=100, 
+        optimization=:gradient,metric_functions::Dict{String, Any}=Dict()
+        )
     # meta_data = Dict("starting state"=>Dict("U index"=>1, "levels"=>1:5),
     #             "ending state"=>Dict("U index"=>5, "levels"=>1),
     #             "electron count"=>3, "sites"=>"2x3", "bc"=>"periodic", "basis"=>"adiabatic", 
     #             "U_values"=>U_values)
     data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
                     "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[])
+
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
-            computed_matrices, losses, loss_std = optimize_unitary(state1, state2, indexer; 
-                    maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization)
+            computed_matrices, metrics = optimize_unitary(state1, state2, indexer; 
+                    maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization.
+                    metric_functions=metric_functions)
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
-            push!(data_dict["loss_metrics"], losses)
-            push!(data_dict["loss_std_metrics"], loss_std)
+            for (k, val) in metrics
+                push!(data_dict[k*"_metrics"], val)
+            end
             push!(data_dict["labels"], Dict(
                 "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 
                 "ending state"=> Dict("level"=>j, "U index"=>instructions["ending state"]["U index"]))

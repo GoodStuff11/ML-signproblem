@@ -22,9 +22,9 @@
         8.636842105263156,
         9.0
     ],
-    "maxiters": 200,
-    "sites": "2x3",
     "basis": "adiabatic",
     "bc": "periodic",
-    "electron count": 4
+    "electron count": 4,
+    "maxiters": 200,
+    "sites": "2x3"
 }
