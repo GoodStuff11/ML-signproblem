@@ -122,7 +122,7 @@ end
 
 
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; 
-    maxiters=10, ϵ=1e-5, max_order=2, optimization=:gradient, metric_functions::Dict{String, Any}=Dict())
+    maxiters=10, ϵ=1e-5, max_order=2, optimization=:gradient, metric_functions::Dict{String, Function}=Dict{String, Function}())
     computed_matrices = []
     dim = length(indexer.inv_comb_dict)
     
@@ -217,7 +217,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         for (k,func) in metric_functions
             push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
         end
-        println("loss std: $(loss_std[end])")
+        println("loss std: $(metrics["loss_std"][end])")
         # if loss < ϵ
         #     break
         # end
@@ -227,7 +227,7 @@ end
 
 
 function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer; maxiters=100, 
-        optimization=:gradient,metric_functions::Dict{String, Any}=Dict()
+        optimization=:gradient,metric_functions::Dict{String, Function}=Dict{String, Function}()
         )
     # meta_data = Dict("starting state"=>Dict("U index"=>1, "levels"=>1:5),
     #             "ending state"=>Dict("U index"=>5, "levels"=>1),
@@ -236,17 +236,22 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
     data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
                     "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[])
 
+
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
             computed_matrices, metrics = optimize_unitary(state1, state2, indexer; 
-                    maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization.
+                    maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
                     metric_functions=metric_functions)
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
             for (k, val) in metrics
-                push!(data_dict[k*"_metrics"], val)
+                if k*"_metrics" ∉ keys(data_dict)
+                    data_dict[k*"_metrics"] = [val]
+                else
+                    push!(data_dict[k*"_metrics"], val)
+                end
             end
             push!(data_dict["labels"], Dict(
                 "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 

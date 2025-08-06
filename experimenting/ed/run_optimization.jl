@@ -27,7 +27,7 @@ function (@main)(ARGS)
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 3
+    N = 4
     half_filling = false
     lattice_dimension = (2,3)
     bc = "periodic"
@@ -76,18 +76,22 @@ function (@main)(ARGS)
     indexer = CombinationIndexer(reduce(vcat,collect(sites(subspace.lattice))), get_subspace_info(subspace)...)
     # difference_dict = collect_all_conf_differences(indexer)
 
-
     # optimization
     for level1 in [8]
-        for level2 in [8]
-            for u_index in length(U_values):-1:2
+        for level2 in [99]
+            for u_index in 1:length(U_values)
+                function energy(state1, state2, computed_matrices, tmp_losses)
+                    new_state = exp(1im*sum(computed_matrices))*state1
+                    return Dict("value"=>real.(new_state'*H[u_index]*new_state/(new_state'*new_state)),"target"=>real.(state2'*H[u_index]*state2/(state2'*state2)))
+                end
+                metric_functions = Dict{String, Function}("energy"=>energy)
                 meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
-                                "U_values"=>U_values, "maxiters"=>200)
+                                "U_values"=>U_values, "maxiters"=>200, "optimizer"=>"LBFGS")
                 instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
-                                "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>2)
-                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient)
+                                "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>3)
+                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient, metric_functions=metric_functions)
                 data_dict_tmp["meta_data"] = meta_data
-                append_to_json_files(data_dict_tmp, "data/unitary_map_N=$N")
+                append_to_json_files(data_dict_tmp, "data/unitary_map_energy_N=$N")
             end
         end
     end
