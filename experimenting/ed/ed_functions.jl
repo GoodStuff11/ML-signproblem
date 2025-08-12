@@ -920,17 +920,18 @@ function full_unitary_analysis(degen_rm_U::Vector, difference_dict::Dict, U_valu
             end
         end
     end
-
-    summarized_data = Dict("norm1"=>Dict(), "norm2"=>Dict(), "total_count"=>Dict(),"count_nonzero"=>Dict())
+    
+    labels = ["norm1", "norm2", "total_count","count_nonzero"]
+    summarized_data = Dict{String,Any}(label=>Dict("orders"=>Vector{Vector{Any}}(undef, norders)) for label ∈ labels)
     for order in 1:norders
         for key in keys(summarized_data)
-            summarized_data[key][order] = []
+            summarized_data[key]["orders"][order] = []
         end
         for u in U_values
-            push!(summarized_data["norm1"][order], norm(data[order][u],1))
-            push!(summarized_data["norm2"][order], norm(data[order][u],2))
-            push!(summarized_data["count_nonzero"][order], sum(abs.(data[order][u]) .> 0))
-            push!(summarized_data["total_count"][order], length(data[order][u]))
+            push!(summarized_data["norm1"]["orders"][order], norm(data[order][u],1))
+            push!(summarized_data["norm2"]["orders"][order], norm(data[order][u],2))
+            push!(summarized_data["count_nonzero"]["orders"][order], sum(abs.(data[order][u]) .> 0))
+            push!(summarized_data["total_count"]["orders"][order], length(data[order][u]))
         end
     end
     return summarized_data
