@@ -900,7 +900,41 @@ function find_N_body_interactions(U::AbstractArray, indexer::CombinationIndexer)
     return second_quantized_solution, second_quantized_nullspace, second_quantized_order_labels
 
 end
+function full_unitary_analysis(degen_rm_U::Vector, difference_dict::Dict, U_values::Vector)
+    # data = Dict(order=>Dict() for order in 1:max(keys(difference_dict)))
+    norders = maximum(collect(keys(difference_dict)))
+    data = Dict(order=>Dict() for order in 1:norders)
+    for (u_index, u) in enumerate(U_values)
+        hopping = log(degen_rm_U[1]'*degen_rm_U[u_index])
+        for (order, creation_annihiation) in difference_dict
+            if length(data[order]) == 0
+                data[order] = Dict(u=>[])
+            elseif u ∉ keys(data[order])
+                data[order][u] = []
+            end
 
+            for index_list in values(creation_annihiation)
+                for (i,j) in index_list
+                    push!(data[order][u],hopping[i,j])
+                end
+            end
+        end
+    end
+
+    summarized_data = Dict("norm1"=>Dict(), "norm2"=>Dict(), "total_count"=>Dict(),"count_nonzero"=>Dict())
+    for order in 1:norders
+        for key in keys(summarized_data)
+            summarized_data[key][order] = []
+        end
+        for u in U_values
+            push!(summarized_data["norm1"][order], norm(data[order][u],1))
+            push!(summarized_data["norm2"][order], norm(data[order][u],2))
+            push!(summarized_data["count_nonzero"][order], sum(abs.(data[order][u]) .> 0))
+            push!(summarized_data["total_count"][order], length(data[order][u]))
+        end
+    end
+    return summarized_data
+end
 
 function greedy_col_permutation_for_diag(A::AbstractMatrix)
     @assert size(A, 1) == size(A, 2) "Matrix must be square"
