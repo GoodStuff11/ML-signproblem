@@ -24,11 +24,11 @@ include("utility_functions.jl")
 
 function (@main)(ARGS)
     t = 1.0
-    U = 6
+    U = 3
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 6
+    N = 3
     half_filling = false
     lattice_dimension = (2,3)
     bc = "periodic"
@@ -82,11 +82,13 @@ function (@main)(ARGS)
     meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
                     "U_values"=>U_values, "mapping"=>"full")
     data["meta_data"] = meta_data
-    append_to_json_files(meta_data, "data/full_unitary_map_N=$N")
+    append_to_json_files(data, "data/full_unitary_map_N=$N")
 
     pl = plot(xlabel=L"U", ylabel=L"\Vert A_{I_M}\Vert_1",legend=:topright, dpi=1000)
-    for order in sort(collect(keys(data["norm1"])))[1:end-1]
-        plot!(pl, data["U_values"], data["norm1"][order], label=L"M=%$order")
+    for order in sort(collect(keys(data["norm1"])))
+        plot!(pl, U_values, data["norm1"][order], label=L"M=%$order")
     end
     savefig(pl, "data/data2.png")
+    
+    return 0
 end
