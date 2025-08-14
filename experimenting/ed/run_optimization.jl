@@ -95,4 +95,6 @@ function (@main)(ARGS)
             end
         end
     end
+
+    return 0 
 end
