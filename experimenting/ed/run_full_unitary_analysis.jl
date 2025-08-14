@@ -28,7 +28,7 @@ function (@main)(ARGS)
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 3
+    N = 6
     half_filling = false
     lattice_dimension = (2,3)
     bc = "periodic"
@@ -45,8 +45,9 @@ function (@main)(ARGS)
     # end
     # U_values = [0.00001,0.01,0.2, 1,1.001,3,4,5,7,10, 100]
     # U_values = [0.00001; LinRange(2.1,9,20)]
+    U_values = 10. .^ LinRange(-5,-3,20)[2:end-1]
     # U_values = sort([U_values; 10.0 .^LinRange(-3,2,40)])
-    U_values = [0.00001, 1, 2]
+    # U_values = [0.00001, 1, 2]
     for U in U_values
         # println(t)
         push!(models,HubbardModel(t,U,μ,half_filling))
@@ -84,11 +85,12 @@ function (@main)(ARGS)
     data["meta_data"] = meta_data
     append_to_json_files(data, "data/full_unitary_map_N=$N")
 
-    pl = plot(xlabel=L"U", ylabel=L"\Vert A_{I_M}\Vert_1",legend=:topright, dpi=1000)
-    for order in sort(collect(keys(data["norm1"])))
-        plot!(pl, U_values, data["norm1"][order], label=L"M=%$order")
-    end
-    savefig(pl, "data/data2.png")
+    # pl = plot(xlabel=L"U", ylabel=L"\Vert A_{I_M}\Vert_1",xscale=:log10, legend=:topright, dpi=1000)
+    # for order in eachindex(data["norm1"]["orders"])
+    #     plot!(pl, U_values, data["norm1"]["orders"][order], label=L"M=%$order")
+    # end
+    # savefig(pl, "order_images/full_unitary_orders_N=$N.png")
+    # savefig(pl, "order_images/full_unitary_orders_N=$N.pdf")
     
     return 0
 end
