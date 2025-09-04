@@ -28,7 +28,7 @@ function (@main)(ARGS)
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 6
+    N = 3
     half_filling = false
     lattice_dimension = (2,3)
     bc = "periodic"
@@ -38,15 +38,15 @@ function (@main)(ARGS)
 
     models = []
 
-    reference_index = 2
+    reference_index = 1
     # for _t in t_values
     #     # println(_t)
     #     push!(models,HubbardModel(_t,0.0001,μ,half_filling))
     # end
     # U_values = [0.00001,0.01,0.2, 1,1.001,3,4,5,7,10, 100]
-    # U_values = [0.00001; LinRange(2.1,9,20)]
-    U_values = 10. .^ LinRange(-5,-3,20)[2:end-1]
-    # U_values = sort([U_values; 10.0 .^LinRange(-3,2,40)])
+
+
+    U_values = 10.0 .^LinRange(-5,2,60)
     # U_values = [0.00001, 1, 2]
     for U in U_values
         # println(t)
