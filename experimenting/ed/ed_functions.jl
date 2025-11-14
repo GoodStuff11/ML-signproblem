@@ -560,16 +560,19 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     end
     return val < 1e-10
 end
-function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::T=1e-3+0im) where T
+function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::T=1e-3+0im, hermitian::Bool=false) where T
     t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, T}()
     site_list = sort(indexer.a) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ,label) for s in site_list for σ in 1:2],n)
+    geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create]<= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
     for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
         key = [ops_create; ops_annihilate]
-        if key ∉ keys(t_dict)
-            t_dict[key] = (2*rand()-1)/2*magnitude
-        else
-            t_dict[key] += (2*rand()-1)/2*magnitude
+        if !hermitian || geq_ops(ops_create, ops_annihilate)
+            if key ∉ keys(t_dict)
+                t_dict[key] = (2*rand()-1)/2*magnitude
+            else
+                t_dict[key] += (2*rand()-1)/2*magnitude
+            end
         end
     end
     return t_dict

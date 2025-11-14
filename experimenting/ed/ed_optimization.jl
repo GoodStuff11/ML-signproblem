@@ -1,3 +1,15 @@
+function make_hermitian(A::SparseMatrixCSC)
+    # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
+    # This function doesn't override non-zero values with zero values like Hermitian(A) can
+    I, J, V = findnz(A)
+    return sparse(
+        vcat(I, J),
+        vcat(J, I),
+        vcat(V, conj.(V)),
+        size(A,1), size(A,2)
+    )
+end
+
 function optimize_sd_sum(goal_state::Vector, indexer::CombinationIndexer; maxiters=100)
     # this approach optimizes U|psi> to be close, subtracts it from the state and then
     # finds a new slater determinant state that's the close. This optimization doesn't work
@@ -25,7 +37,7 @@ function optimize_sd_sum(goal_state::Vector, indexer::CombinationIndexer; maxite
 
         function f(t_vals, p=nothing)
             vals = update_values(signs, ops_list, Dict(zip(t_keys,t_vals)))
-            mat = exp(1im*Matrix(Hermitian(sparse(rows, cols, vals, dim, dim))))
+            mat = exp(1im*Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim))))
             loss = abs2(1-abs2(goal_state'*mat*starting_state))
             println(sqrt(loss))
             return loss
@@ -40,7 +52,7 @@ function optimize_sd_sum(goal_state::Vector, indexer::CombinationIndexer; maxite
         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
 
         loss = sqrt(f(sol.u))
-        push!(computed_matrices, Hermitian(sparse(rows, cols, vals, dim, dim)))
+        push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
         starting_state -= exp(1im*Matrix(computed_matrices[end]))*starting_state
         push!(coefficients, 1/sqrt(sum(abs2.(starting_state))))
         starting_state *= coefficients[end]
@@ -82,7 +94,7 @@ function optimize_sd_sum_2(goal_state::Vector, indexer::CombinationIndexer, sd_c
                 coeff = params[sd_count*N+i-1]
             end
             vals = update_values(signs, ops_list, Dict(zip(t_keys,params[1+N*(i-1):N*i])))
-            mat += coeff*exp(1im*Matrix(Hermitian(sparse(rows, cols, vals, dim, dim))))
+            mat += coeff*exp(1im*Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim))))
         end
         state = mat*starting_state
         state /= sqrt(sum(abs2.(state)))
@@ -109,7 +121,7 @@ function optimize_sd_sum_2(goal_state::Vector, indexer::CombinationIndexer, sd_c
     coefficients = [1;sol.u[sd_count*N+1:end]]
     for (k,coeff) in zip(0:(sd_count-1),coefficients)
         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u[1+k*N:N*(k+1)])))
-        push!(computed_matrices, Hermitian(sparse(rows, cols, vals, dim, dim)))
+        push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
         total_matrix += coeff*exp(1im*computed_matrices[end])
     end
     coeff = 1/sqrt(sum(abs2.(total_matrix*starting_state)))
@@ -120,10 +132,11 @@ function optimize_sd_sum_2(goal_state::Vector, indexer::CombinationIndexer, sd_c
     return computed_matrices, coefficients, loss
 end
 
-
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; 
     maxiters=10, ϵ=1e-5, max_order=2, optimization=:gradient, metric_functions::Dict{String, Function}=Dict{String, Function}())
     computed_matrices = []
+    computed_coefficients = []
+    coefficient_labels = []
     dim = length(indexer.inv_comb_dict)
     
     metrics = Dict{String,Vector{Any}}()
@@ -143,9 +156,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         learning_rate = loss/10
         println("magnitude: $magnitude_esimate")
         println("learning rate: $learning_rate")
-        @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate)
+        @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate, hermitian=true)
         t_keys = collect(keys(t_dict))
         t_vals = collect(values(t_dict))
+        push!(coefficient_labels, t_keys)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
 
         
@@ -162,7 +176,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         function f_nongradient(t_vals, p=nothing)
             vals = update_values(signs, ops_list, Dict(zip(t_keys,t_vals)))
-            mat = Hermitian(sparse(rows, cols, vals, dim, dim))
+            mat = make_hermitian(sparse(rows, cols, vals, dim, dim))
             if p isa AbstractMatrix
                 mat += p
             end
@@ -172,7 +186,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
         function f(t_vals, p=nothing)
             vals = update_values(signs, ops_list, Dict(zip(t_keys,t_vals)))
-            mat = Matrix(Hermitian(sparse(rows, cols, vals, dim, dim)))
+            mat = Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim)))
             if p isa AbstractMatrix
                 mat += p
             end
@@ -195,7 +209,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         if optimization == :gradient
             # opt = OptimizationOptimisers.Adam(learning_rate)
-            @time sol = Optimization.solve(prob, Optimization.LBFGS(), maxiters=maxiters, callback=callback)
+            @time sol = Optimization.solve(prob, Optim.LBFGS(), maxiters=maxiters, callback=callback)
             s = sol
         else
             function prob_func(prob, i, repeat)
@@ -208,12 +222,14 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
         
         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
+
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         loss = sol.objective
-        push!(computed_matrices,Hermitian(sparse(rows, cols, vals, dim, dim)))
+        push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
         println("Finished order $order")
         push!(metrics["loss"], loss) 
         push!(metrics["loss_std"], std(last(tmp_losses,20)))
+        push!(computed_coefficients, sol.u)
         for (k,func) in metric_functions
             push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
         end
@@ -222,7 +238,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         #     break
         # end
     end
-    return computed_matrices, metrics
+    return computed_matrices, coefficient_labels, computed_coefficients, metrics
 end
 
 
@@ -234,18 +250,25 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
     #             "electron count"=>3, "sites"=>"2x3", "bc"=>"periodic", "basis"=>"adiabatic", 
     #             "U_values"=>U_values)
     data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
-                    "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[])
+                    "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[], "all_matrices"=>[],
+                    "coefficients"=>[], "coefficient_labels"=>nothing)
 
 
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
-            computed_matrices, metrics = optimize_unitary(state1, state2, indexer; 
+            computed_matrices, coefficient_labels, coefficient_values, metrics = optimize_unitary(state1, state2, indexer; 
                     maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
                     metric_functions=metric_functions)
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
+            push!(data_dict["all_matrices"], computed_matrices)
+            push!(data_dict["coefficients"], coefficient_values)
+            if isnothing(data_dict["coefficient_labels"])
+                data_dict["coefficient_labels"] = coefficient_labels
+            end
+
             for (k, val) in metrics
                 if k*"_metrics" ∉ keys(data_dict)
                     data_dict[k*"_metrics"] = [val]
@@ -259,7 +282,6 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
             )
         end
     end
-    println(4)
     return data_dict
 end
 
