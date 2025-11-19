@@ -1,3 +1,4 @@
+#!/bin/bash
 for level1 in 8 46 58; do
     for level2 in 8 46 58; do
         for ((i=1; i<=8; i++)); do
