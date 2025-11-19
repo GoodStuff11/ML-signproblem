@@ -12,8 +12,9 @@
 #SBATCH --partition=kim                       # Request partition
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
-if (( $# >= 4)); then
+echo "$1" "$2" "$3" "$4"
+if [ "$#" -ge 4 ]; then
     julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl "$1" "$2" "$3" "$4"
 else
     julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl
-if
+fi
