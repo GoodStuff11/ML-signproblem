@@ -12,7 +12,7 @@ using Zygote
 using Optimization, OptimizationOptimisers
 using JSON
 using OptimizationOptimJL
-using ExponentialUtilities
+using JLD2
 
 
 include("ed_objects.jl")
@@ -45,6 +45,10 @@ function (@main)(ARGS)
     # U_values = [0.00001,0.01,0.2, 1,1.001,3,4,5,7,10, 100]
     U_values = [0.00001; LinRange(2.1,9,20)]
     U_values = sort([U_values; 10.0 .^LinRange(-3,2,40)])
+    selected_u_values = 1:length(U_values)
+
+
+
     for U in U_values
         # println(t)
         push!(models,HubbardModel(t,U,μ,half_filling))
@@ -76,10 +80,20 @@ function (@main)(ARGS)
     indexer = CombinationIndexer(reduce(vcat,collect(sites(subspace.lattice))), get_subspace_info(subspace)...)
     # difference_dict = collect_all_conf_differences(indexer)
 
+    level1_options = [8]
+    level2_options = [58]
+    if length(ARGS) >= 2
+        level1_options = [parse(Int, ARGS[1])]
+        level2_options = [parse(Int, ARGS[2])]
+    end
+    if length(ARGS) >= 4 # for parallelization
+        selected_u_values = parse(Int, ARGS[3]):parse(Int, ARGS[4])
+    end
+
     # optimization
-    for level1 in [8]
-        for level2 in [99]
-            for u_index in 1:length(U_values)
+    for level1 in level1_options
+        for level2 in level2_options
+            for u_index in selected_u_values
                 function energy(state1, state2, computed_matrices, tmp_losses)
                     new_state = exp(1im*sum(computed_matrices))*state1
                     return Dict("value"=>real.(new_state'*H[u_index]*new_state/(new_state'*new_state)),"target"=>real.(state2'*H[u_index]*state2/(state2'*state2)))
@@ -91,7 +105,7 @@ function (@main)(ARGS)
                                 "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>3)
                 data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient, metric_functions=metric_functions)
                 data_dict_tmp["meta_data"] = meta_data
-                append_to_json_files(data_dict_tmp, "data/unitary_map_energy_N=$N")
+                save_with_metadata(data_dict_tmp, "data/unitary_map_energy_N=$N.jld2")
             end
         end
     end
