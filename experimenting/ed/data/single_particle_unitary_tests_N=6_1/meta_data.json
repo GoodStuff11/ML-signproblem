@@ -1,0 +1,20 @@
+{
+    "U_values": [
+        0.0,
+        0.01,
+        0.2,
+        1.0,
+        1.001,
+        3.0,
+        4.0,
+        5.0,
+        7.0,
+        10.0,
+        100.0
+    ],
+    "maxiters": 20,
+    "sites": "2x3",
+    "basis": "adiabatic",
+    "bc": "periodic",
+    "electron count": 6
+}

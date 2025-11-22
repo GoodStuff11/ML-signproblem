@@ -1,0 +1,512 @@
+[
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 61,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 60,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 61,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 59,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 61,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 61,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 58,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 60,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 57,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 60,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 1,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 56,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 59,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 60,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 55,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 2,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 54,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 58,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 59,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 53,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 59,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 52,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 57,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 51,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 3,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 50,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 58,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 58,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 49,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 56,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 48,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 4,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 47,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 57,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 57,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 46,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 55,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 45,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 56,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 56,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 44,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 43,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 54,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 55,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 42,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 41,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 55,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 58
+        },
+        "ending state": {
+            "U index": 40,
+            "level": 58
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 5,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 99
+        },
+        "ending state": {
+            "U index": 53,
+            "level": 99
+        }
+    },
+    {
+        "starting state": {
+            "U index": 1,
+            "level": 8
+        },
+        "ending state": {
+            "U index": 6,
+            "level": 99
+        }
+    }
+]
