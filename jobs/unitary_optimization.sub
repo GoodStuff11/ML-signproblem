@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J n3                                   # Job name
+#SBATCH -J n4                                   # Job name
 #SBATCH -o unitary_optimization_n4_%j.out       # output file (%j expands to jobID)
 #SBATCH -e unitary_optimization_n4_%j.err       # error log file (%j expands to jobID)
 #SBATCH --mail-type=ALL                      # Request status by email 

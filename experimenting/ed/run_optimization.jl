@@ -94,16 +94,16 @@ function (@main)(ARGS)
     for level1 in level1_options
         for level2 in level2_options
             for u_index in selected_u_values
-                function energy(state1, state2, computed_matrices, tmp_losses)
-                    new_state = exp(1im*sum(computed_matrices))*state1
-                    return Dict("value"=>real.(new_state'*H[u_index]*new_state/(new_state'*new_state)),"target"=>real.(state2'*H[u_index]*state2/(state2'*state2)))
-                end
-                metric_functions = Dict{String, Function}("energy"=>energy)
+                # function energy(state1, state2, computed_matrices, tmp_losses)
+                #     new_state = exp(1im*sum(computed_matrices))*state1
+                #     return Dict("value"=>real.(new_state'*H[u_index]*new_state/(new_state'*new_state)),"target"=>real.(state2'*H[u_index]*state2/(state2'*state2)))
+                # end
+                # metric_functions = Dict{String, Function}("energy"=>energy)
                 meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
                                 "U_values"=>U_values, "maxiters"=>200, "optimizer"=>"LBFGS")
                 instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
                                 "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>3)
-                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient, metric_functions=metric_functions)
+                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient)
                 data_dict_tmp["meta_data"] = meta_data
                 save_with_metadata(data_dict_tmp, "data/unitary_map_energy_N=$N.jld2")
             end
