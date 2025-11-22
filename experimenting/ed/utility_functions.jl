@@ -251,19 +251,3 @@ function load_saved_dict(filename::AbstractString)
         file["dict"]
     end
 end
-
-function safe_load_dict(filename::String; retries=20, delay=0.2)
-    for i in 1:retries
-        if !isfile(filename)
-            error("File $filename does not exist")
-        end
-        dict = jldopen(filename, "r") do f
-            haskey(f, "dict") ? f["dict"] : nothing
-        end
-        if dict !== nothing
-            return dict
-        end
-        sleep(delay)
-    end
-    error("Could not read dict from $filename after $retries retries — file may be in use")
-end
