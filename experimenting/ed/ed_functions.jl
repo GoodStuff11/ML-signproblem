@@ -1,3 +1,15 @@
+function make_hermitian(A::SparseMatrixCSC)
+    # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
+    # This function doesn't override non-zero values with zero values like Hermitian(A) can
+    I, J, V = findnz(A)
+    return sparse(
+        vcat(I, J),
+        vcat(J, I),
+        vcat(V, conj.(V)),
+        size(A,1), size(A,2)
+    )
+end
+
 function permutation_parity(a::Vector)
     p = sortperm(a, alg=MergeSort)
     visited = falses(length(p))
@@ -482,8 +494,18 @@ end
 function update_values(
     signs::Vector{U},
     ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
-    t::Dict{Vector{Tuple{T,Int,Symbol}}, U}, 
+    t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
+    t_vals::Vector{U},
+    parameter_mapping::Union{Vector{Int},Nothing}=nothing
 ) where {T, U<:Number}
+    # it's allowed for length(t_vals) < length(t_keys), but a parameter_mapping to make the difference is required.
+    if isnothing(parameter_mapping)
+        @assert length(t_keys) == length(t_vals)
+        t = Dict(zip(t_keys, t_vals))
+    else
+        extended_t_vals = [t_vals[parameter_mapping[i]] for i in eachindex(t_keys)]
+        t = Dict(zip(t_keys, extended_t_vals))
+    end
     return [t[ops_list[i]]*signs[i] for i in eachindex(signs)]
 end
 function general_n_body!(
@@ -495,7 +517,7 @@ function general_n_body!(
 ) where {T, U<:Number}
     # requires applying Hermitian to the resulting sparse matrix
     _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false)
-    _vals = update_values(signs, ops_list, t)
+    _vals = update_values(signs, ops_list, collect(keys(t)), collect(values(t)))
     append!(rows, _rows)
     append!(cols, _cols)
     append!(vals, _vals)
@@ -560,14 +582,20 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     end
     return val < 1e-10
 end
-function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; magnitude::T=1e-3+0im, hermitian::Bool=false) where T
+function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; 
+        magnitude::T=1e-3+0im, hermitian::Bool=false, conserve_spin::Bool=false) where T
+    # function creates a dictionary of free parameters in the form of a dictionary. 
+    # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
+    # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
+
     t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}, T}()
     site_list = sort(indexer.a) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ,label) for s in site_list for σ in 1:2],n)
+    equal_spin(create, annihilate) = sum((σ*2-3) for (s, σ, _) in create) == sum((σ*2-3) for (s, σ, _) in annihilate)
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create]<= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
     for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
         key = [ops_create; ops_annihilate]
-        if !hermitian || geq_ops(ops_create, ops_annihilate)
+        if (!hermitian || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate))
             if key ∉ keys(t_dict)
                 t_dict[key] = (2*rand()-1)/2*magnitude
             else
@@ -578,6 +606,113 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
     return t_dict
 end
 
+
+# output is a minimal number of parameters that are a subset of t_dict values (t_dict should be random, so exactly which shouldn't matter)
+# as a vector reducedparameters, and also a parameter mapping vector parameter_mapping. 
+# parameter_mapping is defined such that values(t_dict)[i] = reduced_parameters[parameter_mapping[i]]
+# NOTE: this function only measures equivalences based on the symmetries, it doesn't care if the transformed states are actually in t_dict
+function force_operator_symmetry(
+        t_dict::Dict,
+        lattice_size::NTuple,
+        directions::Tuple=(),
+        reflect_axes::Tuple=()
+    )
+
+    t_keys = collect(keys(t_dict))
+    t_vals = collect(values(t_dict))
+    D      = length(lattice_size)
+    L      = lattice_size
+
+    # encode coordinate as integer
+    function encode(c::NTuple{N,Int}) where N
+        id = c[1]
+        mult = 1
+        @inbounds for d in 2:N
+            mult *= L[d-1]
+            id += (c[d]-1)*mult
+        end
+        return id
+    end
+
+    # decode if needed later (not required for canonicalization)
+    # ---------------------------------------------------------
+
+    # reflection combinations
+    reflection_sets = [[]]
+    for ax in reflect_axes
+        append!(reflection_sets,[push!(copy(r),ax) for r in reflection_sets])
+    end
+
+    # generate shifts only in symmetry directions
+    shifts = [[]]
+    for d in 1:D
+        if d ∈ directions
+            shifts = [vcat(s,[k]) for s in shifts for k in 0:L[d]-1]
+        else
+            shifts = [vcat(s,[0]) for s in shifts]
+        end
+    end
+
+    # build symmetry group operators ONCE
+    sym_ops = Vector{Function}()
+    for refl in reflection_sets
+        for shift in shifts
+            push!(sym_ops, coords -> begin
+                @inbounds [encode(ntuple(d ->
+                    (d in refl ? (L[d]-coords[d]+1) : coords[d]) |> x ->
+                        (d in directions ? ((x-1+shift[d])%L[d]+1) : x),
+                    D)) for coords in coords]
+            end)
+        end
+    end
+
+    # canonical cache avoids repeating orbit checks
+    canonical_cache = Dict{Any,Any}()
+
+    function canonical(term)
+        haskey(canonical_cache,term) && return canonical_cache[term]
+
+        coords  = [k[1].coordinates for k in term]
+        spins   = [k[2] for k in term]
+        types   = [k[3] for k in term]
+
+        best = nothing
+        for op in sym_ops
+            img = op(coords)
+            cand = (img,spins,types)  # encoded + no tuple overhead
+
+            best === nothing && (best=cand; continue)
+            cand < best && (best=cand)
+        end
+
+        canonical_cache[term] = best
+        return best
+    end
+
+    # canonicalize all keys (fast now)
+    labs = canonical.(t_keys)
+
+    # grouping
+    lab_to_idx = Dict{Any,Int}()
+    param_map = Vector{Int}(undef,length(t_keys))
+    counter = 0
+    for i in eachindex(labs)
+        if !haskey(lab_to_idx,labs[i])
+            counter += 1
+            lab_to_idx[labs[i]] = counter
+        end
+        param_map[i] = lab_to_idx[labs[i]]
+    end
+
+    reduced = [zero(eltype(t_vals)) for _=1:counter]
+    for i in eachindex(t_vals)
+        reduced[param_map[i]] = t_vals[i]
+    end
+
+    return reduced, param_map
+end
+
+
 function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64, AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer)
     if isa(t, Number) 
         t = [t]
@@ -586,7 +721,7 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
         for σ ∈ [1, 2]
             for site_index1 ∈ conf[σ]
                 for order in eachindex(t)
-                    for site_index2 ∈ neighbors(lattice, site_index1,order)
+                    for site_index2 ∈ neighbors(lattice, site_index1, order)
                         if site_index2 ∉ conf[σ]
                             new_conf = replace(conf[σ], site_index1=>site_index2)
                             if σ == 1

@@ -186,7 +186,6 @@ function save_energy_with_metadata(folder::String, dict::Dict)
         return new_path
     end
 end
-
 """
     save_incrementing(folder::String, filename::String, dict::Dict)
 
@@ -235,19 +234,62 @@ end
 """
     load_saved_dict(filename::AbstractString) -> Dict
 
-Load the dictionary saved using `save_with_metadata`.
+Merge all JLD2 files inside `folder` into a single dictionary.
 
-Returns the dictionary stored under the key `"dict"`.
+Rules:
+- All files must contain `meta_data`, and all meta_data must match.
+- All non-omitted keys (except meta_data) must be vectors and will be concatenated.
+- The merged dictionary has:
+      merged["meta_data"] = shared_meta
+      merged[key] = vcat(all vectors across files…)
 
-Throws an error if the file does not exist or if it does not contain `"dict"`.
+Arguments:
+- `folder`      : Folder containing JLD2 files.
+- `omit_keys`   : Vector of keys to exclude from merging. (Default: none)
 """
-function load_saved_dict(filename::AbstractString)
-    @assert isfile(filename) "File does not exist: $filename"
+function merge_jld2_folder(folder::String; omit_keys=String[])
+    # Locate all JLD2 files
+    files = filter(f -> endswith(f, ".jld2"), readdir(folder, join=true))
+    isempty(files) && error("No JLD2 files found in folder: $folder")
 
-    return JLD2.jldopen(filename, "r") do file
-        if !haskey(file, "dict")
-            error("File '$filename' does not contain a saved dictionary under key \"dict\".")
+    merged = Dict{String,Any}()
+    shared_meta = nothing
+    first_file = true
+
+    for file in files
+        dict = load(file)["dict"]
+
+        # Ensure meta_data exists
+        @assert haskey(dict, "meta_data") "File $file has no meta_data key."
+
+        # Establish or validate shared metadata
+        if first_file
+            shared_meta = dict["meta_data"]
+            merged["meta_data"] = shared_meta
+            first_file = false
+        else
+            @assert dict["meta_data"] == shared_meta "meta_data mismatch in file: $file"
         end
-        file["dict"]
+
+        # Merge all non-omitted keys except meta_data
+        for (k, v) in dict
+            if k == "meta_data" || k in omit_keys
+                continue
+            end
+
+            if haskey(merged, k)
+                # append to existing vector
+                try
+                    merged[k] = vcat(merged[k], v)
+                catch
+                    error("Key '$k' cannot be appended. Check that all values are vectors. Error in file: $file")
+                end
+            else
+                # initialize
+                merged[k] = v
+            end
+        end
     end
+
+    return merged
 end
