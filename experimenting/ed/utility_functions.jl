@@ -116,89 +116,123 @@ function append_to_json_files(new_data::Dict{String, Any}, folder::String)
     return final_folder
 end
 
-"""
-    save_dict_with_metadata(dict, folder::String, filename::String)
-
-Saves `dict` as a JLD2 file inside `folder/filename.jld2`, following the rules:
-
-1. If `folder` does not exist: create it and write the file.
-2. If `folder` exists:
-   - If `filename.jld2` does not exist: write the file.
-   - If it exists:
-       * Compare metadata:
-           identical → create a new file with incremented name.
-           different → create a new folder with incremented name.
 
 """
-function save_with_metadata(dict, folder::String, filename::String)
+    save_energy_with_metadata(folder::String, dict::Dict)
 
-    # --- Helper functions ---
-    # Increment names: base, base_1, base_2, ...
-    function increment_name(path::String)
-        base = path
+Save a dictionary containing meta_data and other values.
+
+Behavior:
+1. If folder does NOT exist:
+       - create it
+       - save dict as `meta_data_and_E.jld2` inside it
+2. If folder exists:
+       - if meta_data_and_E.jld2 exists:
+             * if meta_data matches → do nothing
+             * if meta_data differs → create new incremented folder and save there
+       - if meta_data_and_E.jld2 does NOT exist:
+             * save dict normally
+
+Returns the final save path.
+"""
+function save_energy_with_metadata(folder::String, dict::Dict)
+
+    file_name = "meta_data_and_E.jld2"
+    file_path = joinpath(folder, file_name)
+
+    # Helper: increment folder name (folder, folder_1, folder_2, ...)
+    function increment_folder_name(base::String)
+        new = base
         i = 1
-        while ispath(path)
-            path = base * "_" * string(i)
+        while isdir(new)
+            new = base * "_" * string(i)
             i += 1
         end
-        return path
+        return new
     end
 
-    function increment_file(folder::String, filename::String)
-        base = filename
-        i = 1
-        newfile = joinpath(folder, filename * ".jld2")
-        while isfile(newfile)
-            newfile = joinpath(folder, base * "_" * string(i) * ".jld2")
-            i += 1
-        end
-        return newfile
-    end
-
-    # --- Ensure folder exists ---
+    # --- Case 1: folder does not exist ---
     if !isdir(folder)
         mkpath(folder)
-        @info "Folder created: $folder"
-        filepath = joinpath(folder, filename * ".jld2")
-        @save filepath dict
-        return filepath
+        @save file_path dict
+        return file_path
     end
 
-    # Folder exists
-    filepath = joinpath(folder, filename * ".jld2")
+    # --- Case 2: folder exists ---
 
-    # If file does not exist, write it
-    if !isfile(filepath)
-        @save filepath dict
-        return filepath
+    # If file does NOT exist → save normally
+    if !isfile(file_path)
+        @save file_path dict
+        return file_path
     end
 
     # File exists → load and compare metadata
-    existing = load(filepath)["dict"]
+    existing = load(file_path)
+
     if !haskey(existing, "meta_data")
-        error("Existing file does not contain meta_data key.")
+        error("Existing file in folder $folder does not contain meta_data.")
     end
 
-    same_meta = existing["meta_data"] == dict["meta_data"]
-
-    if same_meta
-        # Metadata matches → increment filename
-        newfile = increment_file(folder, filename)
-        @info "Metadata matches. Saving to new file: $newfile"
-        @save newfile dict
-        return newfile
+    # Compare metadata
+    if existing["meta_data"] == dict["meta_data"]
+        # meta_data match → do nothing and finish
+        return file_path
     else
-        # Metadata differs → increment folder
-        newfolder = increment_name(folder)
-        mkpath(newfolder)
-        newfile = joinpath(newfolder, filename * ".jld2")
-        @info "Metadata differs. Creating new folder: $newfolder"
-        @save newfile dict
-        return newfile
+        # meta_data mismatch → create incremented folder
+        new_folder = increment_folder_name(folder)
+        mkpath(new_folder)
+        new_path = joinpath(new_folder, file_name)
+        @save new_path dict
+        return new_path
     end
 end
 """
-    merge_jld2_folder(folder; omit_keys = String[])
+    save_incrementing(folder::String, filename::String, dict::Dict)
+
+Save `dict` into an existing folder.
+
+Rules:
+1. If the folder does NOT exist → error.
+2. If `filename.jld2` does NOT exist → save directly.
+3. If it DOES exist → increment the name (filename_1, filename_2, …) until free, then save.
+
+This version uses ONLY JLD2, no FileIO.
+"""
+function save_dictionary(folder::String, filename::String, dict::Dict)
+
+    # Ensure folder exists
+    if !isdir(folder)
+        error("Folder does not exist: $folder")
+    end
+
+    # Base path
+    file_path = joinpath(folder, filename * ".jld2")
+
+    # If file doesn't exist, save immediately
+    if !isfile(file_path)
+        @save file_path dict
+        return file_path
+    end
+
+    # Otherwise increment filename until one is free
+    base = filename
+    i = 1
+    new_path = joinpath(folder, base * "_" * string(i) * ".jld2")
+
+    while isfile(new_path)
+        i += 1
+        new_path = joinpath(folder, base * "_" * string(i) * ".jld2")
+    end
+
+    # Save to the incremented filename
+    @save new_path dict
+
+    return new_path
+end
+
+
+"""
+    load_saved_dict(filename::AbstractString) -> Dict
 
 Merge all JLD2 files inside `folder` into a single dictionary.
 

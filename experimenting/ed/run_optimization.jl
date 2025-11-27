@@ -22,63 +22,15 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    t = 1.0
-    U = 6
-    μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
-    # N_up = 2
-    # N_down = 2
-    N = 4
-    half_filling = false
-    lattice_dimension = (2,3)
-    bc = "periodic"
-    # lattice = Chain(6, Periodic())
-    lattice = Square(lattice_dimension, if bc == "periodic" Periodic() else Open() end)
-    # lattice = Graphs.cycle_graph(3)
+    dict = load_saved_dict("data/test/meta_data_and_E.jld2")
+    meta_data = dict["meta_data"]
+    indexer = dict["indexer"]
+    U_values = meta_data["U_values"]
+    degen_rm_U = dict["degen_rm_U"]
+    maxiters = meta_data["maxiters"]
+    N = meta_data["electron count"]
 
-    models = []
-
-    reference_index = 2
-    # for _t in t_values
-    #     # println(_t)
-    #     push!(models,HubbardModel(_t,0.0001,μ,half_filling))
-    # end
-    # U_values = [0.00001,0.01,0.2, 1,1.001,3,4,5,7,10, 100]
-    U_values = [0.00001; LinRange(2.1,9,20)]
-    U_values = sort([U_values; 10.0 .^LinRange(-3,2,40)])
     selected_u_values = 1:length(U_values)
-
-
-
-    for U in U_values
-        # println(t)
-        push!(models,HubbardModel(t,U,μ,half_filling))
-    end
-
-    subspace = HubbardSubspace(N, lattice)
-    # subspace = HubbardSubspace(N_up, N_down, lattice)
-
-    ops = []
-    push!(ops,Matrix(create_operator(subspace,:Sx)))
-    push!(ops, Matrix(create_operator(subspace,:S2)))
-    # op3 = Matrix(create_operator(subspace,:L2))
-    push!(ops, Matrix(create_operator(subspace,:T, kind=1)))
-    push!(ops, Matrix(create_operator(subspace,:T, kind=2)))
-    # push!(ops, Matrix(create_operator(subspace,:σ, kind=1)))
-    E = []
-    H = []
-    V = []
-    for model ∈ models
-        push!(H, Matrix(create_Hubbard(model, subspace; perturbations=false)))
-        e, v = eigen(H[end])
-        push!(E, e)
-        push!(V, v)
-    end
-
-    degen_rm_U = create_consistent_basis(H, ops;reference_index=reference_index)
-
-    # dim = get_subspace_dimension(subspace)
-    indexer = CombinationIndexer(reduce(vcat,collect(sites(subspace.lattice))), get_subspace_info(subspace)...)
-    # difference_dict = collect_all_conf_differences(indexer)
 
     level1_options = [8]
     level2_options = [58]
@@ -94,18 +46,10 @@ function (@main)(ARGS)
     for level1 in level1_options
         for level2 in level2_options
             for u_index in selected_u_values
-                function energy(state1, state2, computed_matrices, tmp_losses)
-                    new_state = exp(1im*sum(computed_matrices))*state1
-                    return Dict("value"=>real.(new_state'*H[u_index]*new_state/(new_state'*new_state)),"target"=>real.(state2'*H[u_index]*state2/(state2'*state2)))
-                end
-                metric_functions = Dict{String, Function}("energy"=>energy)
-                meta_data = Dict("electron count"=>N, "sites"=>join(lattice_dimension, "x"), "bc"=>bc, "basis"=>"adiabatic", 
-                                "U_values"=>U_values, "maxiters"=>200, "optimizer"=>"LBFGS")
                 instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
-                                "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>3)
-                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=meta_data["maxiters"], optimization=:gradient, metric_functions=metric_functions)
-                data_dict_tmp["meta_data"] = meta_data
-                save_with_metadata(data_dict_tmp, "data/unitary_map_energy_N=$N.jld2")
+                                "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>2)
+                data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=maxiters, optimization=:gradient)
+                save_dictionary("data/test","unitary_map_energy_N=$N", data_dict_tmp)
             end
         end
     end

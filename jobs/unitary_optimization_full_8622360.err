@@ -1,6 +1,0 @@
-ERROR: LoadError: UndefVarError: `degen_rm_U` not defined in `Main`
-Suggestion: check for spelling errors or missing imports.
-Stacktrace:
- [1] top-level scope
-   @ ~/research/ML-signproblem/experimenting/ed/run_full_unitary_analysis.jl:24
-in expression starting at /home/jek354/research/ML-signproblem/experimenting/ed/run_full_unitary_analysis.jl:24

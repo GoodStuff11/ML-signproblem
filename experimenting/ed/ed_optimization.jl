@@ -135,6 +135,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     metrics = Dict{String,Vector{Any}}()
     loss = 1-abs2(state1'*state2)
     metrics["loss"] = Float64[loss]
+    metrics["other metrics"] = []
     metrics["loss_std"] = Float64[0.0]
     for k in keys(metric_functions)
         metrics[k] = Any[]
@@ -224,6 +225,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         loss = sol.objective
+        push!(metrics["other"], sol.original)
         push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
         println("Finished order $order")
         push!(metrics["loss"], loss) 
