@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH -J n6                                   # Job name
+#SBATCH -J ED                                   # Job name
 #SBATCH -o unitary_optimization_n4_%j.out       # output file (%j expands to jobID)
 #SBATCH -e unitary_optimization_n4_%j.err       # error log file (%j expands to jobID)
 #SBATCH --mail-type=ALL                      # Request status by email 
@@ -7,14 +7,9 @@
 #SBATCH -N 1                                 # Total number of nodes requested
 #SBATCH -n 1                                 # Total number of cores requested
 #SBATCH --get-user-env                       # retrieve the users login environment
-#SBATCH --mem=16G                             # server memory requested (per node)
+#SBATCH --mem=65G                             # server memory requested (per node)
 #SBATCH -t 24:00:00                           # Time limit (hh:mm:ss)
 #SBATCH --partition=kim                       # Request partition
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
-echo "$1" "$2" "$3" "$4"
-if [ "$#" -ge 4 ]; then
-    julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl "$1" "$2" "$3" "$4"
-else
-    julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl
-fi
+julia --project=/home/jek354/research/ML-signproblem/experimenting run_ed.jl

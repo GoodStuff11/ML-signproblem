@@ -27,9 +27,9 @@ function (@main)(ARGS)
     μ = 0  # positive incentivises fewer particles (one electron costs this much energy)
     # N_up = 2
     # N_down = 2
-    N = 3
+    N = 6
     half_filling = false
-    lattice_dimension = (2,3)
+    lattice_dimension = (2,4)
     bc = "periodic"
     # lattice = Chain(6, Periodic())
     lattice = Square(lattice_dimension, if bc == "periodic" Periodic() else Open() end)
@@ -93,7 +93,7 @@ function (@main)(ARGS)
         "indexer"=>indexer)
     
     
-    save_energy_with_metadata("data/test", dict)
+    save_energy_with_metadata("data/N=$(N)_2x4", dict)
 
     return 0 
 end

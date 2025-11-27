@@ -22,7 +22,9 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    dict = load_saved_dict("data/test/meta_data_and_E.jld2")
+    folder = "data/N=6"
+
+    dict = load_saved_dict(joinpath(folder,"meta_data_and_E.jld2"))
     meta_data = dict["meta_data"]
     indexer = dict["indexer"]
     U_values = meta_data["U_values"]
@@ -49,7 +51,7 @@ function (@main)(ARGS)
                 instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>level1),
                                 "ending state"=>Dict("U index"=>u_index, "levels"=>level2), "max_order"=>2)
                 data_dict_tmp = test_map_to_state(degen_rm_U, instructions, indexer; maxiters=maxiters, optimization=:gradient)
-                save_dictionary("data/test","unitary_map_energy_N=$N", data_dict_tmp)
+                save_dictionary(folder,"unitary_map_energy_N=$N", data_dict_tmp)
             end
         end
     end

@@ -142,7 +142,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     metrics = Dict{String,Vector{Any}}()
     loss = 1-abs2(state1'*state2)
     metrics["loss"] = Float64[loss]
-    metrics["other metrics"] = []
+    metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
     for k in keys(metric_functions)
         metrics[k] = Any[]
