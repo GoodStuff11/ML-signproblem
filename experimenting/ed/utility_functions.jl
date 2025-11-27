@@ -117,97 +117,145 @@ function append_to_json_files(new_data::Dict{String, Any}, folder::String)
 end
 
 """
-    save_with_metadata(dict::Dict, filename::AbstractString)
+    save_dict_with_metadata(dict, folder::String, filename::String)
 
-Save a dictionary to a JLD2 file with metadata checking and append behavior.
+Saves `dict` as a JLD2 file inside `folder/filename.jld2`, following the rules:
 
-Dictionary format:
-- Must contain the key `"meta_data"`
-- All other keys contain *vectors* of data that should be appended on match.
-- If `filename` does not exist → save entire dictionary.
-- If `filename` exists:
-    * metadata matches → append to the vector keys
-    * metadata does not match → generate new filename filename_1, filename_2, ...
+1. If `folder` does not exist: create it and write the file.
+2. If `folder` exists:
+   - If `filename.jld2` does not exist: write the file.
+   - If it exists:
+       * Compare metadata:
+           identical → create a new file with incremented name.
+           different → create a new folder with incremented name.
+
 """
-function save_with_metadata(dict::Dict, filename::AbstractString)
-    @assert haskey(dict, "meta_data") "Dictionary must contain `\"meta_data\"`."
+function save_with_metadata(dict, folder::String, filename::String)
 
-    # ------------------------------------------------------------
-    # Case 1: The file does not exist — save new dictionary
-    # ------------------------------------------------------------
-    if !isfile(filename)
-        println("Saving new file: $filename")
-        JLD2.@save filename dict
-        return filename
-    end
-
-    # ------------------------------------------------------------
-    # Case 2: File exists — load and compare metadata
-    # ------------------------------------------------------------
-    existing = JLD2.jldopen(filename, "r") do file
-        file["dict"]
-    end
-
-    if existing["meta_data"] == dict["meta_data"]
-        println("Metadata matches — appending data to $filename")
-
-        # Append vector data
-        JLD2.jldopen(filename, "a") do file
-            d = file["dict"]              # load stored dictionary into memory
-
-            # mutate the in-memory dict
-            for (k, v_new) in dict
-                k == "meta_data" && continue
-                d[k] = vcat(d[k], v_new)
-            end
-            delete!(file, "dict")
-            file["dict"] = d              # WRITE BACK to the file  <-- crucial
+    # --- Helper functions ---
+    # Increment names: base, base_1, base_2, ...
+    function increment_name(path::String)
+        base = path
+        i = 1
+        while ispath(path)
+            path = base * "_" * string(i)
+            i += 1
         end
-
-        return filename
+        return path
     end
 
-    # ------------------------------------------------------------
-    # Case 3: Metadata mismatch — create new incrementing filename
-    # ------------------------------------------------------------
-    println("Metadata mismatch — creating new file")
-
-    # Extract directory, stem, and extension manually
-    dir = dirname(filename)
-    base = basename(filename)
-    stem, ext = splitext(base)
-
-    # Construct incrementing new filename
-    i = 1
-    new_filename = joinpath(dir, stem * "_" * string(i) * ext)
-
-    while isfile(new_filename)
-        i += 1
-        new_filename = joinpath(dir, stem * "_" * string(i) * ext)
+    function increment_file(folder::String, filename::String)
+        base = filename
+        i = 1
+        newfile = joinpath(folder, filename * ".jld2")
+        while isfile(newfile)
+            newfile = joinpath(folder, base * "_" * string(i) * ".jld2")
+            i += 1
+        end
+        return newfile
     end
 
-    println("Saving to new file: $new_filename")
-    JLD2.@save new_filename dict
+    # --- Ensure folder exists ---
+    if !isdir(folder)
+        mkpath(folder)
+        @info "Folder created: $folder"
+        filepath = joinpath(folder, filename * ".jld2")
+        @save filepath dict
+        return filepath
+    end
 
-    return new_filename
+    # Folder exists
+    filepath = joinpath(folder, filename * ".jld2")
+
+    # If file does not exist, write it
+    if !isfile(filepath)
+        @save filepath dict
+        return filepath
+    end
+
+    # File exists → load and compare metadata
+    existing = load(filepath)["dict"]
+    if !haskey(existing, "meta_data")
+        error("Existing file does not contain meta_data key.")
+    end
+
+    same_meta = existing["meta_data"] == dict["meta_data"]
+
+    if same_meta
+        # Metadata matches → increment filename
+        newfile = increment_file(folder, filename)
+        @info "Metadata matches. Saving to new file: $newfile"
+        @save newfile dict
+        return newfile
+    else
+        # Metadata differs → increment folder
+        newfolder = increment_name(folder)
+        mkpath(newfolder)
+        newfile = joinpath(newfolder, filename * ".jld2")
+        @info "Metadata differs. Creating new folder: $newfolder"
+        @save newfile dict
+        return newfile
+    end
 end
-
 """
-    load_saved_dict(filename::AbstractString) -> Dict
+    merge_jld2_folder(folder; omit_keys = String[])
 
-Load the dictionary saved using `save_with_metadata`.
+Merge all JLD2 files inside `folder` into a single dictionary.
 
-Returns the dictionary stored under the key `"dict"`.
+Rules:
+- All files must contain `meta_data`, and all meta_data must match.
+- All non-omitted keys (except meta_data) must be vectors and will be concatenated.
+- The merged dictionary has:
+      merged["meta_data"] = shared_meta
+      merged[key] = vcat(all vectors across files…)
 
-Throws an error if the file does not exist or if it does not contain `"dict"`.
+Arguments:
+- `folder`      : Folder containing JLD2 files.
+- `omit_keys`   : Vector of keys to exclude from merging. (Default: none)
 """
-function load_saved_dict(filename::AbstractString)
-    @assert isfile(filename) "File does not exist: $filename"
+function merge_jld2_folder(folder::String; omit_keys=String[])
+    # Locate all JLD2 files
+    files = filter(f -> endswith(f, ".jld2"), readdir(folder, join=true))
+    isempty(files) && error("No JLD2 files found in folder: $folder")
 
-    return JLD2.jldopen(filename, "r") do file
-        if !haskey(file, "dict")
-            error("File '$filename' does not contain a saved dictionary under key \"dict\".")
+    merged = Dict{String,Any}()
+    shared_meta = nothing
+    first_file = true
+
+    for file in files
+        dict = load(file)["dict"]
+
+        # Ensure meta_data exists
+        @assert haskey(dict, "meta_data") "File $file has no meta_data key."
+
+        # Establish or validate shared metadata
+        if first_file
+            shared_meta = dict["meta_data"]
+            merged["meta_data"] = shared_meta
+            first_file = false
+        else
+            @assert dict["meta_data"] == shared_meta "meta_data mismatch in file: $file"
         end
-        file["dict"]
+
+        # Merge all non-omitted keys except meta_data
+        for (k, v) in dict
+            if k == "meta_data" || k in omit_keys
+                continue
+            end
+
+            if haskey(merged, k)
+                # append to existing vector
+                try
+                    merged[k] = vcat(merged[k], v)
+                catch
+                    error("Key '$k' cannot be appended. Check that all values are vectors. Error in file: $file")
+                end
+            else
+                # initialize
+                merged[k] = v
+            end
+        end
     end
+
+    return merged
 end
