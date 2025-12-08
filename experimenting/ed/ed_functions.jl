@@ -695,7 +695,8 @@ function force_operator_symmetry(
     # grouping
     lab_to_idx = Dict{Any,Int}()
     param_map = Vector{Int}(undef,length(t_keys))
-    counter = 0
+    param_map_inv = Vector{Int}(undef,length(t_keys))
+    counter = 0s
     for i in eachindex(labs)
         if !haskey(lab_to_idx,labs[i])
             counter += 1

@@ -155,12 +155,18 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         t_keys = collect(keys(t_dict))
 
         if use_symmetry
-            @time t_vals, parameter_mapping = force_operator_symmetry(t_dict, maximum(indexer.a).coordinates, (1,2),(1,2))
+            @time t_vals, parameter_mapping = force_operator_symmetry(t_dict, maximum(indexer.a).coordinates, (1,2),())
         else
             t_vals = collect(values(t_dict))
             parameter_mapping = nothing
         end
         push!(coefficient_labels, t_keys)
+
+        # for exp(sum_i t_i A_i), find A_i
+        trotter_matrices = []
+        for p in parameter_mapping
+            push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dims, dims))
+        end
 
         tmp_losses = []
         function callback(state, loss_val)
@@ -172,6 +178,14 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 return true
             end
             return false
+        end
+
+        function trotter_gradient!(grad, t_vals)
+            ##################################
+            # TODO  ##########################
+            ##################################
+
+            return grad
         end
 
         function f_nongradient(t_vals, p=nothing)
@@ -197,6 +211,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         if optimization == :gradient
             optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
+        elseif optimization == :manualgradient
+            optf = Optimization.OptimizationFunction(f_nongradient, adtype=Optimization.NoAD(), grad=trotter_gradient!)
         else
             optf = Optimization.OptimizationFunction(f_nongradient)
         end
@@ -207,7 +223,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             prob = Optimization.OptimizationProblem(optf, t_vals)
         end
 
-        if optimization == :gradient
+        if optimization == :gradient || optimization == :manualgradient
             # opt = OptimizationOptimisers.Adam(learning_rate)
             @time sol = Optimization.solve(prob, Optim.LBFGS(), maxiters=maxiters, callback=callback)
             s = sol
