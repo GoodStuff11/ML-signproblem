@@ -696,7 +696,7 @@ function force_operator_symmetry(
     lab_to_idx = Dict{Any,Int}()
     param_map = Vector{Int}(undef,length(t_keys))
     param_map_inv = Vector{Int}(undef,length(t_keys))
-    counter = 0s
+    counter = 0
     for i in eachindex(labs)
         if !haskey(lab_to_idx,labs[i])
             counter += 1
@@ -848,9 +848,15 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bo
     vals = Float64[]
 
     #Constructs the sparse hopping Hamiltonian matrix \sum_{<i,j>} c^\dagger_i c_j.
-    create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer)
-    create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer)
-    create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
+    if Hm.t > 0
+        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer)
+    end
+    if Hm.U > 0
+        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer)
+    end
+    if Hm.μ > 0
+        create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
+    end
     if perturbations
         # create_Sx!(rows, cols, vals, sqrt(2)*1e-5, indexer)
         # create_S2!(rows, cols, vals, sqrt(3)*1e-5, indexer)

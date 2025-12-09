@@ -231,8 +231,12 @@ function save_dictionary(folder::String, filename::String, dict::Dict)
 end
 
 
+function load_saved_dict(path)
+    return load(path)["dict"]
+end
+
 """
-    load_saved_dict(filename::AbstractString) -> Dict
+    merge_jld2_folder(filename::AbstractString) -> Dict
 
 Merge all JLD2 files inside `folder` into a single dictionary.
 
@@ -247,33 +251,27 @@ Arguments:
 - `folder`      : Folder containing JLD2 files.
 - `omit_keys`   : Vector of keys to exclude from merging. (Default: none)
 """
-function merge_jld2_folder(folder::String; omit_keys=String[])
+function merge_jld2_folder(folder::String; include_keys=String[], data_filter=[], verbose=false)
     # Locate all JLD2 files
     files = filter(f -> endswith(f, ".jld2"), readdir(folder, join=true))
     isempty(files) && error("No JLD2 files found in folder: $folder")
 
     merged = Dict{String,Any}()
-    shared_meta = nothing
-    first_file = true
-
-    for file in files
-        dict = load(file)["dict"]
-
-        # Ensure meta_data exists
-        @assert haskey(dict, "meta_data") "File $file has no meta_data key."
-
-        # Establish or validate shared metadata
-        if first_file
-            shared_meta = dict["meta_data"]
-            merged["meta_data"] = shared_meta
-            first_file = false
-        else
-            @assert dict["meta_data"] == shared_meta "meta_data mismatch in file: $file"
+    for (i, file) in enumerate(files)
+        if verbose && i%20 == 0
+            println("loaded: $i/$(length(files))")
         end
 
+        if endswith(file, "meta_data_and_E.jld2")
+            continue
+        end
+        dict = load_saved_dict(file)
+        if !all([f(dict) for f in data_filter])
+            continue
+        end
         # Merge all non-omitted keys except meta_data
         for (k, v) in dict
-            if k == "meta_data" || k in omit_keys
+            if k ∉ include_keys
                 continue
             end
 
@@ -293,3 +291,4 @@ function merge_jld2_folder(folder::String; omit_keys=String[])
 
     return merged
 end
+
