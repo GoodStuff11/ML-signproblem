@@ -437,9 +437,19 @@ function general_single_body!(
         end
     end
 end
+
 function build_n_body_structure(
     t::Dict{Vector{Tuple{T,Int,Symbol}}, U},
     indexer::CombinationIndexer;
+    skip_lower_triangular::Bool=false
+) where {T, U<:Number}
+    build_n_body_structure(collect(keys(t)), indexer, U; skip_lower_triangular)
+end
+
+function build_n_body_structure(
+    t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
+    indexer::CombinationIndexer,
+    ::Type{U}=Float64;
     skip_lower_triangular::Bool=false
 ) where {T, U<:Number}
     sorted_sites = sort(indexer.a)
@@ -449,7 +459,7 @@ function build_n_body_structure(
     ops_list = Vector{Vector{Tuple{T,Int,Symbol}}}()
 
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        for ops in keys(t)
+        for ops in t_keys
             # Clone the config
             conf_new = [copy(conf[1]), copy(conf[2])]
             valid = true
@@ -1170,3 +1180,26 @@ function create_consistent_basis(H::Vector, ops::Vector, degen::Dict)
 
     return degen_rm_U
 end
+
+"""
+Using only information saved to files, reconstruct sparse matrix for unitary. This can reconstruct
+the matrices stored in all_matrices
+
+ex.
+data_dict_tmp = load_saved_dict(joinpath(folder,"unitary_map_energy_N=4_200.jld2"))
+energy_dict = load_saved_dict(joinpath(folder,"meta_data_and_E.jld2"))
+
+mat = construct_sparse(energy_dict["indexer"], 
+    identity.(data_dict_tmp["coefficient_labels"][1]),
+    data_dict_tmp["coefficients"][1][1])
+"""
+function construct_sparse(
+    indexer::CombinationIndexer, coefficient_labels::Vector{Vector{Tuple{T, Int64, Symbol}}}, 
+    coefficients; parameter_mapping=nothing) where {T}
+    dim = length(indexer.inv_comb_dict)
+    rows, cols, signs, ops_list = build_n_body_structure(coefficient_labels, indexer)
+    vals = update_values(signs, ops_list, coefficient_labels, coefficients, parameter_mapping)
+    return make_hermitian(sparse(rows, cols, vals, dim, dim))
+end
+
+truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)

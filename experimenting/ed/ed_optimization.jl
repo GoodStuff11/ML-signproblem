@@ -122,6 +122,8 @@
 #     return computed_matrices, coefficients, loss
 # end
 
+
+
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; 
         maxiters=10, ϵ=1e-5, max_order=2, spin_conserved::Bool=false, use_symmetry::Bool=false, 
         optimization=:gradient, metric_functions::Dict{String, Function}=Dict{String, Function}()
