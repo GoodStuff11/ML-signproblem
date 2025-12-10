@@ -251,7 +251,7 @@ Arguments:
 - `folder`      : Folder containing JLD2 files.
 - `omit_keys`   : Vector of keys to exclude from merging. (Default: none)
 """
-function merge_jld2_folder(folder::String; include_keys=String[], data_filter=[], verbose=false)
+function merge_jld2_folder(folder::String; include_keys=String[], file_filter=[], verbose=false)
     # Locate all JLD2 files
     files = filter(f -> endswith(f, ".jld2"), readdir(folder, join=true))
     isempty(files) && error("No JLD2 files found in folder: $folder")
@@ -266,7 +266,7 @@ function merge_jld2_folder(folder::String; include_keys=String[], data_filter=[]
             continue
         end
         dict = load_saved_dict(file)
-        if !all([f(dict) for f in data_filter])
+        if !all([f(dict) for f in file_filter])
             continue
         end
         # Merge all non-omitted keys except meta_data
