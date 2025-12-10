@@ -164,8 +164,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         # for exp(sum_i t_i A_i), find A_i
         trotter_matrices = []
-        for p in parameter_mapping
-            push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dims, dims))
+        if !isnothing(parameter_mapping)
+            for p in parameter_mapping
+                push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dims, dims))
+            end
         end
 
         tmp_losses = []
