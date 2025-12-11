@@ -2,7 +2,11 @@
 
 julia_version = "1.12.1"
 manifest_format = "2.0"
+<<<<<<< HEAD
 project_hash = "6b733f2b763005394b1196f2c7a8faf2b0db4d78"
+=======
+project_hash = "e1614721ef98ef8be345efef76304bf91bb391d5"
+>>>>>>> bbf472887003097e2e4c560645eb8561f66c4e31
 
 [[deps.ADTypes]]
 git-tree-sha1 = "27cecae79e5cc9935255f90c53bb831cc3c870d7"
@@ -426,6 +430,16 @@ deps = ["Artifacts", "JLLWrappers", "Libdl"]
 git-tree-sha1 = "27af30de8b5445644e8ffe3bcb0d72049c089cf1"
 uuid = "2e619515-83b5-522b-bb60-26c02a35a201"
 version = "2.7.3+0"
+
+[[deps.ExponentialUtilities]]
+deps = ["Adapt", "ArrayInterface", "GPUArraysCore", "GenericSchur", "LinearAlgebra", "PrecompileTools", "Printf", "SparseArrays", "libblastrampoline_jll"]
+git-tree-sha1 = "664daa6edba2f1cc848d5a4cd1928306919238cc"
+uuid = "d4d017d3-3776-5f7e-afef-a10c40355c18"
+version = "1.28.0"
+weakdeps = ["StaticArrays"]
+
+    [deps.ExponentialUtilities.extensions]
+    ExponentialUtilitiesStaticArraysExt = "StaticArrays"
 
 [[deps.ExprTools]]
 git-tree-sha1 = "27415f162e6028e81c72b82ef756bf321213b6ec"
