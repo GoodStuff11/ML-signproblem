@@ -506,14 +506,15 @@ function update_values(
     ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
     t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
     t_vals::Vector{U},
-    parameter_mapping::Union{Vector{Int},Nothing}=nothing
+    parameter_mapping::Union{Vector{Int},Nothing}=nothing,
+    parity::Union{Vector{Int}, Nothing}=nothing
 ) where {T, U<:Number}
     # it's allowed for length(t_vals) < length(t_keys), but a parameter_mapping to make the difference is required.
     if isnothing(parameter_mapping)
         @assert length(t_keys) == length(t_vals)
         t = Dict(zip(t_keys, t_vals))
     else
-        extended_t_vals = [t_vals[parameter_mapping[i]] for i in eachindex(t_keys)]
+        extended_t_vals = [t_vals[parameter_mapping[i]]*parity[i] for i in eachindex(t_keys)]
         t = Dict(zip(t_keys, extended_t_vals))
     end
     return [t[ops_list[i]]*signs[i] for i in eachindex(signs)]
@@ -621,106 +622,332 @@ end
 # as a vector reducedparameters, and also a parameter mapping vector parameter_mapping. 
 # parameter_mapping is defined such that values(t_dict)[i] = reduced_parameters[parameter_mapping[i]]
 # NOTE: this function only measures equivalences based on the symmetries, it doesn't care if the transformed states are actually in t_dict
-function force_operator_symmetry(
-        t_dict::Dict,
-        lattice_size::NTuple,
-        directions::Tuple=(),
-        reflect_axes::Tuple=()
-    )
+"""
+    find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false)
 
-    t_keys = collect(keys(t_dict))
-    t_vals = collect(values(t_dict))
-    D      = length(lattice_size)
-    L      = lattice_size
+Find groups of indices in X that are related by the specified symmetries.
 
-    # encode coordinate as integer
-    function encode(c::NTuple{N,Int}) where N
-        id = c[1]
-        mult = 1
-        @inbounds for d in 2:N
-            mult *= L[d-1]
-            id += (c[d]-1)*mult
-        end
-        return id
-    end
+# Arguments
+- `X`: Vector of configurations, where each element is a vector of tuples `((x, y), s, op)`
+      where op is either :create or :annihilate
+- `Lx`: Lattice size in x direction
+- `Ly`: Lattice size in y direction
+- `trans_x`: Include translational symmetry in x direction
+- `trans_y`: Include translational symmetry in y direction
+- `refl_x`: Include reflection symmetry about x axis (y → Ly + 1 - y)
+- `refl_y`: Include reflection symmetry about y axis (x → Lx + 1 - x)
+- `spin_symmetry`: Include spin flip symmetry (s: 1 ↔ 2)
+- `hermitian`: Include hermitian conjugation (:create ↔ :annihilate)
 
-    # decode if needed later (not required for canonicalization)
-    # ---------------------------------------------------------
-
-    # reflection combinations
-    reflection_sets = [[]]
-    for ax in reflect_axes
-        append!(reflection_sets,[push!(copy(r),ax) for r in reflection_sets])
-    end
-
-    # generate shifts only in symmetry directions
-    shifts = [[]]
-    for d in 1:D
-        if d ∈ directions
-            shifts = [vcat(s,[k]) for s in shifts for k in 0:L[d]-1]
+# Returns
+- `groups`: Vector of vectors of integers, where each sub-vector contains indices that are symmetry-equivalent.
+- `inverse_map`: Vector of integers where inverse_map[i] gives the group index containing element i.
+- `parity`: Vector of integers (±1) where parity[i] gives the parity of swaps needed to map X[i] to the representative.
+"""
+function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false)
+    n = length(X)
+    visited = falses(n)
+    groups = Vector{Vector{Int}}()
+    inverse_map = zeros(Int, n)
+    parity = ones(Int, n)
+    
+    # Pre-compute hash for fast lookup
+    config_hashes = [hash(sort(config)) for config in X]
+    hash_to_indices = Dict{UInt64, Vector{Int}}()
+    for (i, h) in enumerate(config_hashes)
+        if haskey(hash_to_indices, h)
+            push!(hash_to_indices[h], i)
         else
-            shifts = [vcat(s,[0]) for s in shifts]
+            hash_to_indices[h] = [i]
         end
     end
+    
+    for i in 1:n
+        if visited[i]
+            continue
+        end
+        
+        group = Int[i]
+        visited[i] = true
+        group_index = length(groups) + 1
+        inverse_map[i] = group_index
+        parity[i] = 1
+        
+        # Generate all symmetry-related configurations
+        equivalent_configs = generate_symmetric_configs(X[i], Lx, Ly, 
+                                                        trans_x, trans_y, refl_x, refl_y,
+                                                        spin_symmetry, hermitian)
+        
+        # For each equivalent config, compute hash and check only candidates
+        for config in equivalent_configs
+            h = hash(sort(config))
+            if !haskey(hash_to_indices, h)
+                continue
+            end
+            
+            # Only check indices with matching hash
+            for j in hash_to_indices[h]
+                if j <= i || visited[j]
+                    continue
+                end
+                
+                is_equal, swap_parity = configs_equal_with_parity(X[j], config)
+                if is_equal
+                    push!(group, j)
+                    visited[j] = true
+                    inverse_map[j] = group_index
+                    parity[j] = swap_parity
+                end
+            end
+        end
+        
+        push!(groups, group)
+    end
+    
+    return groups, inverse_map, parity
+end
 
-    # build symmetry group operators ONCE
-    sym_ops = Vector{Function}()
-    for refl in reflection_sets
-        for shift in shifts
-            push!(sym_ops, coords -> begin
-                @inbounds [encode(ntuple(d ->
-                    (d in refl ? (L[d]-coords[d]+1) : coords[d]) |> x ->
-                        (d in directions ? ((x-1+shift[d])%L[d]+1) : x),
-                    D)) for coords in coords]
-            end)
+"""
+    generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian)
+
+Generate all configurations related by the specified symmetries.
+Each transformation is applied to the entire configuration (all tuples together).
+"""
+function generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian)
+    configs = [config]
+    
+    # Apply translational symmetries - generate all translations
+    if trans_x
+        new_configs = Vector{typeof(config)}()
+        for c in configs
+            for dx in 1:(Lx-1)
+                push!(new_configs, translate_x(c, dx, Lx))
+            end
+        end
+        append!(configs, new_configs)
+    end
+    
+    if trans_y
+        new_configs = Vector{typeof(config)}()
+        for c in configs
+            for dy in 1:(Ly-1)
+                push!(new_configs, translate_y(c, dy, Ly))
+            end
+        end
+        append!(configs, new_configs)
+    end
+    
+    # Apply reflection symmetries - each reflection doubles the set
+    if refl_x
+        reflected = [reflect_x(c, Ly) for c in configs]
+        append!(configs, reflected)
+    end
+    
+    if refl_y
+        reflected = [reflect_y(c, Lx) for c in configs]
+        append!(configs, reflected)
+    end
+    
+    # Apply spin flip symmetry - doubles the set
+    if spin_symmetry
+        spin_flipped = [flip_spin(c) for c in configs]
+        append!(configs, spin_flipped)
+    end
+    
+    # Apply hermitian conjugation - doubles the set
+    if hermitian
+        conjugated = [hermitian_conjugate(c) for c in configs]
+        append!(configs, conjugated)
+    end
+    
+    # Remove duplicates using Set for efficiency
+    return unique(configs)
+end
+
+"""
+    configs_equal_with_parity(c1, c2)
+
+Check if two configurations are equal (considering order) and compute parity.
+Returns (is_equal, parity) where parity is 1 for even number of swaps, -1 for odd.
+Uses optimized permutation finding with early termination.
+"""
+function configs_equal_with_parity(c1, c2)
+    n = length(c1)
+    if n != length(c2)
+        return false, 1
+    end
+    
+    # Build a lookup dict for c2 for O(1) access
+    c2_map = Dict{typeof(c2[1]), Vector{Int}}()
+    for (j, elem) in enumerate(c2)
+        if haskey(c2_map, elem)
+            push!(c2_map[elem], j)
+        else
+            c2_map[elem] = [j]
         end
     end
-
-    # canonical cache avoids repeating orbit checks
-    canonical_cache = Dict{Any,Any}()
-
-    function canonical(term)
-        haskey(canonical_cache,term) && return canonical_cache[term]
-
-        coords  = [k[1].coordinates for k in term]
-        spins   = [k[2] for k in term]
-        types   = [k[3] for k in term]
-
-        best = nothing
-        for op in sym_ops
-            img = op(coords)
-            cand = (img,spins,types)  # encoded + no tuple overhead
-
-            best === nothing && (best=cand; continue)
-            cand < best && (best=cand)
+    
+    # Find the permutation
+    permutation = zeros(Int, n)
+    used = falses(n)
+    
+    for i in 1:n
+        if !haskey(c2_map, c1[i])
+            return false, 1
         end
-
-        canonical_cache[term] = best
-        return best
-    end
-
-    # canonicalize all keys (fast now)
-    labs = canonical.(t_keys)
-
-    # grouping
-    lab_to_idx = Dict{Any,Int}()
-    param_map = Vector{Int}(undef,length(t_keys))
-    param_map_inv = Vector{Int}(undef,length(t_keys))
-    counter = 0
-    for i in eachindex(labs)
-        if !haskey(lab_to_idx,labs[i])
-            counter += 1
-            lab_to_idx[labs[i]] = counter
+        
+        # Find first unused index in c2 that matches c1[i]
+        found = false
+        for j in c2_map[c1[i]]
+            if !used[j]
+                permutation[i] = j
+                used[j] = true
+                found = true
+                break
+            end
         end
-        param_map[i] = lab_to_idx[labs[i]]
+        
+        if !found
+            return false, 1
+        end
     end
+    
+    # Count inversions efficiently
+    swap_count = count_inversions(permutation)
+    parity = iseven(swap_count) ? 1 : -1
+    
+    return true, parity
+end
 
-    reduced = [zero(eltype(t_vals)) for _=1:counter]
-    for i in eachindex(t_vals)
-        reduced[param_map[i]] = t_vals[i]
+"""
+    count_inversions(perm)
+
+Count the number of inversions in a permutation using merge sort approach.
+This is O(n log n) instead of O(n²).
+"""
+function count_inversions(perm)
+    n = length(perm)
+    if n <= 1
+        return 0
     end
+    
+    # Use merge sort to count inversions
+    temp = similar(perm)
+    return merge_sort_count!(copy(perm), temp, 1, n)
+end
 
-    return reduced, param_map
+function merge_sort_count!(arr, temp, left, right)
+    inv_count = 0
+    if left < right
+        mid = div(left + right, 2)
+        inv_count += merge_sort_count!(arr, temp, left, mid)
+        inv_count += merge_sort_count!(arr, temp, mid + 1, right)
+        inv_count += merge_count!(arr, temp, left, mid, right)
+    end
+    return inv_count
+end
+
+function merge_count!(arr, temp, left, mid, right)
+    i = left
+    j = mid + 1
+    k = left
+    inv_count = 0
+    
+    while i <= mid && j <= right
+        if arr[i] <= arr[j]
+            temp[k] = arr[i]
+            i += 1
+        else
+            temp[k] = arr[j]
+            inv_count += (mid - i + 1)
+            j += 1
+        end
+        k += 1
+    end
+    
+    while i <= mid
+        temp[k] = arr[i]
+        i += 1
+        k += 1
+    end
+    
+    while j <= right
+        temp[k] = arr[j]
+        j += 1
+        k += 1
+    end
+    
+    for i in left:right
+        arr[i] = temp[i]
+    end
+    
+    return inv_count
+end
+
+
+"""
+    flip_spin(config)
+
+Flip all spin values in config (1 ↔ 2).
+The coordinates and op field are preserved.
+"""
+function flip_spin(config)
+    return [(c, 3 - s, op) for (c, s, op) in config]
+end
+
+"""
+    hermitian_conjugate(config)
+
+Apply hermitian conjugation: swap :create ↔ :annihilate for all operators.
+The coordinates and spin values are preserved.
+"""
+function hermitian_conjugate(config)
+    return [(c, s, op == :create ? :annihilate : :create) for (c, s, op) in config[end:-1:1]]
+end
+"""
+    translate_x(config, dx, Lx)
+
+Translate all coordinates in config by dx in x direction with periodic boundaries.
+The op field (:create or :annihilate) is preserved.
+"""
+function translate_x(config, dx, Lx)
+    if dx == 0
+        return config
+    end
+    return [(Coordinate(mod1(c.coordinates[1] + dx, Lx), c.coordinates[2] ), s, op) for (c, s, op) in config]
+end
+
+"""
+    translate_y(config, dy, Ly)
+
+Translate all coordinates in config by dy in y direction with periodic boundaries.
+The op field (:create or :annihilate) is preserved.
+"""
+function translate_y(config, dy, Ly)
+    if dy == 0
+        return config
+    end
+    return [(Coordinate(c.coordinates[1], mod1(c.coordinates[2] + dy, Ly)), s, op) for (c, s, op) in config]
+end
+
+"""
+    reflect_x(config, Ly)
+
+Reflect all coordinates in config about x axis (y → Ly + 1 - y).
+The op field (:create or :annihilate) is preserved.
+"""
+function reflect_x(config, Ly)
+    return [(Coordinate(c.coordinates[1], Ly + 1 - c.coordinates[2]), s, op) for (c, s, op) in config]
+end
+
+"""
+    reflect_y(config, Lx)
+
+Reflect all coordinates in config about y axis (x → Lx + 1 - x).
+The op field (:create or :annihilate) is preserved.
+"""
+function reflect_y(config, Lx)
+    return [(Coordinate(Lx + 1 - c.coordinates[1], c.coordinates[2]), s, op) for (c, s, op) in config]
 end
 
 
@@ -1195,10 +1422,10 @@ mat = construct_sparse(energy_dict["indexer"],
 """
 function construct_sparse(
     indexer::CombinationIndexer, coefficient_labels::Vector{Vector{Tuple{T, Int64, Symbol}}}, 
-    coefficients; parameter_mapping=nothing) where {T}
+    coefficients; parameter_mapping=nothing, parities=nothing) where {T}
     dim = length(indexer.inv_comb_dict)
     rows, cols, signs, ops_list = build_n_body_structure(coefficient_labels, indexer)
-    vals = update_values(signs, ops_list, coefficient_labels, coefficients, parameter_mapping)
+    vals = update_values(signs, ops_list, coefficient_labels, coefficients, parameter_mapping, parities)
     return make_hermitian(sparse(rows, cols, vals, dim, dim))
 end
 

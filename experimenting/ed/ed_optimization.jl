@@ -131,6 +131,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     computed_matrices = []
     computed_coefficients = []
     parameter_mappings = []
+    parities = []
     coefficient_labels = []
     dim = length(indexer.inv_comb_dict)
     
@@ -144,7 +145,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     end
     if loss < 1e-8
         println("States are already equal")
-        return [], metrics
+        return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
     end
 
     for order = 1:max_order
@@ -152,23 +153,31 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         learning_rate = loss/10
         println("magnitude: $magnitude_esimate")
         println("learning rate: $learning_rate")
-        @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate, hermitian=true, conserve_spin=spin_conserved)
+        @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate, hermitian=!use_symmetry, conserve_spin=spin_conserved)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
 
         if use_symmetry
-            @time t_vals, parameter_mapping = force_operator_symmetry(t_dict, maximum(indexer.a).coordinates, (1,2),())
+            inv_param_map, parameter_mapping, parity = find_symmetry_groups(collect(keys(t_dict)), maximum(indexer.a).coordinates..., 
+                hermitian=true,  trans_x=true, trans_y=true, refl_x=true, refl_y=true)
+            t_vals = rand(typeof(signs[1]), length(inv_param_map))*magnitude_esimate
+            # @time t_vals, parameter_mapping = force_operator_symmetry(t_dict, maximum(indexer.a).coordinates, (1,2),())
+
         else
             t_vals = collect(values(t_dict))
+            inv_param_map = nothing
             parameter_mapping = nothing
+            parity = nothing
         end
         push!(coefficient_labels, t_keys)
 
         # for exp(sum_i t_i A_i), find A_i
-        trotter_matrices = []
-        for p in parameter_mapping
-            push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dims, dims))
-        end
+        # if !isnothing(parameter_mapping)
+        #     trotter_matrices = []
+        #     for p in parameter_mapping
+        #         push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dim, dim))
+        #     end
+        # end
 
         tmp_losses = []
         function callback(state, loss_val)
@@ -187,12 +196,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             # TODO  ##########################
             ##################################
 
-            return grad
+            return grad            
         end
-
+          
         function f_nongradient(t_vals, p=nothing)
-            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping)
-            mat = make_hermitian(sparse(rows, cols, vals, dim, dim))
+            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping, parity)
+            mat = sparse(sparse(rows, cols, vals, dim, dim))
+            if !use_symmetry
+                mat = make_hermitian(mat)
+            end
             if p isa AbstractMatrix
                 mat += p
             end
@@ -201,12 +213,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return loss
         end
         function f(t_vals, p=nothing)
-            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping)
-            mat = Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim)))
+            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping, parity)
+            mat = sparse(sparse(rows, cols, vals, dim, dim))
+            if !use_symmetry
+                mat = make_hermitian(mat)
+            end
             if p isa AbstractMatrix
                 mat += p
             end
-            loss = 1-abs2(state2'*exp(1im*mat)*state1)
+            loss = 1-abs2(state2'*exp(1im*Matrix(mat))*state1)
             println(loss)
             return loss
         end
@@ -239,17 +254,22 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             s = sol[argmin([s.objectives for s in sol])]
         end
         
-        vals = update_values(signs, ops_list, t_keys, sol.u, parameter_mapping)
+        vals = update_values(signs, ops_list, t_keys, sol.u, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         loss = sol.objective
         push!(metrics["other"], sol.original)
-        push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
+        if !use_symmetry
+            push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
+        else
+            push!(computed_matrices, sparse(rows, cols, vals, dim, dim))
+        end
         println("Finished order $order")
         push!(metrics["loss"], loss) 
         push!(metrics["loss_std"], std(last(tmp_losses,20)))
         push!(computed_coefficients, sol.u)
         push!(parameter_mappings, parameter_mapping)
+        push!(parities, parity)
         for (k,func) in metric_functions
             push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
         end
@@ -258,7 +278,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         #     break
         # end
     end
-    return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, metrics
+    return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
 end
 
 
@@ -272,17 +292,18 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
     #             "U_values"=>U_values)
     data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
                     "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[], "all_matrices"=>[],
-                    "coefficients"=>[], "coefficient_labels"=>nothing, "param_mapping"=>nothing)
+                    "coefficients"=>[], "coefficient_labels"=>nothing, "param_mapping"=>nothing, "parities"=>nothing)
 
 
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
             state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
-            computed_matrices, coefficient_labels, coefficient_values, param_mapping, metrics = optimize_unitary(state1, state2, indexer; 
+            args = optimize_unitary(state1, state2, indexer; 
                     spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
                     maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
                     metric_functions=metric_functions)
+            computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics = args
             push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
             push!(data_dict["all_matrices"], computed_matrices)
@@ -290,6 +311,7 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
             if isnothing(data_dict["coefficient_labels"])
                 data_dict["coefficient_labels"] = coefficient_labels
                 data_dict["param_mapping"] = param_mapping
+                data_dict["parities"] = parities
             end
 
             for (k, val) in metrics
