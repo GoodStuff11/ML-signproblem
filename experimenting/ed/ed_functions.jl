@@ -505,7 +505,7 @@ function update_values(
     signs::Vector{U},
     ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
     t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
-    t_vals::Vector{U},
+    t_vals,
     parameter_mapping::Union{Vector{Int},Nothing}=nothing,
     parity::Union{Vector{Int}, Nothing}=nothing
 ) where {T, U<:Number}

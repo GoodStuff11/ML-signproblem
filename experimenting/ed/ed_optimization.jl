@@ -227,7 +227,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
 
         if optimization == :gradient
-            optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
+            optf = Optimization.OptimizationFunction(f, Optimization.AutoForwardDiff())#AutoZygote
         elseif optimization == :manualgradient
             optf = Optimization.OptimizationFunction(f_nongradient, adtype=Optimization.NoAD(), grad=trotter_gradient!)
         else
