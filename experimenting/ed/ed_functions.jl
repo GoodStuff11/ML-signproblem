@@ -501,23 +501,32 @@ function build_n_body_structure(
 
     return rows, cols, signs, ops_list
 end
+
+""" used to optimize update_values """
+function build_param_index_map(
+        ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
+        t_keys::Vector{Vector{Tuple{T,Int,Symbol}}}
+    ) where {T}
+    # Build reverse lookup: key -> index in t_keys
+    key_to_idx = Dict(t_keys[i] => i for i in eachindex(t_keys))
+    # For each element in ops_list, find which t_key index it refers to
+    return [key_to_idx[ops_list[i]] for i in eachindex(ops_list)]
+end
+
 function update_values(
     signs::Vector{U},
-    ops_list::Vector{Vector{Tuple{T,Int,Symbol}}}, 
-    t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
+    param_index_map::Vector{Int},
     t_vals::Vector{U},
     parameter_mapping::Union{Vector{Int},Nothing}=nothing,
     parity::Union{Vector{Int}, Nothing}=nothing
-) where {T, U<:Number}
+) where {U<:Number}
     # it's allowed for length(t_vals) < length(t_keys), but a parameter_mapping to make the difference is required.
     if isnothing(parameter_mapping)
-        @assert length(t_keys) == length(t_vals)
-        t = Dict(zip(t_keys, t_vals))
+        return [t_vals[param_index_map[i]] * signs[i] for i in eachindex(signs)]
     else
-        extended_t_vals = [t_vals[parameter_mapping[i]]*parity[i] for i in eachindex(t_keys)]
-        t = Dict(zip(t_keys, extended_t_vals))
+        return [t_vals[parameter_mapping[param_index_map[i]]] * parity[param_index_map[i]] * signs[i] 
+                for i in eachindex(signs)]
     end
-    return [t[ops_list[i]]*signs[i] for i in eachindex(signs)]
 end
 function general_n_body!(
     rows::Vector{Int}, 

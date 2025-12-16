@@ -156,12 +156,12 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate, hermitian=!use_symmetry, conserve_spin=spin_conserved)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
+        param_index_map = build_param_index_map(ops_list, t_keys)
 
         if use_symmetry
             inv_param_map, parameter_mapping, parity = find_symmetry_groups(collect(keys(t_dict)), maximum(indexer.a).coordinates..., 
                 hermitian=true,  trans_x=true, trans_y=true, refl_x=true, refl_y=true)
             t_vals = rand(typeof(signs[1]), length(inv_param_map))*magnitude_esimate
-            # @time t_vals, parameter_mapping = force_operator_symmetry(t_dict, maximum(indexer.a).coordinates, (1,2),())
 
         else
             t_vals = collect(values(t_dict))
@@ -200,8 +200,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
           
         function f_nongradient(t_vals, p=nothing)
-            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping, parity)
-            mat = sparse(sparse(rows, cols, vals, dim, dim))
+            vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+            mat = sparse(rows, cols, vals, dim, dim)
             if !use_symmetry
                 mat = make_hermitian(mat)
             end
@@ -213,8 +213,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return loss
         end
         function f(t_vals, p=nothing)
-            vals = update_values(signs, ops_list, t_keys, t_vals, parameter_mapping, parity)
-            mat = sparse(sparse(rows, cols, vals, dim, dim))
+            vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+            mat = sparse(rows, cols, vals, dim, dim)
             if !use_symmetry
                 mat = make_hermitian(mat)
             end
@@ -227,7 +227,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
 
         if optimization == :gradient
-            optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
+            optf = Optimization.OptimizationFunction(f, Optimization.AutoForwardDiff()) #AutoZygote
         elseif optimization == :manualgradient
             optf = Optimization.OptimizationFunction(f_nongradient, adtype=Optimization.NoAD(), grad=trotter_gradient!)
         else
@@ -254,7 +254,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             s = sol[argmin([s.objectives for s in sol])]
         end
         
-        vals = update_values(signs, ops_list, t_keys, sol.u, parameter_mapping, parity)
+        vals = update_values(signs, param_index_map, sol.u, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         loss = sol.objective
