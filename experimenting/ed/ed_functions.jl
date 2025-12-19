@@ -1439,3 +1439,108 @@ function construct_sparse(
 end
 
 truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)
+
+function project_cyclic!(U, vec, k, L)
+    tmp = ComplexF64.(copy(vec))
+
+    for n in 1:L-1
+        tmp .= U*tmp
+        vec .+= exp(-im*2π*(k-1)*n/L) * tmp
+    end
+
+    # vec ./= L
+    return vec
+end
+function project_eigenspace!(U, vec, lambdas, target_index)
+    tmp1 = copy(vec)
+    tmp2 = similar(vec)
+
+    for (i,λ) in enumerate(lambdas)
+        if i == target_index
+            continue
+        end
+
+        # tmp2 = (U - λ I) * tmp1
+        tmp2 .= U*tmp1
+        @. tmp2 -= λ * tmp1
+
+        # tmp2 ./= (lambdas[target_index] - λ)
+
+        tmp1, tmp2 = tmp2, tmp1
+    end
+
+    copyto!(vec, tmp1)
+    return vec
+end
+
+function project!(op, vec, eig_index, eigs)
+    if eigs[1] isa Real
+        vec = project_eigenspace!(op, vec, eigs, eig_index)
+    else
+        vec = project_cyclic!(op, vec, eig_index, length(eigs))
+    end
+    return vec
+end
+
+function find_symmetric_basis(ops::Vector, eig_indices::Vector{Int}, neigs::Vector{Int})
+    dim = size(ops[1])[1]
+    checked_indices = zeros(Int, dim)
+    bases = []
+    for i = 1:dim
+        if checked_indices[i] > 0
+            continue
+        end
+
+        # storing group applied on the basis to most efficiently construct it
+        v_full = Array{Any}(undef, Tuple(neigs))
+        v_full[ones(Int, length(neigs))...] = spzeros(Float64, dim)
+        v_full[ones(Int, length(neigs))...][i] = 1
+
+        checked_indices[i] = 1
+        basis = spzeros(ComplexF64, dim)
+        basis += v_full[ones(Int, length(neigs))...]
+        for indices in Iterators.product([1:k for k in neigs]...)
+            if all(l==1 for l in indices)
+                continue
+            end
+            prev_indices = collect(indices)
+            used_op = 0
+            for j in eachindex(indices)
+                if indices[j] > 1
+                    prev_indices[j] -= 1
+                    used_op = j
+                    break
+                end
+            end
+
+            v_full[indices...] = ops[used_op]*v_full[prev_indices...]
+            new_idx = findnz(v_full[indices...])[1][1]
+            if checked_indices[new_idx] == 0
+                checked_indices[new_idx] = 2
+            end
+            basis += exp(1im*2π*sum((collect(indices) .- 1) .* (eig_indices .- 1) ./ neigs)) * v_full[indices...]
+            # when the basis setate doesn't vanishes for this symmetry
+        end
+        if !(sum(abs,basis) ≈ 0)
+            push!(bases, normalize(basis)) # normalize basis
+        end
+    end
+
+    return bases 
+end
+
+function operator_subspace(op, bases)
+    # Find Hamiltonian representation
+    new_h = spzeros(ComplexF64, length(bases), length(bases))
+    op_on_bases = [op*basis for basis in bases]
+    for j in eachindex(bases)
+        for i in j:length(bases)
+            val = bases[j]'*op_on_bases[i]
+            if !(abs(val) ≈ 0)
+                new_h[j,i] = val
+                new_h[i,j] = val'
+            end
+        end
+    end
+    return new_h
+end
