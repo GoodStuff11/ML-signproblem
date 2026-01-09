@@ -1,5 +1,5 @@
 # experimenting/ed/*_images/*
-experimenting/ed/data/*
+# experimenting/ed/data/*
 *.err
 *.out
 

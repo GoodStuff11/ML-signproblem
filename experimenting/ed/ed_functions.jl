@@ -1482,6 +1482,28 @@ function project!(op, vec, eig_index, eigs)
     return vec
 end
 
+function find_reprentatives(dim, mapping, mapping_sign)
+    checked_indices = zeros(int, dim)
+    representative_indices = []
+    periods = []
+    for i = 1:dim
+        if checked_indices[i] > 0
+            continue
+        end
+        check_indices[i] = 1
+        period = 1
+        j = mapping(i)
+        while j != i
+            check_indices[j] = 2
+            period += 1
+        end
+        push!(representative_indices, i)
+        push!(periods, period)
+
+    end
+    return representative_indices, periods
+end
+
 function find_symmetric_basis(ops::Vector, eig_indices::Vector{Int}, neigs::Vector{Int})
     dim = size(ops[1])[1]
     checked_indices = zeros(Int, dim)
