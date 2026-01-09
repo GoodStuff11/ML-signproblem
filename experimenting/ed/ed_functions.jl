@@ -1084,7 +1084,7 @@ function create_operator(Hs::HubbardSubspace, op; kind=1)
     
     return H
 end
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false)
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false, get_indexer::Bool=false)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
     indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
@@ -1117,7 +1117,9 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bo
 
     # constuct Hamiltonian
     H = sparse(rows, cols, vals, dim, dim)
-    
+    if get_indexer
+        return H, indexer
+    end
     return H
 end
 
