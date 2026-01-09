@@ -1084,7 +1084,7 @@ function create_operator(Hs::HubbardSubspace, op; kind=1)
     
     return H
 end
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false)
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false, get_indexer::Bool=false)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
     indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
@@ -1117,7 +1117,9 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bo
 
     # constuct Hamiltonian
     H = sparse(rows, cols, vals, dim, dim)
-    
+    if get_indexer
+        return H, indexer
+    end
     return H
 end
 
@@ -1480,6 +1482,28 @@ function project!(op, vec, eig_index, eigs)
         vec = project_cyclic!(op, vec, eig_index, length(eigs))
     end
     return vec
+end
+
+function find_reprentatives(dim, mapping, mapping_sign)
+    checked_indices = zeros(int, dim)
+    representative_indices = []
+    periods = []
+    for i = 1:dim
+        if checked_indices[i] > 0
+            continue
+        end
+        check_indices[i] = 1
+        period = 1
+        j = mapping(i)
+        while j != i
+            check_indices[j] = 2
+            period += 1
+        end
+        push!(representative_indices, i)
+        push!(periods, period)
+
+    end
+    return representative_indices, periods
 end
 
 function find_symmetric_basis(ops::Vector, eig_indices::Vector{Int}, neigs::Vector{Int})
