@@ -991,6 +991,7 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
 end
 
 function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer)
+    # this corresponds to only n_{i up} n_{i down}
     if half_filling
         for (i, conf) in enumerate(indexer.inv_comb_dict)
             num_negative = length(setdiff(union(conf[1], conf[2]), intersect(conf[1], conf[2])))
@@ -1084,11 +1085,12 @@ function create_operator(Hs::HubbardSubspace, op; kind=1)
     
     return H
 end
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bool=false, get_indexer::Bool=false)
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer, Nothing}=nothing)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
-
+    if isnothing(indexer)
+        indexer = CombinationIndexer(reduce(vcat,collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
+    end
     rows = Int[]
     cols = Int[]
     vals = Float64[]
@@ -1103,15 +1105,7 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; perturbations::Bo
     if Hm.μ > 0
         create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
     end
-    if perturbations
-        # create_Sx!(rows, cols, vals, sqrt(2)*1e-5, indexer)
-        # create_S2!(rows, cols, vals, sqrt(3)*1e-5, indexer)
-        create_L2!(rows, cols, vals, sqrt(5)*1e-5, indexer)
-        # for dim ∈ [1,2]
-        #     mapping = reflection_mapping(Hs.lattice, dim)
-        #     create_transform!(rows, cols, vals, sqrt(1+sqrt(dim+1))*1e-5, mapping, indexer)
-        # end
-    end
+
     # create_SziSzj!(rows, cols, vals, 0.021, indexer; iequalsj=true)
     # create_operator!(rows, cols, vals, 1e-2, indexer)
 
@@ -1442,129 +1436,257 @@ end
 
 truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)
 
-function project_cyclic!(U, vec, k, L)
-    tmp = ComplexF64.(copy(vec))
-
-    for n in 1:L-1
-        tmp .= U*tmp
-        vec .+= exp(-im*2π*(k-1)*n/L) * tmp
+function project_hermitian!(H, λ::Number, v::AbstractVector; 
+                               n_seek::Int=5)
+    
+    # 1. Define the Map for (H - λI)²
+    # We do this as a function to avoid computing the dense square of the matrix.
+    # Map: x -> (H - λI) * ((H - λI) * x)
+    function folded_map(x)
+        # First application: y = (H - λI)x
+        y = H * x - λ * x
+        # Second application: z = (H - λI)y
+        z = H * y - λ * y
+        return z
     end
 
-    # vec ./= L
-    return vec
-end
-function project_eigenspace!(U, vec, lambdas, target_index)
-    tmp1 = copy(vec)
-    tmp2 = similar(vec)
+    # 2. Solve for the Smallest Real (:SR) eigenvalues of the squared map
+    # These correspond to eigenvalues of H closest to λ.
+    # We ask for `n_seek` vectors (must be >= degeneracy of λ).
+    vals, vecs, _ = eigsolve(folded_map, v, n_seek, :SR; ishermitian=true)
+    # 3. Filter and Project
+    # The 'vals' here are the squared distances (μ - λ)².
+    # We only keep vectors where the distance is effectively 0.
+    
+    # Since we are looking at the squared operator, the tolerance applies to (dist)^2.
+    # So we check if val < tol^2 (or just a small epsilon).
+    
+    v_proj = zeros(eltype(v), length(v))
+    found_any = false
 
-    for (i,λ) in enumerate(lambdas)
-        if i == target_index
-            continue
+    for (i, val) in enumerate(vals)
+        # Check if this eigenvector belongs to our target λ
+        # val is approx (eigenvalue_H - λ)^2. Ideally 0.
+        if abs(val) < 1e-10
+            u = vecs[i]
+            # Project: v_proj += <u, v> * u
+            v_proj .+= dot(u, v) .* u
+            found_any = true
         end
-
-        # tmp2 = (U - λ I) * tmp1
-        tmp2 .= U*tmp1
-        @. tmp2 -= λ * tmp1
-
-        # tmp2 ./= (lambdas[target_index] - λ)
-
-        tmp1, tmp2 = tmp2, tmp1
     end
-
-    copyto!(vec, tmp1)
-    return vec
+    
+    if !found_any
+        @warn "No eigenvectors found for λ=$λ. Try increasing `n_seek`."
+    end
+    
+    return v_proj
 end
 
-function project!(op, vec, eig_index, eigs)
-    if eigs[1] isa Real
-        vec = project_eigenspace!(op, vec, eigs, eig_index)
-    else
-        vec = project_cyclic!(op, vec, eig_index, length(eigs))
-    end
-    return vec
-end
-
-function find_reprentatives(dim, mapping, mapping_sign)
-    checked_indices = zeros(int, dim)
+function find_representatives(dim::Int, eig_indices::Vector{Int}, n_eigs::Vector{Int}, 
+        mapping::Vector, mapping_sign::Vector)
+    # EXAMPLE:
+    # n_eigs = [2,4]
+    # eig_indices = [2,1]
+    # mapping = []
+    # s_mapping = [] 
+    # begin for kind in 1:2
+    #     op = create_operator(subspace,:T, kind=kind)
+    #     r, c, v = findnz(op)
+    #     push!(mapping, r)
+    #     push!(mapping_sign, v)
+    # end        
+    # 1<= eig_idx <= n_eigs
+    checked_indices = Array{Any}(undef, dim)
     representative_indices = []
-    periods = []
+    associated_representative = zeros(Int, dim)
+    magnitude = []
     for i = 1:dim
-        if checked_indices[i] > 0
+        if isassigned(checked_indices, i)
             continue
         end
-        check_indices[i] = 1
-        period = 1
-        j = mapping(i)
-        while j != i
-            check_indices[j] = 2
-            period += 1
-        end
-        push!(representative_indices, i)
-        push!(periods, period)
+        # println(i)
 
-    end
-    return representative_indices, periods
-end
+        period = ones(Int, length(eig_indices))
+        num_stabilizers = 1 # identity is a stabilizer
+        stabilizers = []
+        stabilizer_signs = []
+        period_signs = ones(Int, length(eig_indices))
 
-function find_symmetric_basis(ops::Vector, eig_indices::Vector{Int}, neigs::Vector{Int})
-    dim = size(ops[1])[1]
-    checked_indices = zeros(Int, dim)
-    bases = []
-    for i = 1:dim
-        if checked_indices[i] > 0
-            continue
+        # finding periods
+        for (l, (map_l, sign_l)) in enumerate(zip(mapping, mapping_sign))
+            j = map_l[i]
+            period_signs[l] *= sign_l[j]
+            while j != i
+                period[l] += 1
+                j = map_l[j]
+                period_signs[l] *= sign_l[j]
+            end
         end
 
-        # storing group applied on the basis to most efficiently construct it
-        v_full = Array{Any}(undef, Tuple(neigs))
-        v_full[ones(Int, length(neigs))...] = spzeros(Float64, dim)
-        v_full[ones(Int, length(neigs))...][i] = 1
-
-        checked_indices[i] = 1
-        basis = spzeros(ComplexF64, dim)
-        basis += v_full[ones(Int, length(neigs))...]
-        for indices in Iterators.product([1:k for k in neigs]...)
-            if all(l==1 for l in indices)
+        # searching through remaining states corresponding to representative
+        index_matrix = zeros(Int, period...)
+        sign_matrix = ones(Int, period...)
+        index_matrix[ones(Int, period...)...] = i
+        checked_indices[i] = (Tuple(ones(Int, length(period))), 1)
+        # println(checked_indices[1:20])
+        for indices in Iterators.product([1:k for k in period]...)
+            if index_matrix[indices...] != 0
                 continue
             end
+
             prev_indices = collect(indices)
-            used_op = 0
-            for j in eachindex(indices)
-                if indices[j] > 1
-                    prev_indices[j] -= 1
-                    used_op = j
+            op_k = 0
+            for k in eachindex(indices)
+                if indices[k] > 1
+                    prev_indices[k] -= 1
+                    op_k = k
                     break
                 end
             end
 
-            v_full[indices...] = ops[used_op]*v_full[prev_indices...]
-            new_idx = findnz(v_full[indices...])[1][1]
-            if checked_indices[new_idx] == 0
-                checked_indices[new_idx] = 2
+            prev_index = index_matrix[prev_indices...]
+            j = mapping[op_k][prev_index]
+            applied_sign = Int(mapping_sign[op_k][prev_index])
+            index_matrix[indices...] = j
+            sign_matrix[indices...] = applied_sign * sign_matrix[prev_indices...]
+     
+            if !isassigned(checked_indices,j) && prev_indices != checked_indices[prev_index][1]
+                checked_indices[j] = (indices, sign_matrix[indices...])
+                associated_representative[j] = i
             end
-            basis += exp(1im*2π*sum((collect(indices) .- 1) .* (eig_indices .- 1) ./ neigs)) * v_full[indices...]
-            # when the basis setate doesn't vanishes for this symmetry
+            if j == i && isassigned(checked_indices,j)
+                # we have a stabilizer, since a state corresponding to a representative is
+                # associated with the representative in >1 ways
+                num_stabilizers += 1
+                push!(stabilizers, collect(indices))
+                push!(stabilizer_signs, sign_matrix[indices...])
+            end
         end
-        if !(sum(abs,basis) ≈ 0)
-            push!(bases, normalize(basis)) # normalize basis
-        end
-    end
 
-    return bases 
+        # computing representative weight
+        # mR/N + 1/2 = Z if overall_sign == -1
+            # mR + N/2 = Z*N
+        # mR/N = Z if overall_sign == 1
+        mag = num_stabilizers
+        for (s, p, n_eig, eig_i) in zip(period_signs, period, n_eigs, eig_indices)
+            if p == n_eig 
+                continue
+            elseif s == -1 && n_eig % (2*p) != 0
+                mag *= 0 #sum(exp(1im*l*2π*((eig_i-1)*p/n_eig + 0.5)) for l=0:(n_eig ÷ p-1))
+                println("THIS SHOULDNT HAPPEN")
+            elseif ((eig_i - 1)* p + (s == -1)*n_eig/2) % n_eig ≈ 0
+                mag *= n_eig/p
+            else
+                mag *= 0
+                break
+            end
+        end
+        # stabilizers impose an additional constraint on making the magnitude non-zero, 2π k⋅g = 2π(Z + 1/2) (1/2 is omited when s==1)
+        all_n_eigs = prod(n_eigs)
+        for (coord, s) in zip(stabilizers, stabilizer_signs)
+            if !((dot(eig_indices .- 1, (coord .- 1) .* all_n_eigs .÷ n_eigs) + (s==-1)*all_n_eigs÷2) % all_n_eigs ≈ 0)
+                mag = 0
+                break
+            end
+
+        end
+        # println(mag)
+        if !(mag ≈ 0)
+            push!(representative_indices, i)
+            associated_representative[i] = -length(representative_indices)
+            push!(magnitude, mag)
+        end
+
+        # if i > 50
+        #     break
+        # end
+
+    end
+     
+
+    return checked_indices, representative_indices, associated_representative, magnitude
 end
 
-function operator_subspace(op, bases)
-    # Find Hamiltonian representation
-    new_h = spzeros(ComplexF64, length(bases), length(bases))
-    op_on_bases = [op*basis for basis in bases]
-    for j in eachindex(bases)
-        for i in j:length(bases)
-            val = bases[j]'*op_on_bases[i]
-            if !(abs(val) ≈ 0)
-                new_h[j,i] = val
-                new_h[i,j] = val'
+function construct_hamiltonian(
+        r, c, v; 
+        checked_indices, representative_indices, associated_representative, 
+        magnitude, n_eigs, eig_indices
+    )
+    h = spzeros(ComplexF64, length(representative_indices), length(representative_indices))
+ 
+    i = 1
+    for (in_rep_idx, rep_idx) in enumerate(representative_indices)
+        while i <= length(c) && c[i] < rep_idx
+            i += 1
+            # if i > 3000
+            #     error("hey")
+            # end
+        end
+        # println(in_rep_idx)
+        while i <= length(c) && c[i] == rep_idx
+            output_idx = r[i]
+            h_val = v[i]
+            if associated_representative[output_idx] < 0
+                out_rep_idx = abs(associated_representative[output_idx])
+                phase = 1
+                relative_sign = 1
+            elseif associated_representative[output_idx] > 0 && associated_representative[associated_representative[output_idx]] < 0
+                out_rep_idx = abs(associated_representative[associated_representative[output_idx]])
+                (unitary_distance, relative_sign) = checked_indices[output_idx]
+                exp_val = 2π*sum((l-1)*(m-1)/N for (l, N, m) in zip(unitary_distance, n_eigs, eig_indices))
+                phase = cis(-exp_val)
+            else
+                i += 1
+                continue
             end
+            # if (out_rep_idx == 1 && in_rep_idx == 45)|| (out_rep_idx == 45 && in_rep_idx == 1)
+            #     println(i)
+            #     println("($out_rep_idx,$in_rep_idx) - ($(r[i]),$(c[i])):  $h_val, $relative_sign, $phase, $(magnitude[out_rep_idx]), $(magnitude[in_rep_idx])")
+            # end
+            h[out_rep_idx, in_rep_idx] += h_val * relative_sign * phase * sqrt(abs(magnitude[out_rep_idx]/magnitude[in_rep_idx]))
+            i += 1
         end
     end
-    return new_h
+    return h
+end
+
+function reconstruct_full_vector(
+    vec::AbstractVector,
+    mapping::Vector,
+    s_mapping::Vector,
+    representative_indices::Vector,
+    magnitude::AbstractVector,
+    eig_indices::Vector,
+    n_eigs::Vector,
+)
+    n_ops = length(mapping)
+    full_dim = length(mapping[1])
+
+    T = promote_type(eltype(vec), ComplexF64)
+    full_vec = zeros(T, full_dim)
+
+    eigvals = cis.(2π .* (eig_indices .- 1) ./ n_eigs)
+    group_size = prod(n_eigs)
+
+    function apply_ops!(α, idx, phase, op)
+        if op > n_ops
+            full_vec[idx] += vec[α] * phase / sqrt(magnitude[α] * group_size)
+            return
+        end
+
+        cur_idx = idx
+        cur_phase = phase
+
+        for _ in 1:n_eigs[op]
+            apply_ops!(α, cur_idx, cur_phase, op + 1)
+            cur_phase *= eigvals[op] * s_mapping[op][cur_idx]
+            cur_idx = mapping[op][cur_idx]
+        end
+    end
+
+    for α in eachindex(vec)
+        apply_ops!(α, representative_indices[α], one(T), 1)
+    end
+
+    return full_vec
 end
