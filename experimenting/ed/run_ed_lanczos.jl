@@ -26,10 +26,10 @@ function (@main)(ARGS)
 
     N_up = 3
     N_down = 3
-    N =  9
+    N =  3
 
     # lattice = Chain(6, Periodic())
-    lattice_dimension = (3,3)
+    lattice_dimension = (2,3)
     bc = "periodic"
     # lattice = Chain(6, Periodic())
     lattice = Square(lattice_dimension, if bc == "periodic" Periodic() else Open() end)
@@ -118,7 +118,7 @@ function (@main)(ARGS)
     )
     
     
-    save_energy_with_metadata("data/test", dict)
+    save_energy_with_metadata("data/N=3", dict)
 
     return 0 
 end

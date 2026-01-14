@@ -603,7 +603,7 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     return val < 1e-10
 end
 function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer; 
-        magnitude::T=1e-3+0im, hermitian::Bool=false, conserve_spin::Bool=false) where T
+        magnitude::T=1e-3+0im, omit_H_conj::Bool=false, conserve_spin::Bool=false) where T
     # function creates a dictionary of free parameters in the form of a dictionary. 
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
@@ -615,7 +615,7 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create]<= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
     for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
         key = [ops_create; ops_annihilate]
-        if (!hermitian || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate))
+        if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate))
             if key ∉ keys(t_dict)
                 t_dict[key] = (2*rand()-1)/2*magnitude
             else
@@ -643,9 +643,11 @@ Find groups of indices in X that are related by the specified symmetries.
 - `Ly`: Lattice size in y direction
 - `trans_x`: Include translational symmetry in x direction
 - `trans_y`: Include translational symmetry in y direction
-- `refl_x`: Include reflection symmetry about x axis (y → Ly + 1 - y)
+- `refl_x`: Include reflection symmetry about x axis (y → Ly + 1 - y) (NOTE: [σx, Tx] ≠ 0)
 - `refl_y`: Include reflection symmetry about y axis (x → Lx + 1 - x)
-- `spin_symmetry`: Include spin flip symmetry (s: 1 ↔ 2)
+- `spin_symmetry`: Include spin flip symmetry (s: 1 ↔ 2) (NOTE: this doesn't force symmetry with Sx, only e^{iπSx}.
+     It's an additional symmetry that the Hubbard model has, but it's a bit weaker than Sx. However, this does apply
+     to systems in which N↑=N↓)
 - `hermitian`: Include hermitian conjugation (:create ↔ :annihilate)
 
 # Returns
@@ -686,7 +688,7 @@ function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=fa
         equivalent_configs = generate_symmetric_configs(X[i], Lx, Ly, 
                                                         trans_x, trans_y, refl_x, refl_y,
                                                         spin_symmetry, hermitian)
-        
+
         # For each equivalent config, compute hash and check only candidates
         for config in equivalent_configs
             h = hash(sort(config))
@@ -1657,20 +1659,35 @@ function reconstruct_full_vector(
     representative_indices::Vector,
     magnitude::AbstractVector,
     eig_indices::Vector,
+    n_eigs::Vector)
+
+    reconstruct_full_vector(
+        reshape(vec, 1, length(vec)), 
+        mapping, s_mapping, representative_indices, magnitude, eig_indices, n_eigs
+    )[1,:]
+end
+
+function reconstruct_full_vector(
+    vec::AbstractMatrix,
+    mapping::Vector,
+    s_mapping::Vector,
+    representative_indices::Vector,
+    magnitude::AbstractVector,
+    eig_indices::Vector,
     n_eigs::Vector,
 )
     n_ops = length(mapping)
     full_dim = length(mapping[1])
 
     T = promote_type(eltype(vec), ComplexF64)
-    full_vec = zeros(T, full_dim)
+    full_vec = zeros(T, size(vec)[1], full_dim)
 
     eigvals = cis.(2π .* (eig_indices .- 1) ./ n_eigs)
     group_size = prod(n_eigs)
 
     function apply_ops!(α, idx, phase, op)
         if op > n_ops
-            full_vec[idx] += vec[α] * phase / sqrt(magnitude[α] * group_size)
+            full_vec[:, idx] += vec[:, α] * phase / sqrt(magnitude[α] * group_size)
             return
         end
 
@@ -1684,7 +1701,7 @@ function reconstruct_full_vector(
         end
     end
 
-    for α in eachindex(vec)
+    for α in 1:size(vec)[2]
         apply_ops!(α, representative_indices[α], one(T), 1)
     end
 

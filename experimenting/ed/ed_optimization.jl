@@ -221,13 +221,13 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             if p isa AbstractMatrix
                 mat += p
             end
-            loss = 1-abs2(state2'*exp(1im*Matrix(mat))*state1)
+            loss = 1-abs2(state2'*cis(Matrix(mat))*state1)
             println(loss)
             return loss
         end
 
         if optimization == :gradient
-            optf = Optimization.OptimizationFunction(f, Optimization.AutoForwardDiff())#AutoZygote
+            optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
         elseif optimization == :manualgradient
             optf = Optimization.OptimizationFunction(f_nongradient, adtype=Optimization.NoAD(), grad=trotter_gradient!)
         else
@@ -242,7 +242,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         if optimization == :gradient || optimization == :manualgradient
             # opt = OptimizationOptimisers.Adam(learning_rate)
-            @time sol = Optimization.solve(prob, Optim.LBFGS(), maxiters=maxiters, callback=callback)
+            @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters, callback=callback)
             s = sol
         else
             function prob_func(prob, i, repeat)
@@ -282,7 +282,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 end
 
 
-function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer, 
+function test_map_to_state(degen_rm_U::Union{AbstractMatrix, Vector}, instructions::Dict{String, Any}, indexer::CombinationIndexer, 
         spin_conserved::Bool=false; 
         maxiters=100, optimization=:gradient,metric_functions::Dict{String, Function}=Dict{String, Function}()
         )
@@ -294,11 +294,17 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
                     "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[], "all_matrices"=>[],
                     "coefficients"=>[], "coefficient_labels"=>nothing, "param_mapping"=>nothing, "parities"=>nothing)
 
-
+    finish_early = false
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
-            state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
-            state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
+            if degen_rm_U isa AbstractMatrix
+                state1 = degen_rm_U[instructions["starting state"]["U index"],:]
+                state2 = degen_rm_U[instructions["ending state"]["U index"],:]
+                finish_early = true
+            else
+                state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
+                state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
+            end
             args = optimize_unitary(state1, state2, indexer; 
                     spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
                     maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
@@ -325,8 +331,14 @@ function test_map_to_state(degen_rm_U::Vector, instructions::Dict{String, Any}, 
                 "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 
                 "ending state"=> Dict("level"=>j, "U index"=>instructions["ending state"]["U index"]))
             )
+
+            if finish_early
+                return data_dict
+            end
         end
     end
+
+
     return data_dict
 end
 
