@@ -1,5 +1,4 @@
 
-
 # function optimize_sd_sum(goal_state::Vector, indexer::CombinationIndexer; maxiters=100)
 #     # this approach optimizes U|psi> to be close, subtracts it from the state and then
 #     # finds a new slater determinant state that's the close. This optimization doesn't work
@@ -38,7 +37,7 @@
 
 #         opt = OptimizationOptimisers.Adam(learning_rate)
 #         @time sol = solve(prob, opt, maxiters = maxiters)
-        
+
 #         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
 
 #         loss = sqrt(f(sol.u))
@@ -66,7 +65,7 @@
 
 #     starting_state = zeros(dim)
 #     starting_state[1] = 1.0
-    
+
 #     t_dict = create_randomized_nth_order_operator(1,indexer;magnitude=0.5)
 #     t_keys = collect(keys(t_dict))
 #     t_vals = collect(values(t_dict))
@@ -103,7 +102,7 @@
 
 #     opt = OptimizationOptimisers.Adam(0.1)
 #     @time sol = solve(prob, opt, maxiters = maxiters)
-    
+
 
 #     # evaluating what the coefficients are
 #     loss = sqrt(f(sol.u))
@@ -117,26 +116,152 @@
 #     coeff = 1/sqrt(sum(abs2.(total_matrix*starting_state)))
 #     coefficients .*= coeff
 #     println("Finished iteration $(length(computed_matrices))")
-    
+
 #     println(coefficients)
 #     return computed_matrices, coefficients, loss
+
+
+using CombDiff
+using LinearAlgebra
+using SparseArrays
+import Statistics
+using Statistics: std, mean
+using InteractiveUtils
+using Dates
+
+
+
+# Monkey-patch CombDiff.codegen to prevent generation of `_` variable which causes syntax errors.
+# function CombDiff.codegen(v::CombDiff.Var)
+#     s = CombDiff.name(v)
+#     if s == :_
+#         return :_safe_var_replaced
+#     end
+#     return s
+# end
+
+# # Workaround for generated _ variables
+# struct CombDiffIgnore end
+# const combdiff_ignore = CombDiffIgnore()
+# const _safe_var_replaced = combdiff_ignore
+# CombDiff.continuition(::CombDiffIgnore, content) = content
+
+# # Compile the Gradient Generator at the Top Level for proper scope scanning
+# # CACHING: To avoid 15+ minute compile times, we cache the generated code to disk
+# const COMBDIF_GRAD_GEN = let
+#     cache_dir = joinpath(@__DIR__, ".cache")
+#     cache_file = joinpath(cache_dir, "combdiff_grad_gen.jl")
+
+#     # Try to load from cache first
+#     if isfile(cache_file)
+#         println("Loading cached gradient generator from: $cache_file")
+#         try
+#             include(cache_file)
+#             # The cache file should define a function called `_cached_grad_gen`
+#             _cached_grad_gen
+#         catch e
+#             println("Warning: Failed to load cache ($e), regenerating...")
+#             rm(cache_file, force=true)
+#             nothing
+#         end
+#     else
+#         nothing
+#     end |> function (cached)
+#         if cached !== nothing
+#             return cached
+#         end
+
+#         println("Generating gradient function (this may take 10-15 minutes on first run)...")
+#         flush(stdout)
+
+#         f, ctx = CombDiff.@pct begin
+#             @space RV begin
+#                 type = (N,) -> C
+#                 linear = true
+#             end
+#             @space R3 begin
+#                 type = (N, N, N) -> C
+#             end
+#             @space RM begin
+#                 type = (N, N) -> C
+#             end
+#             @space Matfun begin
+#                 type = (RM,) -> RM
+#             end
+
+#             (M::R3, v_1::RV, v_2::RV, matexp::Matfun, A::RV) ->
+#                 sum((i::N, j::N), v_1(i) * matexp(
+#                                       (p::N, q::N) -> sum(k::N, A(k) * M(k, p, q))
+#                                   )(i, j) * v_2(j))
+#         end
+
+#         println("  [1/5] Running type inference...")
+#         flush(stdout)
+#         f = CombDiff.inference(f)
+
+#         println("  [2/5] Decomposing expression...")
+#         flush(stdout)
+#         # Manual pullback expansion to avoid slow simplify in eval_pullback
+#         # and to fix the iterator bug with single variables in decompose.
+#         A_var = last(content(get_bound(f)))
+#         # Wrap A_var in a pct_vec because decompose(Var, ...) has a broadcasting bug
+#         comp = CombDiff.decompose(CombDiff.pct_vec(A_var), get_body(f))
+
+#         println("  [3/5] Computing pullback (this is the slow step)...")
+#         flush(stdout)
+#         pb = CombDiff.pp(comp)
+
+#         println("  [4/5] Simplifying pullback...")
+#         flush(stdout)
+#         s_pb = CombDiff.eval_all(pb)
+
+#         println("  [5/5] Generating code...")
+#         flush(stdout)
+#         # Re-wrap in a map that takes M, v1, v2, matexp as parameters
+#         other_bounds = content(get_bound(f))[1:end-1]
+#         df = CombDiff.pct_map(other_bounds..., s_pb)
+
+#         generated_code = CombDiff.codegen(df)
+
+#         # Save to cache
+#         println("Saving gradient generator to cache: $cache_file")
+#         mkpath(cache_dir)
+#         open(cache_file, "w") do io
+#             println(io, "# Auto-generated gradient function for COMBDIF_GRAD_GEN")
+#             println(io, "# Generated on: ", Dates.now())
+#             println(io, "# DO NOT EDIT - regenerate by deleting this file")
+#             println(io, "")
+#             println(io, "const _cached_grad_gen = ", generated_code)
+#         end
+
+#         println("Generation complete! Subsequent runs will load from cache instantly.")
+#         flush(stdout)
+
+#         # The generated code for a ParametricMap is directly (params...) -> (inner_args..., seed) -> result_map
+#         eval(generated_code)
+#     end
 # end
 
 
+function get_combdiff_grad_func()
+    return COMBDIF_GRAD_GEN
+end
 
-function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer; 
-        maxiters=10, ϵ=1e-5, max_order=2, spin_conserved::Bool=false, use_symmetry::Bool=false, 
-        optimization=:gradient, metric_functions::Dict{String, Function}=Dict{String, Function}()
-    )
+
+function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
+    maxiters=10, ϵ=1e-5, max_order=2, spin_conserved::Bool=false, use_symmetry::Bool=false,
+    optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}()
+)
+    # spin_conserved is only true when using (N↑, N↓) and not N
     computed_matrices = []
     computed_coefficients = []
     parameter_mappings = []
     parities = []
     coefficient_labels = []
     dim = length(indexer.inv_comb_dict)
-    
+
     metrics = Dict{String,Vector{Any}}()
-    loss = 1-abs2(state1'*state2)
+    loss = 1 - abs2(state1' * state2)
     metrics["loss"] = Float64[loss]
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
@@ -149,19 +274,19 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     end
 
     for order = 1:max_order
-        magnitude_esimate = loss/2
-        learning_rate = loss/10
+        magnitude_esimate = loss / 2
+        learning_rate = loss / 10
         println("magnitude: $magnitude_esimate")
         println("learning rate: $learning_rate")
-        @time t_dict = create_randomized_nth_order_operator(order,indexer;magnitude=magnitude_esimate, hermitian=!use_symmetry, conserve_spin=spin_conserved)
+        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=magnitude_esimate, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
 
         if use_symmetry
-            inv_param_map, parameter_mapping, parity = find_symmetry_groups(collect(keys(t_dict)), maximum(indexer.a).coordinates..., 
-                hermitian=true,  trans_x=true, trans_y=true, refl_x=true, refl_y=true)
-            t_vals = rand(typeof(signs[1]), length(inv_param_map))*magnitude_esimate
+            inv_param_map, parameter_mapping, parity = find_symmetry_groups(collect(keys(t_dict)), maximum(indexer.a).coordinates...,
+                hermitian=true, trans_x=true, trans_y=true, spin_symmetry=true)
+            t_vals = rand(typeof(signs[1]), length(inv_param_map)) * magnitude_esimate
 
         else
             t_vals = collect(values(t_dict))
@@ -183,7 +308,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         function callback(state, loss_val)
             # state.gradient
             N = 20
-            push!(tmp_losses, loss_val) 
+            push!(tmp_losses, loss_val)
             if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
                 println("std: $(std(tmp_losses[end-N:end]))")
                 return true
@@ -196,9 +321,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             # TODO  ##########################
             ##################################
 
-            return grad            
+            return grad
         end
-          
+
         function f_nongradient(t_vals, p=nothing)
             vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
             mat = sparse(rows, cols, vals, dim, dim)
@@ -208,7 +333,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             if p isa AbstractMatrix
                 mat += p
             end
-            loss = 1-abs2(state2'*expv(1im,mat,state1))
+            loss = 1 - abs2(state2' * expv(1im, mat, state1))
             println(loss)
             return loss
         end
@@ -221,7 +346,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             if p isa AbstractMatrix
                 mat += p
             end
-            loss = 1-abs2(state2'*cis(Matrix(mat))*state1)
+            loss = 1 - abs2(state2' * exp(1im * Matrix(mat)) * state1)
             println(loss)
             return loss
         end
@@ -229,31 +354,89 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         if optimization == :gradient
             optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
         elseif optimization == :manualgradient
-            optf = Optimization.OptimizationFunction(f_nongradient, adtype=Optimization.NoAD(), grad=trotter_gradient!)
+            optf = Optimization.OptimizationFunction(f_nongradient, grad=trotter_gradient!)
+        elseif optimization == :combdiff
+            # Construct M tensor: M[k, p, q] = signs[k] * (p == rows[k] && q == cols[k])
+            # We represent this as a dense array for CombDiff.
+
+            D = dim
+            num_params = length(t_vals)
+            M_tensor = zeros(ComplexF64, num_params, D, D)
+
+            # Helper to map op_index to param_index
+            function get_param_idx(op_idx)
+                raw_idx = param_index_map[op_idx]
+                if !isnothing(parameter_mapping)
+                    return parameter_mapping[raw_idx]
+                else
+                    return raw_idx
+                end
+            end
+
+            function get_parity_sign(op_idx)
+                if !isnothing(parity) && !isnothing(parameter_mapping)
+                    raw_idx = param_index_map[op_idx]
+                    return parity[raw_idx]
+                end
+                return 1.0
+            end
+
+            for (i, (r, c, s)) in enumerate(zip(rows, cols, signs))
+                k = get_param_idx(i)
+                sign_val = s * get_parity_sign(i)
+                M_tensor[k, r, c] += sign_val
+                if !use_symmetry
+                    if r != c
+                        M_tensor[k, c, r] += conj(sign_val)
+                    else
+                        M_tensor[k, c, r] += conj(sign_val)
+                    end
+                end
+            end
+
+            v1_vec = Vector(conj(state2))
+            v2_vec = Vector(state1)
+
+            # Instantiate the specific gradient function for this M, v1, v2
+            # COMBDIF_GRAD_GEN takes (M, v1, v2, matexp)
+            my_matexp = (x) -> exp(1im * x)
+            grad_func = COMBDIF_GRAD_GEN(M_tensor, v1_vec, v2_vec, my_matexp)
+
+            function combdiff_gradient!(G, x, p)
+                # grad_func(x, seed) -> result_map
+                # seed is 1.0 for scalar output
+                res_map = grad_func(x, 1.0 + 0.0im)
+                for i in 1:length(x)
+                    G[i] = real(res_map(i))
+                end
+            end
+
+            optf = Optimization.OptimizationFunction(f_nongradient, grad=combdiff_gradient!)
         else
             optf = Optimization.OptimizationFunction(f_nongradient)
         end
 
         if length(computed_matrices) > 0
-            prob = Optimization.OptimizationProblem(optf, t_vals,sum(computed_matrices))
+            prob = Optimization.OptimizationProblem(optf, t_vals, sum(computed_matrices))
         else
             prob = Optimization.OptimizationProblem(optf, t_vals)
         end
 
-        if optimization == :gradient || optimization == :manualgradient
+        if optimization == :gradient || optimization == :manualgradient || optimization == :combdiff
             # opt = OptimizationOptimisers.Adam(learning_rate)
+            # BFGS is faster than LBFGS, which both converge faster than adam
             @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters, callback=callback)
             s = sol
         else
             function prob_func(prob, i, repeat)
-                remake(prob, u0 = t_vals)
+                remake(prob, u0=t_vals)
             end
 
             ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
             @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters, callback=callback)
             s = sol[argmin([s.objectives for s in sol])]
         end
-        
+
         vals = update_values(signs, param_index_map, sol.u, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
@@ -265,12 +448,12 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             push!(computed_matrices, sparse(rows, cols, vals, dim, dim))
         end
         println("Finished order $order")
-        push!(metrics["loss"], loss) 
-        push!(metrics["loss_std"], std(last(tmp_losses,20)))
+        push!(metrics["loss"], loss)
+        push!(metrics["loss_std"], std(last(tmp_losses, 20)))
         push!(computed_coefficients, sol.u)
         push!(parameter_mappings, parameter_mapping)
         push!(parities, parity)
-        for (k,func) in metric_functions
+        for (k, func) in metric_functions
             push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
         end
         println("loss std: $(metrics["loss_std"][end])")
@@ -282,36 +465,38 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 end
 
 
-function test_map_to_state(degen_rm_U::Union{AbstractMatrix, Vector}, instructions::Dict{String, Any}, indexer::CombinationIndexer, 
-        spin_conserved::Bool=false; 
-        maxiters=100, optimization=:gradient,metric_functions::Dict{String, Function}=Dict{String, Function}()
-        )
+function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
+    spin_conserved::Bool=false;
+    maxiters=100, optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}()
+)
+    # spin_conserved is only true when using (N↑, N↓) and not N.
+
     # meta_data = Dict("starting state"=>Dict("U index"=>1, "levels"=>1:5),
     #             "ending state"=>Dict("U index"=>5, "levels"=>1),
     #             "electron count"=>3, "sites"=>"2x3", "bc"=>"periodic", "basis"=>"adiabatic", 
     #             "U_values"=>U_values)
-    data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
-                    "loss_metrics"=>[], "labels"=>[], "loss_std_metrics"=>[], "all_matrices"=>[],
-                    "coefficients"=>[], "coefficient_labels"=>nothing, "param_mapping"=>nothing, "parities"=>nothing)
+    data_dict = Dict{String,Any}("norm1_metrics" => [], "norm2_metrics" => [],
+        "loss_metrics" => [], "labels" => [], "loss_std_metrics" => [], "all_matrices" => [],
+        "coefficients" => [], "coefficient_labels" => nothing, "param_mapping" => nothing, "parities" => nothing)
 
     finish_early = false
     for i in instructions["starting state"]["levels"]
         for j in instructions["ending state"]["levels"]
             if degen_rm_U isa AbstractMatrix
-                state1 = degen_rm_U[instructions["starting state"]["U index"],:]
-                state2 = degen_rm_U[instructions["ending state"]["U index"],:]
+                state1 = degen_rm_U[instructions["starting state"]["U index"], :]
+                state2 = degen_rm_U[instructions["ending state"]["U index"], :]
                 finish_early = true
             else
-                state1 = degen_rm_U[instructions["starting state"]["U index"]][:,i]
-                state2 = degen_rm_U[instructions["ending state"]["U index"]][:,j]
+                state1 = degen_rm_U[instructions["starting state"]["U index"]][:, i]
+                state2 = degen_rm_U[instructions["ending state"]["U index"]][:, j]
             end
-            args = optimize_unitary(state1, state2, indexer; 
-                    spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-                    maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
-                    metric_functions=metric_functions)
+            args = optimize_unitary(state1, state2, indexer;
+                spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
+                maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
+                metric_functions=metric_functions)
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics = args
-            push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
-            push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
+            push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
+            push!(data_dict["norm2_metrics"], [norm(cm, 2) for cm in computed_matrices])
             push!(data_dict["all_matrices"], computed_matrices)
             push!(data_dict["coefficients"], coefficient_values)
             if isnothing(data_dict["coefficient_labels"])
@@ -321,15 +506,15 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix, Vector}, instructio
             end
 
             for (k, val) in metrics
-                if k*"_metrics" ∉ keys(data_dict)
+                if k * "_metrics" ∉ keys(data_dict)
                     data_dict[k*"_metrics"] = [val]
                 else
                     push!(data_dict[k*"_metrics"], val)
                 end
             end
             push!(data_dict["labels"], Dict(
-                "starting state"=>Dict("level"=>i, "U index"=>instructions["starting state"]["U index"]), 
-                "ending state"=> Dict("level"=>j, "U index"=>instructions["ending state"]["U index"]))
+                "starting state" => Dict("level" => i, "U index" => instructions["starting state"]["U index"]),
+                "ending state" => Dict("level" => j, "U index" => instructions["ending state"]["U index"]))
             )
 
             if finish_early
@@ -342,18 +527,18 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix, Vector}, instructio
     return data_dict
 end
 
-function test_map_sd_sum(degen_rm_U::Vector, instructions::Dict{String, Any}, indexer::CombinationIndexer;maxiters=maxiters)
-    data_dict = Dict{String, Any}("norm1_metrics"=>[],"norm2_metrics"=>[],
-                    "loss_metrics"=>[], "labels"=>[], "coefficients"=>[])
+function test_map_sd_sum(degen_rm_U::Vector, instructions::Dict{String,Any}, indexer::CombinationIndexer; maxiters=maxiters)
+    data_dict = Dict{String,Any}("norm1_metrics" => [], "norm2_metrics" => [],
+        "loss_metrics" => [], "labels" => [], "coefficients" => [])
     for j in instructions["goal state"]["levels"]
-        goal_state = degen_rm_U[instructions["goal state"]["U index"]][:,j]
+        goal_state = degen_rm_U[instructions["goal state"]["U index"]][:, j]
         computed_matrices, coefficients, losses = optimize_sd_sum_2(goal_state, indexer; maxiters=maxiters)
-        push!(data_dict["norm1_metrics"],[norm(cm, 1) for cm in computed_matrices])
-        push!(data_dict["norm2_metrics"],[norm(cm, 2) for cm in computed_matrices])
+        push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
+        push!(data_dict["norm2_metrics"], [norm(cm, 2) for cm in computed_matrices])
         push!(data_dict["coefficients"], coefficients)
         push!(data_dict["loss_metrics"], losses)
         push!(data_dict["labels"], Dict(
-            "goal state"=> Dict("level"=>j, "U index"=>instructions["goal state"]["U index"]))
+            "goal state" => Dict("level" => j, "U index" => instructions["goal state"]["U index"]))
         )
     end
     return data_dict

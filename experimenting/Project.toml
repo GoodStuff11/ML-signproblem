@@ -1,5 +1,6 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
+CombDiff = "ef708a43-c8a3-43f4-8f65-1f04ee4c5bb0"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
 ExponentialUtilities = "d4d017d3-3776-5f7e-afef-a10c40355c18"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
