@@ -1,256 +1,166 @@
 
-# function optimize_sd_sum(goal_state::Vector, indexer::CombinationIndexer; maxiters=100)
-#     # this approach optimizes U|psi> to be close, subtracts it from the state and then
-#     # finds a new slater determinant state that's the close. This optimization doesn't work
-#     # and the optimization must be simultaneously as supposed to sequentially.
-#     computed_matrices = []
-#     dim = length(indexer.inv_comb_dict)
-#     # accumulated_matrix = zeros(ComplexF64, length(goal_state), length(goal_state))
-#     coefficients = []
-
-#     losses = []
-
-#     loss = 1
-#     starting_state = zeros(length(goal_state))
-#     starting_state[1] = 1.0
-#     while loss > 1e-6
-#         magnitude_esimate = loss/2
-#         learning_rate = loss/10
-#         println("magnitude: $magnitude_esimate")
-#         println("learning rate: $learning_rate")
-#         t_dict = create_randomized_nth_order_operator(1,indexer;magnitude=magnitude_esimate)
-#         t_keys = collect(keys(t_dict))
-#         t_vals = collect(values(t_dict))
-#         rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
 
 
-#         function f(t_vals, p=nothing)
-#             vals = update_values(signs, ops_list, Dict(zip(t_keys,t_vals)))
-#             mat = exp(1im*Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim))))
-#             loss = abs2(1-abs2(goal_state'*mat*starting_state))
-#             println(sqrt(loss))
-#             return loss
-#         end
+# using CombDiff
+# using LinearAlgebra
+# using SparseArrays
+# import Statistics
+# using Statistics: std, mean
+# using InteractiveUtils
+# using Dates
+using ExponentialUtilities
+using Statistics
 
-#         optf = OptimizationFunction(f, Optimization.AutoZygote())
-#         prob = OptimizationProblem(optf, t_vals)
-
-#         opt = OptimizationOptimisers.Adam(learning_rate)
-#         @time sol = solve(prob, opt, maxiters = maxiters)
-
-#         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u)))
-
-#         loss = sqrt(f(sol.u))
-#         push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
-#         starting_state -= exp(1im*Matrix(computed_matrices[end]))*starting_state
-#         push!(coefficients, 1/sqrt(sum(abs2.(starting_state))))
-#         starting_state *= coefficients[end]
-#         println("Finished iteration $(length(computed_matrices))")
-#         println("coefficient $(coefficients[end])")
-#         push!(losses, loss) 
-#         # if loss < ϵ
-#         #     break
-#         # end
-#         if length(computed_matrices) > 5
-#             break
-#         end
-#     end
-#     println(cumprod(coefficients))
-#     return computed_matrices, coefficients, losses
-# end
-
-# function optimize_sd_sum_2(goal_state::Vector, indexer::CombinationIndexer, sd_count::Int=2; maxiters=100, optimization=:zygote)
-#     computed_matrices = []
-#     dim = length(goal_state)
-
-#     starting_state = zeros(dim)
-#     starting_state[1] = 1.0
-
-#     t_dict = create_randomized_nth_order_operator(1,indexer;magnitude=0.5)
-#     t_keys = collect(keys(t_dict))
-#     t_vals = collect(values(t_dict))
-#     rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
-#     N = length(t_vals)
-#     params = rand(sd_count*N+(sd_count-1))
-
-
-#     function f(params, p=nothing)
-#         mat = zeros(dim,dim)
-#         for i in 1:sd_count
-#             if i == 1
-#                 coeff = 1
-#             else
-#                 coeff = params[sd_count*N+i-1]
-#             end
-#             vals = update_values(signs, ops_list, Dict(zip(t_keys,params[1+N*(i-1):N*i])))
-#             mat += coeff*exp(1im*Matrix(make_hermitian(sparse(rows, cols, vals, dim, dim))))
-#         end
-#         state = mat*starting_state
-#         state /= sqrt(sum(abs2.(state)))
-#         loss = abs2(1-abs2(goal_state'*state))
-#         println(sqrt(loss))
-#         return loss
-#     end
-
-#     # optimization
-#     if optimization == :zygote
-#         optf = OptimizationFunction(f, Optimization.AutoZygote())
-#     else
-#         optf = OptimizationFunction(f, Optim.NelderMead())
-#     end
-#     prob = OptimizationProblem(optf, params)
-
-#     opt = OptimizationOptimisers.Adam(0.1)
-#     @time sol = solve(prob, opt, maxiters = maxiters)
-
-
-#     # evaluating what the coefficients are
-#     loss = sqrt(f(sol.u))
-#     total_matrix = zeros(ComplexF64, length(goal_state), length(goal_state))
-#     coefficients = [1;sol.u[sd_count*N+1:end]]
-#     for (k,coeff) in zip(0:(sd_count-1),coefficients)
-#         vals = update_values(signs, ops_list, Dict(zip(t_keys,sol.u[1+k*N:N*(k+1)])))
-#         push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
-#         total_matrix += coeff*exp(1im*computed_matrices[end])
-#     end
-#     coeff = 1/sqrt(sum(abs2.(total_matrix*starting_state)))
-#     coefficients .*= coeff
-#     println("Finished iteration $(length(computed_matrices))")
-
-#     println(coefficients)
-#     return computed_matrices, coefficients, loss
-
-
-using CombDiff
-using LinearAlgebra
-using SparseArrays
-import Statistics
-using Statistics: std, mean
-using InteractiveUtils
-using Dates
-
-
-
-# Monkey-patch CombDiff.codegen to prevent generation of `_` variable which causes syntax errors.
-# function CombDiff.codegen(v::CombDiff.Var)
-#     s = CombDiff.name(v)
-#     if s == :_
-#         return :_safe_var_replaced
-#     end
-#     return s
-# end
-
-# # Workaround for generated _ variables
-# struct CombDiffIgnore end
-# const combdiff_ignore = CombDiffIgnore()
-# const _safe_var_replaced = combdiff_ignore
-# CombDiff.continuition(::CombDiffIgnore, content) = content
-
-# # Compile the Gradient Generator at the Top Level for proper scope scanning
-# # CACHING: To avoid 15+ minute compile times, we cache the generated code to disk
-# const COMBDIF_GRAD_GEN = let
-#     cache_dir = joinpath(@__DIR__, ".cache")
-#     cache_file = joinpath(cache_dir, "combdiff_grad_gen.jl")
-
-#     # Try to load from cache first
-#     if isfile(cache_file)
-#         println("Loading cached gradient generator from: $cache_file")
-#         try
-#             include(cache_file)
-#             # The cache file should define a function called `_cached_grad_gen`
-#             _cached_grad_gen
-#         catch e
-#             println("Warning: Failed to load cache ($e), regenerating...")
-#             rm(cache_file, force=true)
-#             nothing
-#         end
-#     else
-#         nothing
-#     end |> function (cached)
-#         if cached !== nothing
-#             return cached
-#         end
-
-#         println("Generating gradient function (this may take 10-15 minutes on first run)...")
-#         flush(stdout)
-
-#         f, ctx = CombDiff.@pct begin
-#             @space RV begin
-#                 type = (N,) -> C
-#                 linear = true
-#             end
-#             @space R3 begin
-#                 type = (N, N, N) -> C
-#             end
-#             @space RM begin
-#                 type = (N, N) -> C
-#             end
-#             @space Matfun begin
-#                 type = (RM,) -> RM
-#             end
-
-#             (M::R3, v_1::RV, v_2::RV, matexp::Matfun, A::RV) ->
-#                 sum((i::N, j::N), v_1(i) * matexp(
-#                                       (p::N, q::N) -> sum(k::N, A(k) * M(k, p, q))
-#                                   )(i, j) * v_2(j))
-#         end
-
-#         println("  [1/5] Running type inference...")
-#         flush(stdout)
-#         f = CombDiff.inference(f)
-
-#         println("  [2/5] Decomposing expression...")
-#         flush(stdout)
-#         # Manual pullback expansion to avoid slow simplify in eval_pullback
-#         # and to fix the iterator bug with single variables in decompose.
-#         A_var = last(content(get_bound(f)))
-#         # Wrap A_var in a pct_vec because decompose(Var, ...) has a broadcasting bug
-#         comp = CombDiff.decompose(CombDiff.pct_vec(A_var), get_body(f))
-
-#         println("  [3/5] Computing pullback (this is the slow step)...")
-#         flush(stdout)
-#         pb = CombDiff.pp(comp)
-
-#         println("  [4/5] Simplifying pullback...")
-#         flush(stdout)
-#         s_pb = CombDiff.eval_all(pb)
-
-#         println("  [5/5] Generating code...")
-#         flush(stdout)
-#         # Re-wrap in a map that takes M, v1, v2, matexp as parameters
-#         other_bounds = content(get_bound(f))[1:end-1]
-#         df = CombDiff.pct_map(other_bounds..., s_pb)
-
-#         generated_code = CombDiff.codegen(df)
-
-#         # Save to cache
-#         println("Saving gradient generator to cache: $cache_file")
-#         mkpath(cache_dir)
-#         open(cache_file, "w") do io
-#             println(io, "# Auto-generated gradient function for COMBDIF_GRAD_GEN")
-#             println(io, "# Generated on: ", Dates.now())
-#             println(io, "# DO NOT EDIT - regenerate by deleting this file")
-#             println(io, "")
-#             println(io, "const _cached_grad_gen = ", generated_code)
-#         end
-
-#         println("Generation complete! Subsequent runs will load from cache instantly.")
-#         flush(stdout)
-
-#         # The generated code for a ParametricMap is directly (params...) -> (inner_args..., seed) -> result_map
-#         eval(generated_code)
-#     end
-# end
-
-
-function get_combdiff_grad_func()
-    return COMBDIF_GRAD_GEN
+# Auxiliary Matrix Type for Trotter Gradient
+struct AuxiliaryMatrix{T,A,B} <: AbstractMatrix{T}
+    H::A
+    Hk::B
+    n::Int
 end
 
+AuxiliaryMatrix(H::A, Hk::B, n::Int) where {A,B} = AuxiliaryMatrix{eltype(A),A,B}(H, Hk, n)
+
+Base.size(M::AuxiliaryMatrix) = (2 * M.n, 2 * M.n)
+Base.eltype(::AuxiliaryMatrix{T}) where T = T
+
+function LinearAlgebra.opnorm(M::AuxiliaryMatrix, p::Real=Inf)
+    return opnorm(M.H, p) + opnorm(M.Hk, p)
+end
+
+LinearAlgebra.ishermitian(M::AuxiliaryMatrix) = false
+LinearAlgebra.issymmetric(M::AuxiliaryMatrix) = false
+
+function _mul_aux!(y, M, x, alpha, beta)
+    n = M.n
+    x1 = selectdim(x, 1, 1:n)
+    x2 = selectdim(x, 1, n+1:2n)
+    y1 = selectdim(y, 1, 1:n)
+    y2 = selectdim(y, 1, n+1:2n)
+
+    mul!(y1, M.H, x1, alpha, beta)
+    mul!(y2, M.H, x2, alpha, beta)
+    mul!(y2, M.Hk, x1, alpha, 1)
+    return y
+end
+
+# Multi-dispatch to avoid ambiguity with LinearAlgebra
+function LinearAlgebra.mul!(y::AbstractVector, M::AuxiliaryMatrix, x::AbstractVector, alpha::Number, beta::Number)
+    return _mul_aux!(y, M, x, alpha, beta)
+end
+function LinearAlgebra.mul!(y::AbstractMatrix, M::AuxiliaryMatrix, x::AbstractMatrix, alpha::Number, beta::Number)
+    return _mul_aux!(y, M, x, alpha, beta)
+end
+function LinearAlgebra.mul!(y::AbstractVector, M::AuxiliaryMatrix, x::AbstractMatrix, alpha::Number, beta::Number)
+    return _mul_aux!(y, M, x, alpha, beta)
+end
+function LinearAlgebra.mul!(y::AbstractMatrix, M::AuxiliaryMatrix, x::AbstractVector, alpha::Number, beta::Number)
+    return _mul_aux!(y, M, x, alpha, beta)
+end
+
+LinearAlgebra.mul!(y::AbstractVector, M::AuxiliaryMatrix, x::AbstractVector) = mul!(y, M, x, 1, 0)
+LinearAlgebra.mul!(y::AbstractMatrix, M::AuxiliaryMatrix, x::AbstractMatrix) = mul!(y, M, x, 1, 0)
+
+# --- Suzuki-Trotter Utilities ---
+
+function get_suzuki_trotter_sequence(num_ops, order)
+    if order == 1
+        return [(i, 1.0) for i in 1:num_ops]
+    elseif order == 2
+        # S2 = exp(0.5 dt H1) ... exp(dt Hm) ... exp(0.5 dt H1)
+        seq = []
+        for i in 1:num_ops
+            push!(seq, (i, 0.5))
+        end
+        # Reverse and combine middle
+        for i in num_ops:-1:1
+            push!(seq, (i, 0.5))
+        end
+        return seq
+    elseif order == 4
+        # S4(dt) = S2(p*dt) S2(p*dt) S2((1-4p)*dt) S2(p*dt) S2(p*dt)
+        p = 1.0 / (4.0 - 4.0^(1.0 / 3.0))
+        s2 = get_suzuki_trotter_sequence(num_ops, 2)
+        seq = []
+        for w in [p, p, 1 - 4p, p, p]
+            for (idx, weight) in s2
+                push!(seq, (idx, weight * w))
+            end
+        end
+        return seq
+    else
+        error("Suzuki-Trotter order $order not supported. Use 1, 2, or 4.")
+    end
+end
+
+function trotter_evolve(psi, ops, t_vals, order, steps)
+    dt = 1.0 / steps
+    seq_base = get_suzuki_trotter_sequence(length(ops), order)
+    curr_psi = copy(psi)
+    for _ in 1:steps
+        for (idx, w) in seq_base
+            curr_psi = expv(1im * dt * w * t_vals[idx], ops[idx], curr_psi)
+        end
+    end
+    return curr_psi
+end
+
+function trotter_gradient_adjoint(state1, state2, ops, t_vals, order, steps)
+    dim = length(state1)
+    num_ops = length(ops)
+    dt = 1.0 / steps
+    seq_base = get_suzuki_trotter_sequence(num_ops, order)
+
+    # Build full sequence for all steps
+    full_seq = []
+    for _ in 1:steps
+        append!(full_seq, seq_base)
+    end
+
+    L = length(full_seq)
+    phis = Vector{Vector{ComplexF64}}(undef, L + 1)
+    phis[1] = state1
+    for j in 1:L
+        idx, w = full_seq[j]
+        phis[j+1] = expv(1im * dt * w * t_vals[idx], ops[idx], phis[j])
+    end
+
+    overlap = state2' * phis[L+1]
+    grad = zeros(Float64, num_ops)
+    chi = state2
+
+    for j in L:-1:1
+        idx, w = full_seq[j]
+        # dOverlap/dt_idx = <chi_j | i * dt * w * ops[idx] | phis[j+1]>
+        contrib = 1im * dt * w * (chi' * (ops[idx] * phis[j+1]))
+        grad[idx] += -2 * real(conj(overlap) * contrib)
+
+        # Pull back chi: chi_{j-1} = exp(-i * dt * w * t_vals[idx] * ops[idx]) * chi_j
+        chi = expv(-1im * dt * w * t_vals[idx], ops[idx], chi)
+    end
+
+    return grad
+end
+LinearAlgebra.mul!(y::AbstractVector, M::AuxiliaryMatrix, x::AbstractMatrix) = mul!(y, M, x, 1, 0)
+LinearAlgebra.mul!(y::AbstractMatrix, M::AuxiliaryMatrix, x::AbstractVector) = mul!(y, M, x, 1, 0)
+
+
+"""
+Apply exp(α M) * v efficiently.
+Uses expv if M is large & sparse, otherwise falls back to exp(M).
+"""
+function apply_exp(M, v, α)
+    n = size(M, 1)
+    if issparse(M) && n > 128
+        return expv(α, M, v)
+    else
+        return exp(α * M) * v
+    end
+end
 
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
     maxiters=10, ϵ=1e-5, max_order=2, spin_conserved::Bool=false, use_symmetry::Bool=false,
-    optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}()
+    optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
+    trotter_order=0, trotter_steps=1
 )
     # spin_conserved is only true when using (N↑, N↓) and not N
     computed_matrices = []
@@ -283,12 +193,28 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
 
+        ops = []
         if use_symmetry
-            inv_param_map, parameter_mapping, parity = find_symmetry_groups(collect(keys(t_dict)), maximum(indexer.a).coordinates...,
+            inv_param_map, parameter_mapping, parity = find_symmetry_groups(t_keys, maximum(indexer.a).coordinates...,
                 hermitian=true, trans_x=true, trans_y=true, spin_symmetry=true)
+
+            for key_idcs in inv_param_map
+                tmp_t_dict::Dict{Array{Tuple{Coordinate{2,Int64},Int64,Symbol},1},Float64} = Dict()
+                for key_idx in key_idcs
+                    tmp_t_dict[t_keys[key_idx]] = parity[key_idx]
+                end
+                _rows, _cols, _signs, _ops_list = build_n_body_structure(tmp_t_dict, indexer)
+                _param_index_map = build_param_index_map(_ops_list, collect(keys(tmp_t_dict)))
+                _vals = update_values(_signs, _param_index_map, collect(values(tmp_t_dict)))
+                push!(ops, sparse(_rows, _cols, _vals, dim, dim))
+            end
             t_vals = rand(typeof(signs[1]), length(inv_param_map)) * magnitude_esimate
 
         else
+            for k in collect(keys(t_dict))
+                rows, cols, signs, ops_list = build_n_body_structure(Dict(k => 1), indexer)
+                push!(ops, make_hermitian(sparse(rows, cols, signs, dim, dim)))
+            end
             t_vals = collect(values(t_dict))
             inv_param_map = nothing
             parameter_mapping = nothing
@@ -316,15 +242,62 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return false
         end
 
-        function trotter_gradient!(grad, t_vals)
-            ##################################
-            # TODO  ##########################
-            ##################################
 
+
+        function trotter_grad!(grad, t_vals, p=nothing)
+            if trotter_order > 0
+                # Use Adjoint method for Suzuki-Trotter
+                grad_adj = trotter_gradient_adjoint(state1, state2, ops, t_vals, trotter_order, trotter_steps)
+                grad .= grad_adj
+                return grad
+            end
+
+            # Reconstruct Full Hamiltonian H
+            vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+            H = sparse(rows, cols, vals, dim, dim)
+            if !use_symmetry
+                H = make_hermitian(H)
+            end
+
+            # Compute baseline forward evolution U|ψ1> once for overlap term
+            psi1_U = expv(1im, H, state1)
+            overlap = state2' * psi1_U
+
+            # Parallel loop over parameters to compute gradient components
+            Threads.@threads for k in 1:length(t_vals)
+                Hk = ops[k]
+
+                # Construct Auxiliary Operator (Implicit M)
+                # M = [H 0; Hk H]
+                M = AuxiliaryMatrix(H, Hk, dim)
+
+                # Compute derivative via expv
+                # exp(iM) * [psi1; 0] = [U*psi1; i * (dU/dt_k)*psi1] (because M is lower tri)
+                v_in = zeros(ComplexF64, 2 * dim)
+                v_in[1:dim] = state1
+
+                # Increased Krylov subspace size m=100 to ensure convergence for large Norm(H)
+                v_out = expv(1im, M, v_in; m=100)
+
+                # The second block is i * dU/dt_k * psi1
+                # This IS d(exp(iH))/dt * psi1.
+                d_psi = v_out[dim+1:end]
+
+                # Gradient of Loss L = 1 - |<ψ2|U|ψ1>|^2
+                d_overlap = state2' * d_psi
+                grad[k] = -2 * real(conj(overlap) * d_overlap)
+            end
             return grad
         end
 
         function f_nongradient(t_vals, p=nothing)
+            if trotter_order > 0
+                psi_evolved = trotter_evolve(state1, ops, t_vals, trotter_order, trotter_steps)
+                loss = 1 - abs2(state2' * psi_evolved)
+                println(loss)
+                return loss
+            end
+
             vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
             mat = sparse(rows, cols, vals, dim, dim)
             if !use_symmetry
@@ -354,7 +327,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         if optimization == :gradient
             optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
         elseif optimization == :manualgradient
-            optf = Optimization.OptimizationFunction(f_nongradient, grad=trotter_gradient!)
+            optf = Optimization.OptimizationFunction(f_nongradient, grad=trotter_grad!)
         elseif optimization == :combdiff
             # Construct M tensor: M[k, p, q] = signs[k] * (p == rows[k] && q == cols[k])
             # We represent this as a dense array for CombDiff.
