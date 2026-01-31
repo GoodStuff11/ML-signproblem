@@ -9,6 +9,18 @@ function make_hermitian(A::SparseMatrixCSC)
         size(A, 1), size(A, 2)
     )
 end
+function make_antihermitian(A::SparseMatrixCSC)
+    # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
+    # This function doesn't override non-zero values with zero values like Hermitian(A) can
+
+    I, J, V = findnz(A)
+    return sparse(
+        vcat(I, J),
+        vcat(J, I),
+        vcat(V, -conj.(V)),
+        size(A, 1), size(A, 2)
+    )
+end
 
 function permutation_parity(a::Vector)
     # computes the number of swaps required to sort and returns its parity (0,1)
@@ -544,7 +556,7 @@ function update_values(
     if isnothing(parameter_mapping)
         return [t_vals[param_index_map[i]] * signs[i] for i in eachindex(signs)]
     else
-        return [t_vals[parameter_mapping[param_index_map[i]]] * parity[param_index_map[i]] * signs[i]
+        return [parameter_mapping[param_index_map[i]] == 0 ? U(0) : t_vals[parameter_mapping[param_index_map[i]]] * parity[param_index_map[i]] * signs[i]
                 for i in eachindex(signs)]
     end
 end
@@ -652,7 +664,7 @@ end
 # parameter_mapping is defined such that values(t_dict)[i] = reduced_parameters[parameter_mapping[i]]
 # NOTE: this function only measures equivalences based on the symmetries, it doesn't care if the transformed states are actually in t_dict
 """
-    find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false)
+    find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false, antihermitian=false)
 
 Find groups of indices in X that are related by the specified symmetries.
 
@@ -669,13 +681,14 @@ Find groups of indices in X that are related by the specified symmetries.
      It's an additional symmetry that the Hubbard model has, but it's a bit weaker than Sx. However, this does apply
      to systems in which N↑=N↓)
 - `hermitian`: Include hermitian conjugation (:create ↔ :annihilate)
+- `antihermitian`: Include hermitian conjugation with a sign flip (anti-hermitian symmetry A† = -A)
 
 # Returns
 - `groups`: Vector of vectors of integers, where each sub-vector contains indices that are symmetry-equivalent.
 - `inverse_map`: Vector of integers where inverse_map[i] gives the group index containing element i.
 - `parity`: Vector of integers (±1) where parity[i] gives the parity of swaps needed to map X[i] to the representative.
 """
-function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false)
+function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false, antihermitian=false)
     n = length(X)
     visited = falses(n)
     groups = Vector{Vector{Int}}()
@@ -707,13 +720,24 @@ function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=fa
         # Generate all symmetry-related configurations
         equivalent_configs = generate_symmetric_configs(X[i], Lx, Ly,
             trans_x, trans_y, refl_x, refl_y,
-            spin_symmetry, hermitian)
+            spin_symmetry, hermitian, antihermitian)
 
         # For each equivalent config, compute hash and check only candidates
-        for config in equivalent_configs
+        should_skip_group = false
+        for (config, sign) in equivalent_configs
             h = hash(sort(config))
             if !haskey(hash_to_indices, h)
                 continue
+            end
+
+            # Check self-consistency for antihermitian symmetry
+            # If a config maps to itself with a sign flip (e.g. diagonal term), it must be zero.
+            if sign == -1
+                is_equal, swap_parity = configs_equal_with_parity(X[i], config)
+                if is_equal
+                    should_skip_group = true
+                    break
+                end
             end
 
             # Only check indices with matching hash
@@ -727,71 +751,107 @@ function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=fa
                     push!(group, j)
                     visited[j] = true
                     inverse_map[j] = group_index
-                    parity[j] = swap_parity
+                    parity[j] = swap_parity * sign
                 end
             end
         end
 
-        push!(groups, group)
+        if should_skip_group
+            # If the group is invalid (self-cancelling), we effectively discard it.
+            # We can mark it as visited but set parity to 0 to indicate it should be dropped?
+            # Or just set its inverse_map to 0?
+            inverse_map[i] = 0 # Mark as zeroed
+            parity[i] = 0
+            for jdx in group
+                if jdx != i
+                    inverse_map[jdx] = 0
+                    parity[jdx] = 0
+                end
+            end
+            # Remove the group from the list (or replace with empty/dummy)
+            # Since we appended to groups at the end, we just don't append it.
+            # But we incremented group_index.
+            # Let's clean up group_index usage.
+            # Wait, we incremented inverse_map with group_index.
+            # If we skip, we should handle that.
+            # Actually, reusing group_index logic:
+            # If we don't push(groups, group), indices shift? 
+            # inverse_map stores index into groups.
+            # So if we skip, we don't add to groups.
+            # But we already assigned group_index = length(groups) + 1.
+            # So if we don't push, subsequent groups will have wrong index?
+            # No, if we skip, group_index will be reused for next i.
+            # Wait, `group_index` variable is local.
+            # BUT we assigned `inverse_map[i] = group_index`.
+            # We should revert that.
+        else
+            push!(groups, group)
+        end
     end
+
+    # Clean up inverse_map (optional, but good for safety)
+    # 0 values indicate terms that vanish due to symmetry constraints
 
     return groups, inverse_map, parity
 end
 
 """
-    generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian)
+    generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian, antihermitian)
 
 Generate all configurations related by the specified symmetries.
-Each transformation is applied to the entire configuration (all tuples together).
+Returns a vector of tuples `(config, sign)`, where sign is -1 if generated by anti-hermitian conjugation, 1 otherwise.
 """
-function generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian)
-    configs = [config]
+function generate_symmetric_configs(config, Lx, Ly, trans_x, trans_y, refl_x, refl_y, spin_symmetry, hermitian, antihermitian)
+    configs = [(config, 1)]
 
     # Apply translational symmetries - generate all translations
     if trans_x
-        new_configs = Vector{typeof(config)}()
-        for c in configs
+        new_configs = Vector{eltype(configs)}()
+        for (c, s) in configs
             for dx in 1:(Lx-1)
-                push!(new_configs, translate_x(c, dx, Lx))
+                push!(new_configs, (translate_x(c, dx, Lx), s))
             end
         end
         append!(configs, new_configs)
     end
 
     if trans_y
-        new_configs = Vector{typeof(config)}()
-        for c in configs
+        new_configs = Vector{eltype(configs)}()
+        for (c, s) in configs
             for dy in 1:(Ly-1)
-                push!(new_configs, translate_y(c, dy, Ly))
+                push!(new_configs, (translate_y(c, dy, Ly), s))
             end
         end
         append!(configs, new_configs)
     end
 
-    # Apply reflection symmetries - each reflection doubles the set
+    # Apply reflection symmetries
     if refl_x
-        reflected = [reflect_x(c, Ly) for c in configs]
+        reflected = [(reflect_x(c, Ly), s) for (c, s) in configs]
         append!(configs, reflected)
     end
 
     if refl_y
-        reflected = [reflect_y(c, Lx) for c in configs]
+        reflected = [(reflect_y(c, Lx), s) for (c, s) in configs]
         append!(configs, reflected)
     end
 
-    # Apply spin flip symmetry - doubles the set
+    # Apply spin flip symmetry
     if spin_symmetry
-        spin_flipped = [flip_spin(c) for c in configs]
+        spin_flipped = [(flip_spin(c), s) for (c, s) in configs]
         append!(configs, spin_flipped)
     end
 
-    # Apply hermitian conjugation - doubles the set
+    # Apply hermitian conjugation
     if hermitian
-        conjugated = [hermitian_conjugate(c) for c in configs]
+        conjugated = [(hermitian_conjugate(c), s) for (c, s) in configs]
+        append!(configs, conjugated)
+    elseif antihermitian
+        conjugated = [(hermitian_conjugate(c), -s) for (c, s) in configs]
         append!(configs, conjugated)
     end
 
-    # Remove duplicates using Set for efficiency
+    # Remove duplicates
     return unique(configs)
 end
 

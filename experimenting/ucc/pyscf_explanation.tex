@@ -1,0 +1,206 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath}
+\usepackage{geometry}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{hyperref}
+
+\geometry{a4paper, margin=1in}
+
+\definecolor{codegreen}{rgb}{0,0.6,0}
+\definecolor{codegray}{rgb}{0.5,0.5,0.5}
+\definecolor{codepurple}{rgb}{0.58,0,0.82}
+\definecolor{backcolour}{rgb}{0.95,0.95,0.92}
+
+\lstdefinestyle{mystyle}{
+    backgroundcolor=\color{backcolour},   
+    commentstyle=\color{codegreen},
+    keywordstyle=\color{magenta},
+    numberstyle=\tiny\color{codegray},
+    stringstyle=\color{codepurple},
+    basicstyle=\ttfamily\footnotesize,
+    breakatwhitespace=false,         
+    breaklines=true,                 
+    captionpos=b,                    
+    keepspaces=true,                 
+    numbers=left,                    
+    numbersep=5pt,                  
+    showspaces=false,                
+    showstringspaces=false,
+    showtabs=false,                  
+    tabsize=2
+}
+
+\lstset{style=mystyle}
+
+\title{Explanation of UCCSD Implementation in PySCF}
+\author{Antigravity Agent}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+This document explains the Python script \texttt{pyscf\_testing.py}, which implements the Unitary Coupled Cluster Singles and Doubles (UCCSD) method for a 2D Hubbard model using the PySCF library. We compare the code implementation with the corresponding mathematical physics formulas.
+
+\section{Model Definition (Hubbard Model)}
+The 2D Hubbard Hamiltonian is defined as:
+\begin{equation}
+    \hat{H} = -t \sum_{\langle i,j \rangle, \sigma} (\hat{c}_{i\sigma}^\dagger \hat{c}_{j\sigma} + h.c.) + U \sum_i \hat{n}_{i\uparrow} \hat{n}_{i\downarrow}
+\end{equation}
+where $t$ is the hopping parameter, $U$ is the on-site Coulomb repulsion, and $\langle i,j \rangle$ denotes nearest-neighbor sites.
+
+\subsection{One-Electron Integrals (Hopping)}
+The kinetic energy term (hopping) corresponds to the one-electron integrals $h_{ij}$.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Mathematics} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+h1 = np.zeros((Ns, Ns))
+# ... loop over neighbors ...
+h1[i, j] = h1[j, i] = -t
+\end{lstlisting} 
+    & 
+    $h_{ij} = -t$ if $i, j$ are nearest neighbors, ensuring:
+    \[ \hat{H}_{1e} = \sum_{ij\sigma} h_{ij} \hat{c}_{i\sigma}^\dagger \hat{c}_{j\sigma} \]
+    \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\subsection{Two-Electron Integrals (Interaction)}
+The Hubbard interaction is local, meaning particles only interact when on the same site. PySCF uses the chemist's notation for integrals $(ij|kl) = \iint \phi_i^*(r_1) \phi_j(r_1) \frac{1}{r_{12}} \phi_k^*(r_2) \phi_l(r_2) dr_1 dr_2$.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Mathematics} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+eri = np.zeros((Ns, Ns, Ns, Ns))
+for i in range(Ns):
+    eri[i, i, i, i] = U
+\end{lstlisting} 
+    & 
+    For contact interaction $V(r_1, r_2) = U \delta(r_1 - r_2)$:
+    \[ (ii|ii) = U \]
+    All other $(ij|kl) = 0$.
+    This leads to:
+    \[ \hat{H}_{2e} = \frac{1}{2} \sum_{ijkl\sigma\tau} (ij|kl) \hat{c}_{i\sigma}^\dagger \hat{c}_{k\tau}^\dagger \hat{c}_{l\tau} \hat{c}_{j\sigma} \]
+    which simplifies to $U \sum_i \hat{n}_{i\uparrow} \hat{n}_{i\downarrow}$.
+    \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\section{System Setup in PySCF}
+We use PySCF's `Mole` object but strip it of its standard quantum chemical properties (like nuclear repulsion and overlap) to simulate a lattice model.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Effect} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+mf = scf.UHF(mol)
+mf.get_hcore = lambda *args: h1
+mf.get_ovlp = lambda *args: np.eye(Ns)
+mf._eri = ao2mo.restore(1, eri, Ns)
+\end{lstlisting} 
+    & 
+    \begin{itemize}
+        \item \texttt{get\_hcore}: Replaces core Hamiltonian with hopping matrix $h$.
+        \item \texttt{get\_ovlp}: Sets overlap matrix $S_{ij} = \delta_{ij}$ (orthonormal site basis).
+        \item \texttt{\_eri}: Replaces electron repulsion integrals with Hubbard $U$ terms.
+    \end{itemize}
+    \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+mol.energy_nuc = lambda *args: 0.0
+\end{lstlisting}
+    & Removing the nuclear repulsion energy $E_{nuc}$ ensures the total energy is just the electronic Hubbard energy. \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\section{Unrestricted Hartree-Fock (UHF)}
+We perform a Self-Consistent Field (SCF) calculation to find the mean-field ground state $|\Phi_0\rangle$. We allow spin symmetry breaking (Unrestricted HF) to find a lower energy Antiferromagnetic (AFM) state.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Mathematics} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+dm_alpha[i, i] = 1.0 # even
+dm_beta[i, i] = 1.0  # odd
+mf.kernel(dm0=dm_init)
+\end{lstlisting} 
+    & 
+    Initial Density Guess (Néel State):
+    \[ \langle n_{i\uparrow} \rangle = 1, \langle n_{i\downarrow} \rangle = 0 \quad (i \in A) \]
+    \[ \langle n_{j\uparrow} \rangle = 0, \langle n_{j\downarrow} \rangle = 1 \quad (j \in B) \]
+    This breaks spin symmetry to find generalized HF solutions.
+    \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\section{Coupled Cluster (UCCSD)}
+UCCSD parameterizes the wavefunction as $|\Psi\rangle = e^{\hat{T}} |\Phi_0\rangle$, where $\hat{T} = \hat{T}_1 + \hat{T}_2$.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Mathematics} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+mycc = cc.CCSD(mf)
+mycc.kernel()
+t1 = mycc.t1
+t2 = mycc.t2
+\end{lstlisting} 
+    & 
+    \textbf{Cluster Operator $\hat{T}$}:
+    \[ \hat{T}_1 = \sum_{ia} t_i^a \hat{a}_a^\dagger \hat{a}_i \]
+    \[ \hat{T}_2 = \frac{1}{4} \sum_{ijab} t_{ij}^{ab} \hat{a}_a^\dagger \hat{b}_b^\dagger \hat{a}_j \hat{a}_i \]
+    where $i,j$ are occupied and $a,b$ are virtual orbitals in the reference $|\Phi_0\rangle$.
+    PySCF solves the amplitude equations to find $t$ coefficients.
+    \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\section{Exact Diagonalization (FCI)}
+For benchmarking, we solve the full eigenvalue problem.
+
+\begin{table}[h!]
+    \centering
+    \begin{tabular}{|p{0.45\textwidth}|p{0.45\textwidth}|}
+    \hline
+    \textbf{Code} & \textbf{Mathematics} \\
+    \hline
+\begin{lstlisting}[language=Python, numbers=none]
+fs = fci.FCI(mf)
+fs.kernel()
+\end{lstlisting} 
+    & 
+    Solves the time-independent Schrödinger equation exactly within the discrete basis:
+    \[ \hat{H} |\Psi_{FCI}\rangle = E_{FCI} |\Psi_{FCI}\rangle \]
+    This provides the exact ground state energy for comparison.
+    \\
+    \hline
+    \end{tabular}
+\end{table}
+
+\end{document}

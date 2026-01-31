@@ -13,17 +13,127 @@ v_1, v_2 = ones(Hs_dim), ones(Hs_dim)
 M = [sparse(0.01 * rand(Hs_dim, Hs_dim)) for _ in 1:DIM]
 
 # The objective function.
-objective = (a) -> v_1' * exp(Matrix(sum(i -> a[i] * M[i], 1:DIM))) * v_2
+objective = (a) -> 1 - abs2(v_1' * exp(Matrix(sum(i -> a[i] * M[i], 1:DIM))) * v_2)
 
 # The analytic derivative, truncated to N = 1000.
 # This is a slow implementation prioritizing clarity.
 
-function d_objective(a)
+function d_objective_sparse(a)
     # Type assertions for globals to ensure performance
     local M_typed::Vector{SparseMatrixCSC{Float64,Int}} = M
     local v1_typed::Vector{Float64} = v_1
     local v2_typed::Vector{Float64} = v_2
     local N_typed::Int = N
+    local Hs_dim_typed::Int = Hs_dim
+    local DIM_typed::Int = DIM
+
+    invN = 1.0 / N_typed
+
+    # Forward Pass
+    # Store r[k] = A^(k-1) * v_1
+    # We allocate N+1 slots. r[k] corresponds to A^(k-1) v_1
+    r = Vector{Vector{Float64}}(undef, N_typed + 1)
+
+    # We can pre-allocate the vectors in r to be contiguous in memory?
+    # For now, separate allocations is fine unless N is huge.
+
+    r[1] = v1_typed
+
+    # Pre-allocate buffer for matrix-vector product result
+    # We will reuse this buffer logic or just allocate fresh. 
+    # To be safe and simple: new allocation per step (or copy)
+
+    for k in 1:N_typed
+        # r[k+1] = A * r[k] = r[k] + 1/N * sum(a_j * M_j * r[k])
+        rk = r[k]
+        r_next = copy(rk) # Starts as Identity * rk
+
+        # Add contribution from each M_j
+        for j in 1:DIM_typed
+            m = M_typed[j]
+            aj_invN = a[j] * invN
+
+            rows = rowvals(m)
+            vals = nonzeros(m)
+
+            # M_j * rk
+            # Iterate columns of m
+            for col in 1:size(m, 2)
+                rj = rk[col]
+                # If rj is small, we could skip, but check cost usually > mult cost
+                for idx in nzrange(m, col)
+                    row = rows[idx]
+                    val = vals[idx]
+                    r_next[row] += aj_invN * val * rj
+                end
+            end
+        end
+        r[k+1] = r_next
+    end
+
+    # Backward Pass
+    grads = zeros(Float64, DIM_typed)
+    l = copy(v2_typed)
+    l_next = similar(l)
+
+    for i in N_typed:-1:1
+        r_current = r[i+1]
+
+        # Gradient accumulation
+        # val_j = l' * M_j * r_current
+        for j in 1:DIM_typed
+            m = M_typed[j]
+            rows = rowvals(m)
+            vals = nonzeros(m)
+            val = 0.0
+            for c in 1:size(m, 2)
+                rc = r_current[c]
+                for idx in nzrange(m, c)
+                    val += l[rows[idx]] * vals[idx] * rc
+                end
+            end
+            grads[j] += val
+        end
+
+        # Update l for next step: l = A' * l
+        # l_new = l + 1/N * sum(a_j * M_j' * l)
+        if i > 1
+            copyto!(l_next, l)
+
+            for j in 1:DIM_typed
+                m = M_typed[j]
+                aj_invN = a[j] * invN
+                rows = rowvals(m)
+                vals = nonzeros(m)
+
+                # Compute M_j' * l
+                # (M^T l)_col = sum_row M_row,col * l_row
+                # Since we iterate cols of M (which are rows of M^T),
+                # for a given col, we sum over rows of M.
+
+                for col in 1:size(m, 2)
+                    delta = 0.0
+                    for idx in nzrange(m, col)
+                        row = rows[idx]
+                        val = vals[idx]
+                        delta += val * l[row]
+                    end
+                    l_next[col] += aj_invN * delta
+                end
+            end
+            copyto!(l, l_next)
+        end
+    end
+
+    return grads ./ N_typed
+end
+
+function d_objective_dense(a)
+    # Type assertions for globals to ensure performance
+    local M_typed::Vector{SparseMatrixCSC{Float64,Int}} = M
+    local v1_typed::Vector{Float64} = v_1
+    local v2_typed::Vector{Float64} = v_2
+    local N_typed::Int = N # determines the accuracy of the method
     local Hs_dim_typed::Int = Hs_dim
     local DIM_typed::Int = DIM
 
@@ -115,4 +225,4 @@ finite_difference_check = [
 ] * 1000
 
 
-isapprox(d_objective([1, 1]), finite_difference_check, atol=1e-3)
+isapprox(d_objective_dense([1, 1]), finite_difference_check, atol=1e-3)

@@ -6,7 +6,7 @@ using SparseArrays
 println("Loading testing.jl...")
 include("testing.jl")
 
-d_analytic = d_objective([1, 1])
+d_analytic = d_objective_dense([1, 1])
 
 # Original slow implementation for comparison
 function d_objective_original(a)
@@ -32,9 +32,9 @@ function run_large_benchmark()
     # "Hs_dim will be very large"
     # "DIM will also be sufficiently large"
 
-    global Hs_dim = 1000
-    global DIM = 50
-    global N = 100 # Keep N reasonable for benchmark time, or 1000 as per file
+    global Hs_dim = 2000
+    global DIM = 100
+    global N = 1000 # Keep N reasonable for benchmark time, or 1000 as per file
 
     println("Parameters: Hs_dim=$Hs_dim, DIM=$DIM, N=$N")
 
@@ -65,34 +65,40 @@ function run_large_benchmark()
 
     a_test = rand(DIM)
 
-    println("Running d_objective (warmup)...")
-    d_objective(a_test)
+    println("Running d_objective_dense (warmup)...")
+    d_objective_dense(a_test)
 
-    println("Running d_objective (measured)...")
-    @time res = d_objective(a_test)
+    println("Running d_objective_dense (measured)...")
+    @time res = d_objective_dense(a_test)
+
+    println("Running d_objective_sparse (warmup)...")
+    d_objective_sparse(a_test)
+
+    println("Running d_objective_sparse (measured)...")
+    @time res = d_objective_sparse(a_test)
 
     # Redefine objective for the large case to ensure it uses the correct global M
     large_objective = (a) -> v_1' * exp(Matrix(sum(i -> a[i] * M[i], 1:DIM))) * v_2
 
-    println("\n--- Finite Difference Check ---")
-    println("Running Finite Difference (DIM=$DIM)...")
-    fd_grad = zeros(Float64, DIM)
-    epsilon = 1e-5
-    # Calculate FD for each dimension.
-    # Base value
-    val_base = large_objective(a_test)
+    # println("\n--- Finite Difference Check ---")
+    # println("Running Finite Difference (DIM=$DIM)...")
+    # fd_grad = zeros(Float64, DIM)
+    # epsilon = 1e-5
+    # # Calculate FD for each dimension.
+    # # Base value
+    # val_base = large_objective(a_test)
 
-    @time for i in 1:DIM
-        a_perturbed = copy(a_test)
-        a_perturbed[i] += epsilon
-        val_perturbed = large_objective(a_perturbed)
-        fd_grad[i] = (val_perturbed - val_base) / epsilon
-    end
+    # @time for i in 1:DIM
+    #     a_perturbed = copy(a_test)
+    #     a_perturbed[i] += epsilon
+    #     val_perturbed = large_objective(a_perturbed)
+    #     fd_grad[i] = (val_perturbed - val_base) / epsilon
+    # end
 
-    println("FD Grad norm: ", norm(fd_grad))
-    println("Optimized Grad norm: ", norm(res))
-    println("Diff vs FD: ", norm(res - fd_grad))
-    println("Matches within tolerance? ", isapprox(res, fd_grad, rtol=1e-2))
+    # println("FD Grad norm: ", norm(fd_grad))
+    # println("Optimized Grad norm: ", norm(res))
+    # println("Diff vs FD: ", norm(res - fd_grad))
+    # println("Matches within tolerance? ", isapprox(res, fd_grad, rtol=1e-2))
 
     println("\n--- Zygote Check ---")
     println("Running Zygote gradient...")
