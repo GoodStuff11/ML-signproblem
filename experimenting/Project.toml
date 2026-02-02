@@ -1,6 +1,7 @@
 [deps]
 BenchmarkTools = "6e4b80f9-dd63-53aa-95a3-0cdb28fa8baf"
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
+CurveFit = "5a033b19-8c74-5913-a970-47c3779ef25c"
 ExponentialUtilities = "d4d017d3-3776-5f7e-afef-a10c40355c18"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Glob = "c27321d9-0574-5035-807b-f59d2c89b15c"
