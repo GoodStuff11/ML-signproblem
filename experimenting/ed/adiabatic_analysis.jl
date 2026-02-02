@@ -19,14 +19,14 @@ Returns:
   U :: Unitary matrix (ComplexF64) approximating the time-ordered exponential
 """
 function time_ordered_unitary(T::Matrix{Float64},
-                              V::Matrix{Float64},
-                              t0::Float64, tf::Float64;
-                              tol::Float64 = 1e-9,
-                              max_substeps::Int = 1_000_000,
-                              verbose::Bool = false)
+    V::Matrix{Float64},
+    t0::Float64, tf::Float64;
+    tol::Float64=1e-9,
+    max_substeps::Int=1_000_000,
+    verbose::Bool=false)
 
-    n = size(T,1)
-    U = Matrix{ComplexF64}(I, n, n)
+    n = size(T, 1)
+    U = Matrix{ComplexF64}(LinearAlgebra.I, n, n)
 
     t = t0
     dt = (tf - t0) / 100   # initial guess
@@ -45,20 +45,20 @@ function time_ordered_unitary(T::Matrix{Float64},
         end
 
         # --------- midpoint method (1 step) ----------
-        tmid = t + dt/2
+        tmid = t + dt / 2
         Hmid = T .+ tmid .* V
         U1 = exp(-1im * Hmid * dt)
 
         # --------- midpoint method (2 half steps) ----------
         # First half
-        tmid1 = t + dt/4
+        tmid1 = t + dt / 4
         Hmid1 = T .+ tmid1 .* V
-        U_half1 = exp(-1im * Hmid1 * (dt/2))
+        U_half1 = exp(-1im * Hmid1 * (dt / 2))
 
         # Second half
-        tmid2 = t + 3dt/4
+        tmid2 = t + 3dt / 4
         Hmid2 = T .+ tmid2 .* V
-        U_half2 = exp(-1im * Hmid2 * (dt/2))
+        U_half2 = exp(-1im * Hmid2 * (dt / 2))
 
         U2 = U_half2 * U_half1   # order matters
 
@@ -71,7 +71,7 @@ function time_ordered_unitary(T::Matrix{Float64},
             t += dt
 
             # update dt for next step
-            s = err == 0 ? 2.0 : min(2.0, 0.9 * (tol/err)^(1/3))
+            s = err == 0 ? 2.0 : min(2.0, 0.9 * (tol / err)^(1 / 3))
             dt = min(dt * s, tf - t)
 
             if verbose
@@ -79,7 +79,7 @@ function time_ordered_unitary(T::Matrix{Float64},
             end
         else
             # reject and shrink dt
-            s = max(0.1, 0.9 * (tol/err)^(1/3))
+            s = max(0.1, 0.9 * (tol / err)^(1 / 3))
             dt *= s
 
             if dt < 1e-16

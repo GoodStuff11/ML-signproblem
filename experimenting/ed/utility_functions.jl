@@ -167,7 +167,7 @@ function save_energy_with_metadata(folder::String, dict::Dict)
     end
 
     # File exists → load and compare metadata
-    existing = load(file_path)
+    existing = load_saved_dict(file_path)
 
     if !haskey(existing, "meta_data")
         error("Existing file in folder $folder does not contain meta_data.")
