@@ -1536,7 +1536,7 @@ end
 
 truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)
 
-function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::Vector{<:Real}; safety_factor=1.1)
+function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::Vector{<:Real}; safety_factor=50.0)
     target_eig = all_eigs[target_eig_idx]
 
     # 1. Analyze Spectral Properties
@@ -1557,29 +1557,36 @@ function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::
 
     # Time step dt: Nyquist limit to avoid aliasing the spectrum
     # We add a small buffer (+1e-5) to spectral_width to ensure we are strictly below Nyquist
-    dt = 2 * π / (spectral_width + 1.0)
+    dt = 2 * π / (spectral_width + 1.0) # slightly smaller step
 
-    # Total time T: Required to resolve the smallest energy gap
-    # Uncertainty principle: Time * Energy ~ 2π
+    # Total time T:
+    # To resolve gap ΔE, we need T ~ 1/ΔE. 
+    # With a window, we need more cycles.
     T_required = (2 * π / min_gap) * safety_factor
 
     # Number of steps K
     K = ceil(Int, T_required / dt)
 
     # 3. Perform the Projection Sum
-    # P = (1/K) * sum_{k=0}^{K-1} exp(-i * t_k * target) * exp(i * t_k * H)
+    # P = (1/K) * sum_{k=0}^{K-1} W(t_k) * exp(-i * t_k * target) * exp(i * t_k * H)
 
     v_proj = zero(v)
 
-    # We use a rectangular window here. 
-    # Note: For very crowded spectra, a Gaussian window (tapering coefficients) 
-    # would suppress spectral leakage better, but rectangular is the standard "sum".
-    for k in 1:K-1
+    # Hanning Window to suppress side lobes
+    # W(n) = 0.5 * (1 - cos(2π * n / (N-1)))
+
+    for k in 0:K
         t = k * dt
+
+        # Hanning window 
+        # t goes from 0 to T_required approx
+        # Normalized time tau in [0, 1]
+        tau = k / K
+        window = 0.5 * (1 - cos(2 * π * tau))
 
         # Coefficient: cancel the phase of the target eigenvalue
         # c_k = exp(-i * \lambda_{target} * t)
-        coeff = exp(-im * target_eig * t)
+        coeff = window * exp(-im * target_eig * t)
 
         # Evolution: exp(i * H * t) * v
         v_evolved = expv(im * t, H, v)

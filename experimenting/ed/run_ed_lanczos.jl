@@ -20,20 +20,23 @@ include("ed_optimization.jl")
 include("utility_functions.jl")
 
 
+
+
 function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (4, 3)
-    spin_polarized = false
-    file_name = "data/N=6_4x3"
+    lattice_dimension = (3, 4)
+    spin_polarized = true
+
     if spin_polarized
-        N_up = 2
-        N_down = 2
+        N_up = 6
+        N_down = 6
         N = (N_up, N_down)
     else
         N = 6
     end
+    file_name = "data/N=$(N)_" * join(lattice_dimension, "x")
 
 
     bc = "periodic"
@@ -89,7 +92,7 @@ function (@main)(ARGS)
 
         ops = []
         eig_values = []
-        if subspace.N >= 1
+        if !spin_polarized
             particle_n = subspace.N
             push!(ops, Hermitian(symmetrize(create_operator(subspace, :Sx))))
             push!(eig_values, -particle_n÷2:1:particle_n÷2)
@@ -103,21 +106,82 @@ function (@main)(ARGS)
         println("k=$k")
 
         all_eig_vecs = zeros(ComplexF64, length(U_values), length(representative_indices))
-        # diagonalize
+
+
+        targets = Float64[]
+        should_project = false
+
         for (i, U) in enumerate(U_values)
             new_h = new_hopping + new_interaction * U
-            E, H_vecs = eigsolve(new_h, rand(ComplexF64, size(new_h)[1]), 1, :SR, ishermitian=true)
+            E, H_vecs = eigsolve(new_h, rand(ComplexF64, size(new_h)[1]), 5, :SR, ishermitian=true)
+            # println(E)
 
-            # here we pick the lowest energy state. It's typically in a S^2 eigenstate,
-            # but only when N is odd is it not an Sx eigenstate. Thus we project to Sx.
-            if !spin_polarized
-                H_vec = project_hermitian(ops[1], H_vecs[1], (N + 1) ÷ 2, collect((-N/2):(N/2)))
+            vec_idx = nothing
+            if i == 1
+                vec_idx = 1
+
+                # Check for degeneracy: |E0 - E1| < 1e-10
+                if length(E) >= 2 && abs(E[1] - E[2]) < 1e-10
+                    println("Degeneracy detected at U=$U. Fixing gauge.")
+                    should_project = true
+
+                    # Project to the first allowed eigenvalue for each operator
+                    # and store them as targets
+                    for (op, allowed_vals) in zip(ops, eig_values)
+                        # Target the first allowed value (e.g. min Sz)
+                        target = allowed_vals[1]
+                        push!(targets, target)
+
+                        # Find index of target in allowed_vals
+                        target_idx = findfirst(x -> abs(x - target) < 1e-9, allowed_vals)
+                        if target_idx === nothing
+                            target_idx = 1
+                        end
+
+                        H_vecs[1] = project_hermitian(op, H_vecs[1], target_idx, collect(allowed_vals))
+                        println(H_vecs[1]' * op * H_vecs[1])
+                    end
+                end
             else
-                H_vec = H_vecs[1]
+                # Find vector with highest overlap with previous one
+                prev_vec = all_eig_vecs[i-1, :]
+                for k in eachindex(H_vecs)
+                    if abs(H_vecs[k]' * prev_vec) > 0.9
+                        vec_idx = k
+                        break
+                    end
+                end
+            end
+            if vec_idx === nothing
+                # println(E)
+                # println([real(H_vecs[k]' * op * H_vecs[k]) for k in eachindex(H_vecs) for op in ops])
+                # error("Could not find vector with overlap > 0.9 at U=$U")
+                vec_idx = 1
             end
 
-            push!(all_E[end], E[1])
-            all_eig_vecs[i, :] = H_vec
+            # If we decided to project at i=1, enforce it at subsequent steps too
+            if should_project && i > 1
+                for (j, op) in enumerate(ops)
+                    target = targets[j]
+                    allowed = collect(eig_values[j])
+                    target_idx = findfirst(x -> abs(x - target) < 1e-9, allowed)
+                    if target_idx !== nothing
+                        H_vecs[vec_idx] = project_hermitian(op, H_vecs[vec_idx], target_idx, allowed)
+                        println(H_vecs[vec_idx]' * op * H_vecs[vec_idx])
+                    end
+                end
+            end
+
+            push!(all_E[end], E[vec_idx])
+            all_eig_vecs[i, :] = H_vecs[vec_idx]
+
+            if i >= 2
+                overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
+                if overlap < 0.9
+                    error("error is bad: $overlap")
+                end
+                println("overlap: $U $overlap $(real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])) $vec_idx")
+            end
         end
         push!(all_full_eig_vecs, reconstruct_full_vector(
             all_eig_vecs,
