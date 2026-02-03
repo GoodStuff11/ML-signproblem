@@ -1,7 +1,7 @@
 #!/bin/bash
 #SBATCH -J ED                                   # Job name
-#SBATCH -o unitary_optimization_n4_%j.out       # output file (%j expands to jobID)
-#SBATCH -e unitary_optimization_n4_%j.err       # error log file (%j expands to jobID)
+#SBATCH -o unitary_optimization_4x3_%j.out       # output file (%j expands to jobID)
+#SBATCH -e unitary_optimization_4x3_%j.err       # error log file (%j expands to jobID)
 #SBATCH --mail-type=ALL                      # Request status by email 
 #SBATCH --mail-user=jek354@cornell.edu        # Email address to send results to.
 #SBATCH -N 1                                 # Total number of nodes requested

@@ -24,17 +24,17 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (4, 3)
+    lattice_dimension = (4, 2)
     spin_polarized = false
-    file_name = "data/N=6_4x3"
+
     if spin_polarized
-        N_up = 2
-        N_down = 2
+        N_up = 3
+        N_down = 3
         N = (N_up, N_down)
     else
-        N = 6
+        N = 8
     end
-
+    file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
 
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
