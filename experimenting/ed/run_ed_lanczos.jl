@@ -34,10 +34,9 @@ function (@main)(ARGS)
         N_down = 6
         N = (N_up, N_down)
     else
-        N = 6
+        N = 8
     end
-    file_name = "data/N=$(N)_" * join(lattice_dimension, "x")
-
+    file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
 
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
