@@ -142,6 +142,7 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
 end
 
 function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state1, state2, use_symmetry, antihermitian; p=nothing)
+    t = @elapsed begin
     vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
     mat = sparse(rows, cols, vals, dim, dim)
     if !use_symmetry
@@ -159,7 +160,8 @@ function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping
     else
         loss = 1 - abs2(state2' * expv(1im, mat, state1))
     end
-    println(loss)
+end
+println("time=$t loss=$loss")
     return loss
 end
 
@@ -184,12 +186,12 @@ function zygote_loss(t_vals, rows, cols, signs, param_index_map, parameter_mappi
     loss = 1 - abs2(state2' * new_state)
     # println(state1)
     # println(new_state)
-    println(loss)
+    @Zygote.ignore println("$loss $(sum(mat))")
     return loss
 end
 
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
-    maxiters=10, ϵ=1e-5, max_order=2, spin_conserved::Bool=false, use_symmetry::Bool=false,
+    maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1,2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
     antihermitian::Bool=false
 )
@@ -214,15 +216,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
     end
 
-    for order = 1:max_order
-        magnitude_esimate = loss / 2
-        learning_rate = loss / 10
-        println("magnitude: $magnitude_esimate")
-        println("learning rate: $learning_rate")
-        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=magnitude_esimate, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved)
+    for order ∈ optimization_scheme
+        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=1.0, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=true)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
+
+        magnitude_esimate = loss/length(t_keys)
+        println("magnitude: $magnitude_esimate")
+
 
         ops = []
         if use_symmetry
@@ -313,7 +315,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             # opt = OptimizationOptimisers.Adam(learning_rate)
             # BFGS is faster than LBFGS, which both converge faster than adam
             @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters, callback=callback)
-            s = sol
+            loss = sol.objective
+            metric = sol.original
+            coefficients = sol.u
+        elseif optimization == :finite_differences
+            @time sol = Optim.optimize(f_nongradient, t_vals, Optim.BFGS())
+            coefficients = sol.minimizer
+            loss = sol.minimum
+            metric = sol
+            println("loss=$loss")
         else
             function prob_func(prob, i, repeat)
                 remake(prob, u0=t_vals)
@@ -321,14 +331,13 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
             ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
             @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters, callback=callback)
-            s = sol[argmin([s.objective for s in sol])]
+            sol = sol[argmin([s.objective for s in sol])]
         end
 
-        vals = update_values(signs, param_index_map, sol.u, parameter_mapping, parity)
+        vals = update_values(signs, param_index_map, coefficients, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
-        loss = sol.objective
-        push!(metrics["other"], sol.original)
+        push!(metrics["other"], metric)
         if !use_symmetry
             if antihermitian
                 push!(computed_matrices, make_antihermitian(sparse(rows, cols, vals, dim, dim)))
@@ -340,14 +349,14 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
         println("Finished order $order")
         push!(metrics["loss"], loss)
-        push!(metrics["loss_std"], std(last(tmp_losses, 20)))
-        push!(computed_coefficients, sol.u)
+        # push!(metrics["loss_std"], std(last(tmp_losses, 20)))
+        push!(computed_coefficients, coefficients)
         push!(parameter_mappings, parameter_mapping)
         push!(parities, parity)
         for (k, func) in metric_functions
             push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
         end
-        println("loss std: $(metrics["loss_std"][end])")
+        # println("loss std: $(metrics["loss_std"][end])")
         # if loss < ϵ
         #     break
         # end
@@ -383,7 +392,7 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
             end
             args = optimize_unitary(state1, state2, indexer;
                 spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-                maxiters=maxiters, max_order=get!(instructions, "max_order", 2), optimization=optimization,
+                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1,2]), optimization=optimization,
                 metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false))
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics = args
             push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
@@ -463,22 +472,24 @@ function adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter
 
     # 2. Add offset p if present
     if !isnothing(p) && !(p isa SciMLBase.NullParameters)
-        A = A + p
+        B = A + p
+    else
+        B = A
     end
 
     if antihermitian
         # psi, _ = exponentiate(A, 1.0, v2)
-        psi = expv(1.0, A, v2)
+        psi = expv(1.0, B, v2)
     else
         # psi, _ = exponentiate(A, 1.0im, v2)
-        psi = expv(1.0im, A, v2)
+        psi = expv(1.0im, B, v2)
     end
 
     # 4. Overlap
     # ov = <v1 | psi>
     overlap = dot(v1, psi)
     loss = 1 - abs2(overlap)
-    println(loss)
+    @Zygote.ignore println("$loss $(sum(abs.(A)))")
     return loss
 end
 
@@ -584,7 +595,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
             else
                 dO_dt = val * 1.0im
             end
-            grad_t[i] = -2 * real(conj_overlap_factor * dO_dt)
+            grad_t[i] = -2 * real(conj_overlap_factor * dO_dt) + 1e-10*t_vals[i] # regularization
         end
 
         return NoTangent(), grad_t, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()

@@ -635,7 +635,7 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     return val < 1e-10
 end
 function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer;
-    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false) where T
+    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false) where T
     # function creates a dictionary of free parameters in the form of a dictionary. 
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
@@ -653,6 +653,12 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
             else
                 t_dict[key] += (2 * rand() - 1) / 2 * magnitude
             end
+        end
+    end
+    if normalize_coefficients
+        normalization_coefficient = length(values(t_dict))
+        for key in keys(t_dict)
+            t_dict[key] /= normalization_coefficient
         end
     end
     return t_dict

@@ -9,6 +9,7 @@ from qiskit_nature.second_q.circuit.library import UCCSD, HartreeFock
 from qiskit_nature.second_q.mappers import JordanWignerMapper
 from qiskit.primitives import StatevectorEstimator as Estimator
 import networkx as nx
+import time
 
 # --- Parameters ---
 n_rows = 2
@@ -66,30 +67,13 @@ model = FermiHubbardModel(
     onsite_interaction=u
 )
 
-# Wait, uniform_parameters creates a new lattice/Hamiltonian?
-# Let's check FermiHubbardModel signature.
-# FermiHubbardModel(lattice, onsite_interaction=None)
-# The hopping comes from the lattice weights.
 
-# lattice.uniform_parameters returns a Lattice with weights set?
-# Actually, FermiHubbardModel expects the hopping to be in the lattice weights.
 # uniform_parameters helper sets them.
 lattice_with_params = lattice.uniform_parameters(
     uniform_interaction=u,
     uniform_onsite_potential=0.0,
 )
-# hopping term is -t sum c^dag c. uniform_parameters sets edge weight.
-# We need to ensure hopping is t.
-# But uniform_parameters usually sets interaction U? No, interaction is separate in FermiHubbardModel init.
-# uniform_parameters sets "uniform_interaction" (which is U?) in the lattice? 
-# Qiskit Nature documentation is confusing here. 
-# Lattice.uniform_parameters(uniform_interaction, uniform_onsite_potential)
-# usually sets the attributes on the graph.
-# But FermiHubbardModel takes onsite_interaction as global param?
 
-# Let's try explicit construction:
-# Pass lattice and onsite_interaction.
-# And ensure lattice edges have weight -t (hopping).
 for u_node, v, d in graph.edges(data=True):
     # Hopping usually -t
     d['weight'] = -t 
@@ -104,12 +88,7 @@ model = FermiHubbardModel(
     lattice,
     onsite_interaction=u
 )
-# Re-checking documentation logic:
-# uniform_parameters sets edge weights to -t and self-loops to epsilon.
-# But we defined weights as 1.0 in networkx.
-# For Hubbard, hopping term is -t sum c^dag c.
-# So we should set weights to t (or -t?).
-# Converting graph weights:
+
 for u_node, v, d in graph.edges(data=True):
     d['weight'] = t # Hopping parameter t
 
@@ -144,16 +123,29 @@ print(f"Number of Parameters: {ansatz.num_parameters}")
 # --- Solver ---
 algorithm_globals.random_seed = 42
 estimator = Estimator()
-# optimizer = SLSQP(maxiter=100)
-optimizer = COBYLA(maxiter=50)
+from qiskit_algorithms.optimizers import COBYLA, SLSQP, SPSA
+
+# ...
+
+# --- Solver ---
+algorithm_globals.random_seed = 42
+estimator = Estimator()
+# COBYLA / SLSQP are slow for high param count without fast gradients (adjoint)
+# SPSA is much faster per step (2 evaluations) though requires more steps.
+optimizer = SPSA(maxiter=50) # Reduced for demonstration speed
+# SPSA is stochastic, so 50 might not converge fully but will show speedup.
 
 initial_point = np.zeros(ansatz.num_parameters) # Start from HF
 
-print("Running VQE...")
+# Skip transpilation as requested
+print("Running VQE with SPSA...")
+t = time.time()
 vqe = VQE(estimator, ansatz, optimizer, initial_point=initial_point)
 result = vqe.compute_minimum_eigenvalue(qubit_op)
-
+print(f"Time: {time.time() - t:.2f} seconds")
 print(f"VQE Result Energy: {result.eigenvalue.real:.8f}")
+
+
 
 # --- Verification (Exact Diagonalization) ---
 from qiskit_algorithms import NumPyMinimumEigensolver
@@ -161,4 +153,4 @@ from qiskit_algorithms import NumPyMinimumEigensolver
 exact_solver = NumPyMinimumEigensolver()
 exact_result = exact_solver.compute_minimum_eigenvalue(qubit_op)
 print(f"Exact Energy:      {exact_result.eigenvalue.real:.8f}")
-print(f"Error:             {result.eigenvalue.real - exact_result.eigenvalue.real:.8f}")
+# print(f"Error:             {result.eigenvalue.real - exact_result.eigenvalue.real:.8f}")
