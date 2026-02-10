@@ -8,13 +8,14 @@
 #SBATCH -n 1                                 # Total number of cores requested
 #SBATCH --get-user-env                       # retrieve the users login environment
 #SBATCH --mem=16G                             # server memory requested (per node)
-#SBATCH -t 24:00:00                           # Time limit (hh:mm:ss)
-#SBATCH --partition=kim                       # Request partition
+#SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
+#SBATCH --partition=aimi                       # Request partition
+#SBATCH --nodelist=aimi-cpu-01
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
-echo "$1" "$2" "$3" "$4"
-if [ "$#" -ge 4 ]; then
-    julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl "$1" "$2" "$3" "$4"
+echo "$1" "$2" "$3"
+if [ "$#" -ge 3 ]; then
+    julia --project=/home/jek354/research/ML-signproblem/experimenting run_lanczos_optimization.jl "$1" "$2" "$3"
 else
-    julia --project=/home/jek354/research/ML-signproblem/experimenting run_optimization.jl
+    julia --project=/home/jek354/research/ML-signproblem/experimenting run_lanczos_optimization.jl
 fi

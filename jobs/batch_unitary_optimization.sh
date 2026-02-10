@@ -1,8 +1,7 @@
 #!/bin/bash
-for level1 in 8 46 58; do
-    for level2 in 8 46 58; do # 
-        for ((i=9; i<=12; i++)); do
-            sbatch ./unitary_optimization.sub "$level1" "$level2" "$(( i * 5 - 4 ))" "$(( i * 5 ))"
-        done
-    done
+
+for ((i=1; i<=9; i++)); do
+    sbatch ./unitary_optimization.sh true "$(( i * 5 - 4 ))" "$(( i * 5 ))"
+    sbatch ./unitary_optimization.sh false "$(( i * 5 - 4 ))" "$(( i * 5 ))"
 done
+

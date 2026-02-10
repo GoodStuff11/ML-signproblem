@@ -23,8 +23,7 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    folder = "data/N=6_2x3"
-
+    folder = "/home/jek354/research/data/N=(3, 3)_3x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -80,7 +79,7 @@ function (@main)(ARGS)
         )
 
         println("Running Optimization from U=$(U_values[instructions["starting state"]["U index"]]) to U=$(U_values[instructions["ending state"]["U index"]])")
-
+        duration = @elapsed begin
         data_dict = test_map_to_state(
             target_vecs,
             instructions,
@@ -89,10 +88,14 @@ function (@main)(ARGS)
             maxiters=meta_data["maxiters"],
             optimization=:adjoint_gradient
         )
+        end
+
         dic["optimization_results"] = data_dict
         dic["symmetry_sector"] = k_min
+        dic["use_symmetry"] = use_symmetry
+        dic["optimization_time"] = duration
 
-        save_dictionary(folder, "unitary_map_energy_N=$N", data_dict)
+        save_dictionary(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$N", data_dict)
     end
 
     return 0
