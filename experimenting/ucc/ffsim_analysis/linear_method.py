@@ -1,0 +1,207 @@
+
+from __future__ import annotations
+
+import math
+from typing import Any, Callable
+
+import numpy as np
+from pyscf.lib.linalg_helper import safe_eigh
+from scipy.optimize import OptimizeResult, minimize
+from scipy.sparse.linalg import LinearOperator
+
+from ffsim.optimize._util import (
+    WrappedCallable,
+    WrappedLinearOperator,
+    jacobian_finite_diff,
+    orthogonalize_columns,
+)
+from ffsim.optimize.linear_method import _linear_method_matrices, _get_param_update
+
+def minimize_linear_method(
+    params_to_vec: Callable[[np.ndarray], np.ndarray],
+    hamiltonian: LinearOperator,
+    x0: np.ndarray,
+    jacobian_func: Callable[[np.ndarray, np.ndarray], np.ndarray] | None = None,
+    *,
+    maxiter: int = 1000,
+    lindep: float = 1e-8,
+    epsilon: float = 1e-8,
+    ftol: float = 1e-8,
+    gtol: float = 1e-5,
+    regularization: float = 1e-4,
+    variation: float = 0.5,
+    optimize_regularization: bool = True,
+    optimize_variation: bool = True,
+    optimize_kwargs: dict | None = None,
+    callback: Callable[[OptimizeResult], Any] | None = None,
+) -> OptimizeResult:
+    """Minimize the energy of a variational ansatz using the linear method.
+    
+    Modified to accept a custom `jacobian_func`.
+    """
+    if regularization < 0:
+        raise ValueError(f"regularization must be nonnegative. Got {regularization}.")
+    if not 0 <= variation <= 1:
+        raise ValueError(f"variation must be between 0 and 1. Got {variation}.")
+    if maxiter < 1:
+        raise ValueError(f"maxiter must be at least 1. Got {maxiter}.")
+
+    if optimize_kwargs is None:
+        optimize_kwargs = dict(method="L-BFGS-B")
+
+    params = x0.copy()
+    success = False
+    message = "Stop: Total number of iterations reached limit."
+    intermediate_result = OptimizeResult(
+        x=None, fun=None, jac=None, nfev=0, njev=0, nit=0, nlinop=0
+    )
+
+    params_to_vec = WrappedCallable(params_to_vec, intermediate_result)
+    hamiltonian = WrappedLinearOperator(hamiltonian, intermediate_result)
+
+    for i in range(maxiter):
+        vec = params_to_vec(params)
+        
+        if jacobian_func is not None:
+            # Use custom Jacobian function: J = jacobian_func(params, vec)
+            # The custom function should return the tangent vectors |dPsi/dTheta_i>
+            # (which are approx Generator_i |Psi>)
+            jac = jacobian_func(params, vec)
+        else:
+            jac = jacobian_finite_diff(params_to_vec, params, len(vec), epsilon=epsilon)
+            
+        jac = orthogonalize_columns(jac, vec)
+
+        energy_mat, overlap_mat = _linear_method_matrices(vec, jac, hamiltonian)
+        energy = energy_mat[0, 0]
+        grad = 2 * energy_mat[0, 1:]
+
+        previous_energy = intermediate_result.fun
+        intermediate_result.njev += 1
+
+        if i > 0 and callback is not None:
+            intermediate_result.x = params
+            intermediate_result.fun = energy
+            intermediate_result.jac = grad
+            intermediate_result.energy_mat = energy_mat
+            intermediate_result.overlap_mat = overlap_mat
+            intermediate_result.regularization = regularization
+            intermediate_result.variation = variation
+            callback(intermediate_result)
+
+        if (
+            previous_energy is not None
+            and abs(previous_energy - energy)
+            / max(abs(previous_energy), abs(energy), 1)
+            <= ftol
+        ):
+            success = True
+            message = "Convergence: Relative reduction of objective function <= ftol."
+            break
+        if np.max(np.abs(grad)) <= gtol:
+            success = True
+            message = "Convergence: Norm of gradient <= gtol."
+            break
+
+        if optimize_regularization and optimize_variation:
+            def f(x: np.ndarray) -> float:
+                regularization_param, variation_param = x
+                regularization = regularization_param**2
+                variation = 0.5 * (1 + math.tanh(variation_param))
+                param_update = _get_param_update(
+                    energy_mat,
+                    overlap_mat,
+                    regularization,
+                    variation,
+                    lindep,
+                )
+                vec = params_to_vec(params + param_update)
+                return np.vdot(vec, hamiltonian @ vec).real
+
+            regularization_param = math.sqrt(regularization)
+            variation_param = math.atanh(2 * min(1 - 1e-8, max(1e-8, variation)) - 1)
+            result = minimize(
+                f,
+                x0=[regularization_param, variation_param],
+                **optimize_kwargs,
+            )
+            regularization_param, variation_param = result.x
+            regularization = regularization_param**2
+            variation = 0.5 * (1 + math.tanh(variation_param))
+
+        elif optimize_regularization:
+            def f(x: np.ndarray) -> float:
+                (regularization_param,) = x
+                regularization = regularization_param**2
+                param_update = _get_param_update(
+                    energy_mat,
+                    overlap_mat,
+                    regularization,
+                    variation,
+                    lindep,
+                )
+                vec = params_to_vec(params + param_update)
+                return np.vdot(vec, hamiltonian @ vec).real
+
+            regularization_param = math.sqrt(regularization)
+            result = minimize(
+                f,
+                x0=[regularization_param],
+                **optimize_kwargs,
+            )
+            (regularization_param,) = result.x
+            regularization = regularization_param**2
+
+        elif optimize_variation:
+            def f(x: np.ndarray) -> float:
+                (variation_param,) = x
+                variation = 0.5 * (1 + math.tanh(variation_param))
+                param_update = _get_param_update(
+                    energy_mat,
+                    overlap_mat,
+                    regularization,
+                    variation,
+                    lindep,
+                )
+                vec = params_to_vec(params + param_update)
+                return np.vdot(vec, hamiltonian @ vec).real
+
+            variation_param = math.atanh(2 * min(1 - 1e-8, max(1e-8, variation)) - 1)
+            result = minimize(
+                f,
+                x0=[variation_param],
+                **optimize_kwargs,
+            )
+            (variation_param,) = result.x
+            variation = 0.5 * (1 + math.tanh(variation_param))
+
+        param_update = _get_param_update(
+            energy_mat,
+            overlap_mat,
+            regularization,
+            variation,
+            lindep,
+        )
+        params = params + param_update
+        intermediate_result.nit += 1
+
+    vec = params_to_vec(params)
+    energy = np.vdot(vec, hamiltonian @ vec).real
+
+    intermediate_result.x = params
+    intermediate_result.fun = energy
+    del intermediate_result.jac
+    if callback is not None:
+        callback(intermediate_result)
+
+    return OptimizeResult(
+        x=params,
+        success=success,
+        message=message,
+        fun=energy,
+        jac=grad,
+        nfev=intermediate_result.nfev,
+        njev=intermediate_result.njev,
+        nlinop=intermediate_result.nlinop,
+        nit=intermediate_result.nit,
+    )

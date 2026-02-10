@@ -67,30 +67,13 @@ model = FermiHubbardModel(
     onsite_interaction=u
 )
 
-# Wait, uniform_parameters creates a new lattice/Hamiltonian?
-# Let's check FermiHubbardModel signature.
-# FermiHubbardModel(lattice, onsite_interaction=None)
-# The hopping comes from the lattice weights.
 
-# lattice.uniform_parameters returns a Lattice with weights set?
-# Actually, FermiHubbardModel expects the hopping to be in the lattice weights.
 # uniform_parameters helper sets them.
 lattice_with_params = lattice.uniform_parameters(
     uniform_interaction=u,
     uniform_onsite_potential=0.0,
 )
-# hopping term is -t sum c^dag c. uniform_parameters sets edge weight.
-# We need to ensure hopping is t.
-# But uniform_parameters usually sets interaction U? No, interaction is separate in FermiHubbardModel init.
-# uniform_parameters sets "uniform_interaction" (which is U?) in the lattice? 
-# Qiskit Nature documentation is confusing here. 
-# Lattice.uniform_parameters(uniform_interaction, uniform_onsite_potential)
-# usually sets the attributes on the graph.
-# But FermiHubbardModel takes onsite_interaction as global param?
 
-# Let's try explicit construction:
-# Pass lattice and onsite_interaction.
-# And ensure lattice edges have weight -t (hopping).
 for u_node, v, d in graph.edges(data=True):
     # Hopping usually -t
     d['weight'] = -t 
@@ -105,12 +88,7 @@ model = FermiHubbardModel(
     lattice,
     onsite_interaction=u
 )
-# Re-checking documentation logic:
-# uniform_parameters sets edge weights to -t and self-loops to epsilon.
-# But we defined weights as 1.0 in networkx.
-# For Hubbard, hopping term is -t sum c^dag c.
-# So we should set weights to t (or -t?).
-# Converting graph weights:
+
 for u_node, v, d in graph.edges(data=True):
     d['weight'] = t # Hopping parameter t
 
@@ -159,27 +137,15 @@ optimizer = SPSA(maxiter=50) # Reduced for demonstration speed
 
 initial_point = np.zeros(ansatz.num_parameters) # Start from HF
 
-# Optimize Ansatz Circuit (Transpile once)
-# This avoids re-transpilation overhead if VQE handles it poorly, 
-# though VQE usually handles unbound circuits well.
-# Checking depth for user info.
-from qiskit import transpile
-# Basic transpile to unroll to u3, cx
-# Force decomposition to basis gates to avoid EvolvedOp matrix exponentiation
-ansatz_transpiled = transpile(ansatz, basis_gates=['u', 'cx'], optimization_level=3)
-print(f"Ansatz Depth (Transpiled): {ansatz_transpiled.depth()}")
-print(f"Ansatz Ops: {ansatz_transpiled.count_ops()}")
-
+# Skip transpilation as requested
 print("Running VQE with SPSA...")
 t = time.time()
-# VQE is too slow with StatevectorEstimator for 11k depth circuit on this machine
-# without qiskit-aer.
-# vqe = VQE(estimator, ansatz_transpiled, optimizer, initial_point=initial_point)
-# result = vqe.compute_minimum_eigenvalue(qubit_op)
-# print(f"Time: {time.time() - t:.2f} seconds")
-# print(f"VQE Result Energy: {result.eigenvalue.real:.8f}")
+vqe = VQE(estimator, ansatz, optimizer, initial_point=initial_point)
+result = vqe.compute_minimum_eigenvalue(qubit_op)
+print(f"Time: {time.time() - t:.2f} seconds")
+print(f"VQE Result Energy: {result.eigenvalue.real:.8f}")
 
-print("VQE Skipped due to performance (requires qiskit-aer). Running Exact Solver...")
+
 
 # --- Verification (Exact Diagonalization) ---
 from qiskit_algorithms import NumPyMinimumEigensolver

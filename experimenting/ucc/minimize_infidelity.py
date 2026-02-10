@@ -33,18 +33,6 @@ def get_sector_indices(n_qubits, n_electrons=None, n_up=None, n_down=None):
     """
     indices = []
     for i in range(2**n_qubits):
-        # Convert to binary string, padding with zeros
-        # Note: PennyLane basis |00..01> corresponds to q_{N-1} = 1.
-        # But in binary '1' is the LSB.
-        # We need to be careful with bit-to-qubit mapping.
-        # Usually, integer i corresponds to state |b0 b1 ... bN-1> where b is binary representation.
-        # Let's assume standard integer-to-bitstring mapping.
-        # format(i, '012b') gives '00...00' for 0.
-        
-        # Check PennyLane convention:
-        # qml.expval(qml.PauliZ(0)) on |10..0> gives -1.
-        # |10..0> corresponds to index 2**(N-1).
-        # So qubit 0 corresponds to the MSB.
         
         s = f"{i:0{n_qubits}b}"
         
@@ -166,10 +154,50 @@ print("-" * 20)
 # Use shots=None for exact expectation values
 dev = qml.device("lightning.qubit", wires=n_qubits, shots=None)
 
-# Excitations
-singles, doubles = qml.qchem.excitations(n_electrons, n_qubits)
-s_wires, d_wires = qml.qchem.excitations_to_wires(singles, doubles)
-n_coeffs = len(singles) + len(doubles)
+# Generalized Excitations
+def generate_generalized_excitations(n_qubits):
+    """
+    Generates all unique generalized single and double excitations 
+    that conserve spin z projection (sz), assuming interleaved spin ordering
+    (even=up, odd=down).
+    """
+    s_wires = []
+    d_wires = []
+    
+    for p in range(n_qubits):
+        for q in range(p + 1, n_qubits):
+            # Spin conservation: parity must match
+            if (p % 2) == (q % 2):
+                s_wires.append([p, q])
+
+    # 1. Generate all unique pairs (i, j) with i < j
+    pairs = []
+    for i in range(n_qubits):
+        for j in range(i + 1, n_qubits):
+            pairs.append((i, j))
+    
+    for i in range(len(pairs)):
+        for j in range(i + 1, len(pairs)):
+            # pair_to = (s, r) = pairs[j] (indices are larger usually? Doesn't matter)
+            # pair_from = (q, p) = pairs[i]
+            
+            p, q = pairs[i] # p < q
+            r, s = pairs[j] # r < s
+            
+            # Disjoint check
+            if len({p, q, r, s}) != 4:
+                continue
+                
+            # Spin conservation
+            # (p%2 + q%2) must equal (r%2 + s%2)
+            if (p % 2 + q % 2) == (r % 2 + s % 2):
+                d_wires.append([[r, s], [p, q]])
+
+    return s_wires, d_wires
+
+s_wires, d_wires = generate_generalized_excitations(n_qubits)
+print(f"Generalized Excitations: {len(s_wires)} singles, {len(d_wires)} doubles")
+n_coeffs = len(s_wires) + len(d_wires)
 
 # Construct the Observable P = |v1><v1|
 # This allows us to compute Overlap^2 = <psi| P |psi>

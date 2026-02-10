@@ -1,7 +1,57 @@
 
 import pennylane as qml
 from pennylane import numpy as np
+from scipy.sparse import linalg as sla
 import time
+
+def generate_generalized_excitations(n_qubits):
+    """
+    Generates all unique generalized single and double excitations 
+    that conserve spin z projection (sz), assuming interleaved spin ordering
+    (even=up, odd=down).
+    """
+    s_wires = []
+    d_wires = []
+
+    # Singles: p -> q (a dagger_p a_q)
+    # Unique pairs (p, q). Since a^dag_p a_q - a^dag_q a_p is anti-Hermitian,
+    # (p, q) and (q, p) give same parameter space (just sign flip).
+    # Enforce p < q.
+    for p in range(n_qubits):
+        for q in range(p + 1, n_qubits):
+            # Spin conservation: parity must match
+            if (p % 2) == (q % 2):
+                s_wires.append([p, q])
+
+    # Doubles: p, q -> r, s (a^dag_r a^dag_s a_q a_p)
+    # Convention: wires_from = [q, p], wires_to = [s, r]
+    
+    # 1. Generate all unique pairs (i, j) with i < j
+    pairs = []
+    for i in range(n_qubits):
+        for j in range(i + 1, n_qubits):
+            pairs.append((i, j))
+            
+    # 2. Iterate all combinations of two pairs: pair1=(p, q), pair2=(r, s)
+    # Enforce pair1 < pair2 to avoid double counting (Hermitian conjugate).
+    
+    for i in range(len(pairs)):
+        for j in range(i + 1, len(pairs)):
+            p, q = pairs[i] # p < q
+            r, s = pairs[j] # r < s
+            
+            # Disjoint check
+            if len({p, q, r, s}) != 4:
+                continue
+                
+            # Spin conservation
+            # (p%2 + q%2) must equal (r%2 + s%2)
+            if (p % 2 + q % 2) == (r % 2 + s % 2):
+                # Add to lists.
+                # Structure as [[r, s], [p, q]] (matches qml.FermionicDoubleExcitation expected inputs)
+                d_wires.append([[r, s], [p, q]])
+
+    return s_wires, d_wires
 
 def main():
     # --- Hubbard Model Parameters ---
@@ -48,17 +98,7 @@ def main():
     ham_fermi = 0
     for c, op in zip(coeffs, ops):
         ham_fermi += c * op
-    
-    # Map to Qubit Hamiltonian using Jordan-Wigner
-    print("Mapping Hamiltonian to qubits...")
-    ham_qubit_mo = qml.jordan_wigner(ham_fermi)
-    # The Hamiltonian construction above is in SITE basis.
-    # But below we switch to MO basis construction for the circuit expval?
-    # Wait, the previous script had explicit MO basis construction.
-    # I should preserve that. The code above constructs SITE Hamiltonian. 
-    # But later I defined `coeffs_mo` and `ham_qubit_mo`.
-    # Let me reconstruct the MO basis logic which is CRITICAL for UCCSD.
-    
+        
     # --- MO Basis Transformation ---
     # 1. Construct 1-body matrix
     mat_1h = np.zeros((n_sites, n_sites))
@@ -116,13 +156,15 @@ def main():
     hf_state = np.array([1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0]) 
     hf_list = [int(x) for x in hf_state]
     
-    # Generate Excitations for UCCSD
-    singles, doubles = qml.qchem.excitations(electrons, qubits)
-    print(f"Number of singles: {len(singles)}")
-    print(f"Number of doubles: {len(doubles)}")
+    # Generate Generalized Excitations for UCCSD
+    # singles, doubles = qml.qchem.excitations(electrons, qubits)
+    singles, doubles_formatted = generate_generalized_excitations(qubits)
     
-    # Reshape doubles for UCCSD
-    doubles_formatted = [ [d[:2], d[2:]] for d in doubles ]
+    print(f"Number of generalized singles: {len(singles)}")
+    print(f"Number of generalized doubles: {len(doubles_formatted)}")
+    
+    # Doubles are already formatted by our function as [[r,s], [p,q]]
+    # doubles_formatted = [ [d[:2], d[2:]] for d in doubles ]
     
     # Manual UCCSD decomposition to bypass potential decoration issues
     def manual_uccsd(weights, wires, s_wires, d_wires, init_state):
@@ -153,15 +195,15 @@ def main():
         return qml.math.real(circuit(weights))
 
     # --- 3. Optimization ---
-    print("Starting optimization with GradientDescentOptimizer...")
-    opt = qml.GradientDescentOptimizer(stepsize=0.1) 
+    print("Starting optimization with AdamOptimizer...")
+    opt = qml.AdamOptimizer(stepsize=0.05) 
     
-    n_params = len(singles) + len(doubles)
+    n_params = len(singles) + len(doubles_formatted)
     params = np.zeros(n_params, requires_grad=True)
     
     print(f"Initial Energy: {cost_fn(params):.6f}")
     
-    max_steps = 50
+    max_steps = 300
     history = []
     
     t0 = time.time()
@@ -173,7 +215,7 @@ def main():
             print(f"Step {i}: Energy = {prev_energy:.6f}")
             
         # Basic covergence check
-        if i > 5 and abs(history[-1] - history[-2]) < 1e-4:
+        if i > 5 and abs(history[-1] - history[-2]) < 1e-10:
             print("Converged.")
             break
             
@@ -183,7 +225,14 @@ def main():
     print(f"Optimization time: {t1-t0:.2f}s")
     
     # Reference Value
-    exact_energy = -3.789823
+    # Reference Value (Computed Exact Diagonalization)
+    print("Computing exact ground state energy via sparse diagonalization...")
+    H_sparse = ham_qubit_mo_final.sparse_matrix()
+    # k=1 for ground state, which='SA' for Smallest Algebraic
+    evals, _ = sla.eigsh(H_sparse, k=1, which='SA')
+    exact_energy = evals[0]
+    
+    print(f"Exact Energy: {exact_energy:.6f}")
     print(f"Difference from Exact: {abs(final_energy - exact_energy):.6f}")
 
 if __name__ == "__main__":

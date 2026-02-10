@@ -26,17 +26,18 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (3, 4)
+    lattice_dimension = (4, 2)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 6
-        N_down = 6
+        N_up = 4
+        N_down = 4
         N = (N_up, N_down)
     else
-        N = 8
+        N = 6
     end
-    file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
+    # file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
+    file_name = "/Users/jonathonkambulow/Library/CloudStorage/Dropbox/programming/cornell courses/research/experimenting/ed/data/N=$(N)_" * join(lattice_dimension, "x")
 
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
