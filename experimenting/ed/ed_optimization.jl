@@ -1,3 +1,4 @@
+include("optimization_helpers.jl")
 
 """
 Apply exp(α M) * v efficiently.
@@ -143,25 +144,25 @@ end
 
 function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state1, state2, use_symmetry, antihermitian; p=nothing)
     t = @elapsed begin
-    vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
-    mat = sparse(rows, cols, vals, dim, dim)
-    if !use_symmetry
+        vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+        mat = sparse(rows, cols, vals, dim, dim)
+        if !use_symmetry
+            if antihermitian
+                mat = make_antihermitian(mat)
+            else
+                mat = make_hermitian(mat)
+            end
+        end
+        if p isa AbstractMatrix
+            mat += p
+        end
         if antihermitian
-            mat = make_antihermitian(mat)
+            loss = 1 - abs2(state2' * expv(1.0, mat, state1))
         else
-            mat = make_hermitian(mat)
+            loss = 1 - abs2(state2' * expv(1im, mat, state1))
         end
     end
-    if p isa AbstractMatrix
-        mat += p
-    end
-    if antihermitian
-        loss = 1 - abs2(state2' * expv(1.0, mat, state1))
-    else
-        loss = 1 - abs2(state2' * expv(1im, mat, state1))
-    end
-end
-println("time=$t loss=$loss")
+    println("time=$t loss=$loss")
     return loss
 end
 
@@ -186,14 +187,134 @@ function zygote_loss(t_vals, rows, cols, signs, param_index_map, parameter_mappi
     loss = 1 - abs2(state2' * new_state)
     # println(state1)
     # println(new_state)
-    @Zygote.ignore println("$loss $(sum(mat))")
+    Zygote.@ignore println("$loss $(sum(mat))")
     return loss
 end
 
+
+# -----------------------------------------------------------------------------
+# Riemannian Optimization Helpers
+# -----------------------------------------------------------------------------
+
+
+"""
+    project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, v1, v2, overlap)
+
+Computes the projection of the Euclidean gradient E corresponding to Loss = 1 - |<v2|U|v1>|^2 onto the tangent space at U spanned by {U * A_k}.
+The gradient E is rank-1: E = - conj(overlap) * v2 * v1'.
+The unconstrained tangent direction is Xi = U' * E = - conj(overlap) * (U' v2) * v1'.
+Let w2 = U' v2. Then Xi = - conj(overlap) * w2 * v1'.
+We project Xi onto the basis {A_k} (skew-Hermitian generators).
+c_k = <A_k, Xi> / <A_k, A_k> = Re(tr(A_k' Xi)) / norm(A_k)^2.
+tr(A_k' Xi) = - conj(overlap) * tr(A_k' w2 v1') = - conj(overlap) * (v1' A_k' w2).
+This involves only sparse matrix-vector products and dot products.
+Complexity: O(N_ops * nnz(A_k)) per step, vs O(dim^3) for dense.
+"""
+function project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, v1, v2, overlap)
+
+    t1 = @elapsed begin
+        # 1. Compute w2 = U' * v2
+        # Since U is unitary, U' = inv(U). If U is stored as matrix.
+        w2 = U' * v2
+
+        conj_overlap = conj(overlap)
+        # Factor for projection: - conj(overlap)
+        factor = -conj_overlap
+
+        n_ops = length(ops)
+        coeffs = zeros(Float64, n_ops)
+    end
+    # Re-use buffer for A_k' * w2?
+    # Actually A_k is sparse. 
+    # If antihermitian=false (Hermitian M_k, A_k = i M_k), A_k' = -i M_k = -A_k.
+    # If antihermitian=true (AntiHermitian M_k, A_k = M_k), A_k' = -M_k = -A_k.
+    # So A_k' = -A_k always for generators of Unitary group?
+    # Yes, elements of u(N) are skew-Hermitian.
+
+    # Compute v1' * A_k' * w2
+    # = - (v1' * A_k * w2)
+    # = - (w2' * A_k' * v1)' = - (w2' * (-A_k) * v1)' ...
+    # Just compute z = A_k * w2 (sparse mv), then dot(v1, z).
+
+    # Pre-allocate if possible, but Ops are different sparse matrices.
+    # We can perform the dot product without allocating full vector z if we iterate non-zeros.
+
+    t2 = @elapsed begin
+        for k in 1:n_ops
+            op = ops[k]
+            # Calculate term = v1' * A_k' * w2
+            # If !antihermitian: A_k = i * op. A_k' = -i * op.
+            # term = v1' * (-i op) * w2 = -i * (v1' * op * w2).
+            # We need val = v1' * op * w2.
+
+            # Sparse dot: sum_{r,c} v1[r]^* op[r,c] w2[c]
+            val = 0.0 + 0.0im
+            rows_op = rowvals(op)
+            vals_op = nonzeros(op)
+            for col in 1:size(op, 2)
+                # w2_c = w2[col]
+                # Optimization: check if w2[col] is zero? Unlikely for dense vector.
+                w2_c = w2[col]
+                for idx in nzrange(op, col)
+                    row = rows_op[idx]
+                    v = vals_op[idx]
+                    # term: v1[row]' * v * w2[col]
+                    val += conj(v1[row]) * v * w2_c
+                end
+            end
+
+            if !antihermitian
+                # A_k = i op.
+                # tr(A_k' Xi) = factor * (-i * val)
+                # c_k = Re( factor * -i * val ) / norm_sq
+                scalar_term = factor * (-1im * val)
+            else
+                # A_k = op. A_k' = -op (if op is skew).
+                # Wait, if 'op' passed is the generator itself (antihermitian=true means op is skew).
+                # Then A_k' = op' = -op.
+                # term = v1' * (-op) * w2 = -val.
+                scalar_term = factor * (-val)
+            end
+
+            norm_sq = dim # approximate
+            coeffs[k] = real(scalar_term) / norm_sq
+        end
+    end
+
+    t3 = @elapsed begin
+        # Reconstruct Xi_proj
+        vals = update_values(signs, param_index_map, coeffs, parameter_mapping, parity)
+        Xi_new = sparse(rows, cols, vals, dim, dim)
+
+        if !use_symmetry
+            if antihermitian
+                Xi_new = make_antihermitian(Xi_new)
+            else
+                Xi_new = make_hermitian(Xi_new)
+                Xi_new = 1im * Xi_new
+            end
+        else
+            if !antihermitian
+                Xi_new = 1im * Xi_new
+            end
+        end
+    end
+
+    t4 = @elapsed begin
+        # G = U * Xi_new
+        mul!(G, U, Xi_new)
+    end
+    # if rand() < 0.05
+    println("Profiling project_to_tangent_rank1!: Prep=$(round(t1, digits=6)) Loop=$(round(t2, digits=6)) Recon=$(round(t3, digits=6)) Mul=$(round(t4, digits=6)) Total=$(round(t1+t2+t3+t4, digits=6))")
+    # end
+    return G
+end
+
+
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
-    maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1,2], spin_conserved::Bool=false, use_symmetry::Bool=false,
-    optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
-    antihermitian::Bool=false
+    maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1, 2], spin_conserved::Bool=false, use_symmetry::Bool=false,
+    gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
+    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=1e-2,
 )
     # spin_conserved is only true when using (N↑, N↓) and not N
     computed_matrices = []
@@ -202,7 +323,6 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     parities = []
     coefficient_labels = []
     dim = length(indexer.inv_comb_dict)
-
     metrics = Dict{String,Vector{Any}}()
     loss = 1 - abs2(state1' * state2)
     metrics["loss"] = Float64[loss]
@@ -211,6 +331,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     for k in keys(metric_functions)
         metrics[k] = Any[]
     end
+
+    println("Initial loss: $loss")
+    println("Dimension: $dim")
     if loss < 1e-8
         println("States are already equal")
         return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
@@ -222,9 +345,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
 
-        magnitude_esimate = loss/length(t_keys)
+        magnitude_esimate = loss / length(t_keys)
         println("magnitude: $magnitude_esimate")
-
 
         ops = []
         if use_symmetry
@@ -259,6 +381,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
         push!(coefficient_labels, t_keys)
 
+        println("Parameter count: $(length(t_vals))")
         # for exp(sum_i t_i A_i), find A_i
         # if !isnothing(parameter_mapping)
         #     trotter_matrices = []
@@ -270,10 +393,27 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         tmp_losses = []
         function callback(state, loss_val)
             # state.gradient
+            # push!(loss_tracker, loss_val)
             N = 20
+
+            grad_msg = if isnothing(state.grad)
+                "gradient=N/A relative-change=N/A curvature=N/A"
+            else
+                "gradient=$(sum(abs, state.grad)) relative-change=$(sum(state.grad ./ state.u)) curvature=$(sum(state.grad .* state.u))"
+            end
+
+            # println("loss=$loss_val state=$(sum(abs, state.u)/length(state.u)) $grad_msg")
+            println("loss=$loss_val state=$(norm(state.u)) $grad_msg")
+            # if optimizer == :riemann
+            #     unitarity_err = norm(state.u' * state.u - I)
+            #     println("loss=$loss_val unitarity_err=$unitarity_err")
+            # else
+            #     println("loss=$loss_val")
+            # end
+
             push!(tmp_losses, loss_val)
             if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
-                println("std: $(std(tmp_losses[end-N:end]))")
+                # println("std: $(std(tmp_losses[end-N:end]))")
                 return true
             end
             return false
@@ -295,44 +435,80 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state2, state1, p, !use_symmetry, antihermitian)
         end
 
-        if optimization == :gradient
+        if gradient == :gradient
             optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
-        elseif optimization == :manualgradient
+        elseif gradient == :manualgradient
             optf = Optimization.OptimizationFunction(f_nongradient, grad=fg!)
-        elseif optimization == :adjoint_gradient
+        elseif gradient == :adjoint_gradient
             optf = Optimization.OptimizationFunction(f_adjoint, Optimization.AutoZygote())
         else
             optf = Optimization.OptimizationFunction(f_nongradient)
         end
 
-        if length(computed_matrices) > 0
-            prob = Optimization.OptimizationProblem(optf, t_vals, sum(computed_matrices))
-        else
-            prob = Optimization.OptimizationProblem(optf, t_vals)
-        end
 
-        if optimization == :gradient || optimization == :manualgradient || optimization == :adjoint_gradient
-            # opt = OptimizationOptimisers.Adam(learning_rate)
-            # BFGS is faster than LBFGS, which both converge faster than adam
-            @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters)
-            loss = sol.objective
-            metric = sol.original
-            coefficients = sol.u
-        elseif optimization == :finite_differences
-            @time sol = Optim.optimize(f_nongradient, t_vals, Optim.BFGS())
-            coefficients = sol.minimizer
-            loss = sol.minimum
-            metric = sol
-            println("loss=$loss")
-        else
-            function prob_func(prob, i, repeat)
-                remake(prob, u0=t_vals)
+        optimizers = optimizer isa Vector ? optimizer : [optimizer]
+
+        sol = nothing
+        for optimizer_sym in optimizers
+            # 1. Setup Phase
+            if length(optimizers) > 1
+                t_vals = t_vals + perturb_optimization * (2 * rand(length(t_vals)) .- 1)
+            end
+            if optimizer_sym == :riemann
+                # --- Riemannian Setup ---
+                U0 = params_to_unitary(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, computed_matrices, dim, antihermitian, use_symmetry)
+                manifold = UnitaryMatrices(dim)
+
+                function cost_riemann(U, p)
+                    return 1 - abs2(dot(state2, U * state1))
+                end
+                function grad_riemann(G, U, p)
+                    overlap = dot(state2, U * state1)
+                    project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, state1, state2, overlap)
+                    return G
+                end
+
+                current_optf = OptimizationFunction(cost_riemann, grad=grad_riemann)
+                prob = OptimizationProblem(current_optf, U0, manifold=manifold)
+                opt_algo = OptimizationManopt.GradientDescentOptimizer()
+
+            else
+                # --- Euclidean Setup ---
+                p_args = length(computed_matrices) > 0 ? sum(computed_matrices) : nothing
+
+                # Create Problem using global optf (defined outside loop)
+                prob = OptimizationProblem(optf, t_vals, p_args)
+
+                # Determine Algorithm
+                if optimizer_sym == :LBFGS
+                    opt_algo = Optim.LBFGS()
+                elseif optimizer_sym == :BFGS
+                    opt_algo = OptimizationOptimJL.BFGS()
+                elseif optimizer_sym == :GradientDescent
+                    opt_algo = OptimizationOptimJL.GradientDescent()
+                else
+                    opt_algo = OptimizationOptimJL.LBFGS()
+                end
             end
 
-            ensembleproblem = Optimization.EnsembleProblem(prob; prob_func)
-            @time sol = Optimization.solve(ensembleproblem, OptimizationOptimJL.ParticleSwarm(), EnsembleThreads(), trajectories=Threads.nthreads(), maxiters=maxiters, callback=callback)
-            sol = sol[argmin([s.objective for s in sol])]
+            # 2. Execution Phase: Single Solve Call
+            println("Solving with $optimizer_sym...")
+            @time sol = Optimization.solve(prob, opt_algo, maxiters=maxiters, callback=callback)
+
+            # 3. Post-Process Phase
+            if optimizer_sym == :riemann
+                t_vals = unitary_to_params(sol.u, ops, dim, antihermitian)
+            else
+                t_vals = sol.u
+            end
         end
+
+        # After loop, final coefficients are in t_vals
+        coefficients = t_vals
+
+        loss = f_nongradient(t_vals, length(computed_matrices) > 0 ? sum(computed_matrices) : nothing)
+        metric = sol # approx?
+
 
         vals = update_values(signs, param_index_map, coefficients, parameter_mapping, parity)
 
@@ -361,13 +537,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         #     break
         # end
     end
+    # display(plot(loss_tracker, yscale=:log10))
+    # println("hey")
     return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
 end
 
 
 function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
-    maxiters=100, optimization=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}()
+    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=LBFGS
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
@@ -392,8 +570,8 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
             end
             args = optimize_unitary(state1, state2, indexer;
                 spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1,2]), optimization=optimization,
-                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false))
+                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
+                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer)
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics = args
             push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"], [norm(cm, 2) for cm in computed_matrices])
@@ -422,7 +600,6 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
             end
         end
     end
-
 
     return data_dict
 end
@@ -489,7 +666,7 @@ function adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter
     # ov = <v1 | psi>
     overlap = dot(v1, psi)
     loss = 1 - abs2(overlap)
-    @Zygote.ignore println("$loss $(sum(abs.(A)))")
+    # Zygote.@ignore println("loss=$loss coeff-mag=$(sum(abs.(t_vals)))")
     return loss
 end
 
@@ -595,7 +772,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
             else
                 dO_dt = val * 1.0im
             end
-            grad_t[i] = -2 * real(conj_overlap_factor * dO_dt) + 1e-10*t_vals[i] # regularization
+            grad_t[i] = -2 * real(conj_overlap_factor * dO_dt) + 1e-3 * t_vals[i] # regularization
         end
 
         return NoTangent(), grad_t, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
