@@ -30,8 +30,8 @@ function (@main)(ARGS)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 4
-        N_down = 4
+        N_up = 3
+        N_down = 3
         N = (N_up, N_down)
     else
         N = 6
@@ -76,6 +76,7 @@ function (@main)(ARGS)
     all_full_eig_vecs = []
     all_E = []
 
+    
 
     for (k, eig_indices) in enumerate(all_eig_indices)
         push!(all_E, [])
@@ -142,6 +143,8 @@ function (@main)(ARGS)
                         println(H_vecs[1]' * op * H_vecs[1])
                     end
                 end
+
+                println("overlap: $U $(real(H_vecs[1]' * ops[1]* real(H_vecs[1])))")
             else
                 # Find vector with highest overlap with previous one
                 prev_vec = all_eig_vecs[i-1, :]
@@ -177,8 +180,13 @@ function (@main)(ARGS)
 
             if i >= 2
                 overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
-                if overlap < 0.9
-                    error("error is bad: $overlap")
+                if overlap < 0.8
+                    println(E)
+                    eig_value = real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])
+                    if !isapprox(eig_value,round(eig_value), atol=1e-9)
+                        println("overlap: $U $overlap $(eig_value) $vec_idx")
+                        error("error is bad: $overlap")
+                    end
                 end
                 println("overlap: $U $overlap $(real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])) $vec_idx")
             end

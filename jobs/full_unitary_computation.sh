@@ -9,7 +9,8 @@
 #SBATCH --get-user-env                       # retrieve the users login environment
 #SBATCH --mem=50G                             # server memory requested (per node)
 #SBATCH -t 72:00:00                           # Time limit (hh:mm:ss)
-#SBATCH --partition=kim                       # Request partition
+#SBATCH --partition=aimi                       # Request partition
+#SBATCH --nodelist=aimi-cpu-01
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
 julia --project=/home/jek354/research/ML-signproblem run_full_unitary_analysis.jl
