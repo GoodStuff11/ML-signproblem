@@ -23,7 +23,7 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    folder = "/home/jek354/research/data/N=(3, 3)_3x2"
+    folder = "/home/jek354/research/data/N=(4, 4)_4x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -85,7 +85,7 @@ function (@main)(ARGS)
             instructions,
             indexer,
             spin_conserved;
-            maxiters=meta_data["maxiters"],
+            maxiters=500,#meta_data["maxiters"],
             optimization=:adjoint_gradient
         )
         end
