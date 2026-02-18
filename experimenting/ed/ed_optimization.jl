@@ -314,7 +314,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         if optimization == :gradient || optimization == :manualgradient || optimization == :adjoint_gradient
             # opt = OptimizationOptimisers.Adam(learning_rate)
             # BFGS is faster than LBFGS, which both converge faster than adam
-            @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters, callback=callback)
+            @time sol = Optimization.solve(prob, Optim.BFGS(), maxiters=maxiters)
             loss = sol.objective
             metric = sol.original
             coefficients = sol.u
