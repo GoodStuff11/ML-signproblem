@@ -400,14 +400,37 @@ function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
 end
 function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing)
     # This is for i!=j
-    # c+_{i,up}c_{i,down}c+_{j,down}c_{j,up}
+    # We want 0.5 * (S_i^+ S_j^- + S_i^- S_j^+)
+    # This swaps spins: i_up j_down -> i_down j_up   OR   i_down j_up -> i_up j_down
+    sorted_sites = sort(indexer.a)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        for σ ∈ [1, 2]
+        for σ ∈ [1, 2] # σ is the spin starting at site_index1
             for site_index1 ∈ setdiff(conf[σ], conf[3-σ])
                 for site_index2 ∈ setdiff(conf[3-σ], conf[σ])
                     if !ismissing(NN) && !(site_index2 in neighbors(NN, site_index1))
                         continue
                     end
+
+                    # We are moving a spin σ from site1 to site2 (becoming 3-σ? No)
+                    # No, we are SWAPPING.
+                    # site1 starts with σ, ends with 3-σ.
+                    # site2 starts with 3-σ, ends with σ.
+
+                    # Operator: 
+                    # Annihilate (site1, σ)
+                    # Create (site1, 3-σ)
+                    # Annihilate (site2, 3-σ)
+                    # Create (site2, σ)
+
+                    ops = [
+                        (site_index2, σ, :create),
+                        (site_index2, 3 - σ, :annihilate),
+                        (site_index1, 3 - σ, :create),
+                        (site_index1, σ, :annihilate)
+                    ]
+
+                    sign = compute_jw_sign(conf, sorted_sites, ops)
+
                     if σ == 1
                         i2 = index(indexer, replace(conf[1], site_index1 => site_index2), replace(conf[2], site_index2 => site_index1))
                     else
@@ -415,7 +438,7 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
                     end
                     push!(rows, i1)
                     push!(cols, i2)
-                    push!(vals, magnitude / 2)
+                    push!(vals, (magnitude / 2) * sign)
                 end
             end
         end
@@ -475,12 +498,12 @@ function build_n_body_structure(
     indexer::CombinationIndexer;
     skip_lower_triangular::Bool=false
 ) where {T,U<:Number}
-    build_n_body_structure(collect(keys(t)), indexer, U; skip_lower_triangular)
+    build_n_body_structure_from_keys(collect(keys(t)), indexer, U; skip_lower_triangular)
 end
 
-function build_n_body_structure(
-    t_keys::Vector{Vector{Tuple{T,Int,Symbol}}},
-    indexer::CombinationIndexer,
+function build_n_body_structure_from_keys(
+    t_keys::AbstractVector,
+    indexer::CombinationIndexer{T},
     ::Type{U}=Float64;
     skip_lower_triangular::Bool=false
 ) where {T,U<:Number}
@@ -1109,9 +1132,59 @@ function create_chemical_potential!(rows::Vector{Int}, cols::Vector{Int}, vals::
     end
 end
 function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
+    sorted_sites = sort(indexer.a)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         i2 = index(indexer, conf[2], conf[1])
-        sign = electron_parity(collect(conf[1]), collect(conf[2]), collect(conf[2]), collect(conf[1]))
+
+        ops = Tuple{eltype(sorted_sites),Int,Symbol}[]
+        for site in sorted_sites
+            in_up = site in conf[1]
+            in_down = site in conf[2]
+            if in_up && in_down
+                # Doublon: swap u and d. c^dag_u c^dag_d c_d c_u
+                # Or simply: destroy u, destroy d, create d, create u
+                # But we want to map u->d, d->u.
+                # Actually, parity operator P = prod (c^dag_d c_u + c^dag_u c_d + ...)
+                # On doublon: (c^dag_d c_u)(c^dag_u c_d) is zero? No.
+                # P = (c^dag_d c_u + c^dag_u c_d) c^dag_u c^dag_d |0>
+                # = c^dag_d c_u c^dag_u c^dag_d |0> (second term is 0)
+                # = c^dag_d (1 - c^dag_u c_u) c^dag_d |0>
+                # = c^dag_d c^dag_d |0> = 0.
+                # WAIT. Parity operator KILLs doublons?
+                # Pauli x: |0> -> 0, |1> -> |0>, |0> -> |1>, |1> -> 0 ? NO.
+                # Pauli x is for spin 1/2.
+                # |up> -> |down>. |down> -> |up>.
+                # This operator is defined on SINGLE spin.
+                # If we have doublons, we have TWO spins?
+                # Hubbard model site with 2 electrons is a precise state.
+                # Usually we define P = prod_j (c^dag_j,down c_j,up + c^dag_j,up c_j,down + (c^dag_d c^dag_u c_u c_d)?).
+                # User code said: `new_conf1 = conf[2]`, `new_conf2 = conf[1]`.
+                # This SWAPS populations.
+                # |ud> -> |ud>.
+                # This preserves doublons.
+                # So the operator is NOT prod sigma_x (which kills doublons).
+                # It is the "SWAP SPINS" operator.
+                # Physical meaning: map spin up to spin down everywhere.
+                # For doublons: u->d, d->u. Result is d, u. Still doublon.
+                # Sign?
+                # We simply destroy u, destroy d, create u, create d?
+                # Yes.
+                push!(ops, (site, 1, :annihilate))
+                push!(ops, (site, 2, :annihilate))
+                push!(ops, (site, 2, :create))
+                push!(ops, (site, 1, :create))
+            elseif in_up
+                # u -> d
+                push!(ops, (site, 1, :annihilate))
+                push!(ops, (site, 2, :create))
+            elseif in_down
+                # d -> u
+                push!(ops, (site, 2, :annihilate))
+                push!(ops, (site, 1, :create))
+            end
+        end
+
+        sign = compute_jw_sign(conf, sorted_sites, ops)
         push!(rows, i1)
         push!(cols, i2)
         push!(vals, magnitude * sign)
@@ -1122,6 +1195,29 @@ function create_Sz!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
         push!(rows, i)
         push!(cols, i)
         push!(vals, magnitude * (length(conf[1]) - length(conf[2])))
+    end
+end
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
+    sorted_sites = sort(indexer.a)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        for σ ∈ [1, 2]
+            for site_index ∈ setdiff(conf[σ], conf[3-σ])
+                # Flip σ to 3-σ
+                # Annihilate σ, Create 3-σ
+                ops = [(site_index, σ, :annihilate), (site_index, 3 - σ, :create)]
+                sign = compute_jw_sign(conf, sorted_sites, ops)
+
+                if σ == 1
+                    i2 = index(indexer, setdiff(conf[1], [site_index]), union(conf[2], [site_index]))
+                else
+                    i2 = index(indexer, union(conf[1], [site_index]), setdiff(conf[2], [site_index]))
+                end
+
+                push!(rows, i1)
+                push!(cols, i2)
+                push!(vals, magnitude / 2 * sign)
+            end
+        end
     end
 end
 function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, mapping::Dict, indexer::CombinationIndexer)
@@ -1543,6 +1639,9 @@ end
 truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)
 
 function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::Vector{<:Real}; safety_factor=50.0)
+    if norm(v) < 1e-9
+        return v
+    end
     target_eig = all_eigs[target_eig_idx]
 
     # 1. Analyze Spectral Properties
@@ -1576,30 +1675,58 @@ function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::
     # 3. Perform the Projection Sum
     # P = (1/K) * sum_{k=0}^{K-1} W(t_k) * exp(-i * t_k * target) * exp(i * t_k * H)
 
-    v_proj = zero(v)
+    v_proj = zeros(ComplexF64, size(v))
 
     # Hanning Window to suppress side lobes
     # W(n) = 0.5 * (1 - cos(2π * n / (N-1)))
 
-    for k in 0:K
-        t = k * dt
 
-        # Hanning window 
-        # t goes from 0 to T_required approx
+    # Current evolved vector v(t) initialized at t=0 -> v
+    v_evolved = copy(v)
+
+    # Pre-compute exp(i * H * dt) operator if possible? 
+    # No, H is likely sparse. calculating exp(iHdt) dense is memory intensive if N is large.
+    # We will use expv iteratively. 
+    # However, repeatedly calling expv might be slow due to overhead.
+    # But it's O(K) instead of O(K^2).
+
+    # First term for k=0 (t=0)
+    # window(0) = 0? No, window(tau) = 0.5*(1-cos(2pi*tau))
+    # tau=0 -> cos(0)=1 -> window=0.
+    # So k=0 term is zero. 
+    # Actually check loop: k=0 to K.
+    # k=0 -> t=0 -> tau=0 -> window=0. coeff=0.
+    # So we can skip k=0 Update?
+    # But we need v_evolved for k=1.
+
+    for k in 0:K
+        # t = k * dt
         # Normalized time tau in [0, 1]
         tau = k / K
+
+        # Hanning window (0 at endpoints)
         window = 0.5 * (1 - cos(2 * π * tau))
 
-        # Coefficient: cancel the phase of the target eigenvalue
-        # c_k = exp(-i * \lambda_{target} * t)
-        coeff = window * exp(-im * target_eig * t)
+        if abs(window) > 1e-10
+            # Coefficient: cancel the phase of the target eigenvalue
+            # c_k = exp(-i * \lambda_{target} * t)
+            # t = k * dt
+            phase_factor = exp(-im * target_eig * k * dt)
+            coeff = window * phase_factor
 
-        # Evolution: exp(i * H * t) * v
-        v_evolved = expv(im * t, H, v)
+            v_proj .+= coeff .* v_evolved
+        end
 
-        v_proj .+= coeff .* v_evolved
+        # Evolve for next step: v(t+dt) = exp(i*H*dt) * v(t)
+        # We do this for all k < K. For k=K we don't need next step.
+        if k < K
+            v_evolved = expv(im * dt, H, v_evolved)
+        end
     end
 
+    if norm(v_proj) < 1e-9
+        return v_proj
+    end
     return normalize(v_proj)
 end
 
