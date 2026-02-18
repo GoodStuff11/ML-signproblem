@@ -103,7 +103,8 @@ function (@main)(ARGS)
     min_E = Inf
     k_min = 1
     for (k, E_vec) in enumerate(all_E)
-        if !isempty(E_vec)           E_ground = E_vec[1]
+        if !isempty(E_vec)
+            E_ground = E_vec[1]
             if E_ground < min_E
                 min_E = E_ground
                 k_min = k
@@ -111,7 +112,7 @@ function (@main)(ARGS)
         end
     end
     u_start_idx = 1
-    u_end_idx = length(U_values) ÷2
+    u_end_idx = length(U_values) ÷ 2
 
     target_vecs = all_full_eig_vecs[k_min]
 
@@ -163,9 +164,9 @@ function (@main)(ARGS)
     # --- 1D Cut Visualization ---
     args = optimize_unitary(state1, state2, indexer;
         spin_conserved=spin_conserved, use_symmetry=use_symmetry,
-        maxiters=300, optimization_scheme=[1, 2], optimization=:adjoint_gradient,
+        maxiters=300, optimization_scheme=[1, 2], gradient=:adjoint_gradient,
         antihermitian=use_antihermitian)
-    # computed_matrices, _, coefficient_values, _, _, metrics = args
+    # computed_matrices, coefficient_labels, coefficient_values, parameter_mappings, parities, metrics, operator_cache = args
 
     # println("Generating Hessian eigenvectors for directions...")
 

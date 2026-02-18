@@ -314,14 +314,27 @@ end
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
     maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1, 2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
-    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=1e-2,
+    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=2.0,
+    operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}()
 )
     # spin_conserved is only true when using (N↑, N↓) and not N
-    computed_matrices = []
-    computed_coefficients = []
-    parameter_mappings = []
-    parities = []
-    coefficient_labels = []
+    max_order_scheme = isempty(optimization_scheme) ? 0 : maximum(optimization_scheme)
+    max_order_cache = isempty(operator_cache) ? 0 : maximum(keys(operator_cache))
+    max_order = max(max_order_scheme, max_order_cache)
+
+    # Initialize return vectors with nothing
+    computed_matrices = Vector{Any}(nothing, max_order)
+    computed_coefficients = Vector{Any}(nothing, max_order)
+    parameter_mappings = Vector{Any}(nothing, max_order)
+    parities = Vector{Any}(nothing, max_order)
+    coefficient_labels = Vector{Any}(nothing, max_order)
+
+    # helper for p_args (sum of all OTHER matrices)
+    function get_p_args(current_order)
+        mats = [m for (i, m) in enumerate(computed_matrices) if i != current_order && !isnothing(m)]
+        return isempty(mats) ? nothing : sum(mats)
+    end
+
     dim = length(indexer.inv_comb_dict)
     metrics = Dict{String,Vector{Any}}()
     loss = 1 - abs2(state1' * state2)
@@ -334,21 +347,24 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
     println("Initial loss: $loss")
     println("Dimension: $dim")
-    if loss < 1e-8
+    if loss < 1e-15
         println("States are already equal")
-        return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
+        return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics, operator_cache
     end
 
-    for order ∈ optimization_scheme
-        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=1.0, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=true)
+    # Define a function to ensure operator structure is computed and cached
+    function ensure_operator_structure!(order)
+        if haskey(operator_cache, order)
+            return operator_cache[order]
+        end
+        # compute operator structure, initial coefficients and operators
+        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=true)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
 
-        magnitude_esimate = loss / length(t_keys)
-        println("magnitude: $magnitude_esimate")
-
         ops = []
+        sym_data = nothing
         if use_symmetry
             inv_param_map, parameter_mapping, parity = find_symmetry_groups(t_keys, maximum(indexer.a).coordinates...,
                 hermitian=!antihermitian, antihermitian=antihermitian, trans_x=true, trans_y=true, spin_symmetry=true)
@@ -363,8 +379,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 _vals = update_values(_signs, _param_index_map, collect(values(tmp_t_dict)))
                 push!(ops, sparse(_rows, _cols, _vals, dim, dim))
             end
-            t_vals = rand(typeof(signs[1]), length(inv_param_map)) * magnitude_esimate
-
+            sym_data = (inv_param_map, parameter_mapping, parity)
         else
             for k in collect(keys(t_dict))
                 _rows, _cols, _signs, _ = build_n_body_structure(Dict(k => 1.0), indexer)
@@ -374,12 +389,85 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                     push!(ops, make_hermitian(sparse(_rows, _cols, _signs, dim, dim)))
                 end
             end
-            t_vals = collect(values(t_dict))
-            inv_param_map = nothing
             parameter_mapping = nothing
             parity = nothing
         end
-        push!(coefficient_labels, t_keys)
+
+        cache_entry = Dict(
+            :t_dict => t_dict,
+            :rows => rows,
+            :cols => cols,
+            :signs => signs,
+            :ops_list => ops_list,
+            :t_keys => t_keys,
+            :param_index_map => param_index_map,
+            :sym_data => sym_data,
+            :ops => ops,
+            :parameter_mapping => parameter_mapping,
+            :parity => parity,
+            :coefficients => nothing # Initialize as nothing
+        )
+        operator_cache[order] = cache_entry
+        return cache_entry
+    end
+
+    # 1. Pre-population: realize matrices for any coefficients provided in the cache
+    for (order_idx, struct_data) in operator_cache
+        coeffs = get(struct_data, :coefficients, nothing)
+        if !isnothing(coeffs)
+            # Assign labels and mappings
+            coefficient_labels[order_idx] = struct_data[:t_keys]
+            parameter_mappings[order_idx] = struct_data[:parameter_mapping]
+            parities[order_idx] = struct_data[:parity]
+            computed_coefficients[order_idx] = coeffs
+
+            # Compute the matrix
+            vals = update_values(struct_data[:signs], struct_data[:param_index_map], coeffs, struct_data[:parameter_mapping], struct_data[:parity])
+            if !use_symmetry
+                if antihermitian
+                    computed_matrices[order_idx] = make_antihermitian(sparse(struct_data[:rows], struct_data[:cols], vals, dim, dim))
+                else
+                    computed_matrices[order_idx] = make_hermitian(sparse(struct_data[:rows], struct_data[:cols], vals, dim, dim))
+                end
+            else
+                computed_matrices[order_idx] = sparse(struct_data[:rows], struct_data[:cols], vals, dim, dim)
+            end
+        end
+    end
+
+    # 2. Main Optimization Scheme Loop
+    for order ∈ optimization_scheme
+        struct_data = ensure_operator_structure!(order)
+
+        # Extract variables for convenience from struct_data
+        t_dict = struct_data[:t_dict]
+        rows = struct_data[:rows]
+        cols = struct_data[:cols]
+        signs = struct_data[:signs]
+        ops_list = struct_data[:ops_list]
+        t_keys = struct_data[:t_keys]
+        param_index_map = struct_data[:param_index_map]
+        sym_data = struct_data[:sym_data]
+        ops = struct_data[:ops]
+        parameter_mapping = struct_data[:parameter_mapping]
+        parity = struct_data[:parity]
+        existing_coeffs = struct_data[:coefficients]
+
+        coefficient_labels[order] = t_keys
+
+        # Determine Initial Coefficients (t_vals) for this optimization order
+        magnitude_esimate = loss / length(t_keys)
+
+        if !isnothing(existing_coeffs)
+            t_vals = existing_coeffs
+        else
+            if use_symmetry
+                # sym_data is (inv_param_map, ...)
+                t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
+            else
+                t_vals = real(collect(values(t_dict)))
+            end
+        end
 
         println("Parameter count: $(length(t_vals))")
         # for exp(sum_i t_i A_i), find A_i
@@ -451,12 +539,25 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         sol = nothing
         for optimizer_sym in optimizers
             # 1. Setup Phase
-            if length(optimizers) > 1
-                t_vals = t_vals + perturb_optimization * (2 * rand(length(t_vals)) .- 1)
+            if length(optimizers) > 1 && perturb_optimization > 1e-9
+                t_vals = t_vals + perturb_optimization * mean(abs.(t_vals)) * (2 * rand(length(t_vals)) .- 1)
             end
             if optimizer_sym == :riemann
                 # --- Riemannian Setup ---
-                U0 = params_to_unitary(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, computed_matrices, dim, antihermitian, use_symmetry)
+                p_args = get_p_args(order)
+                if !isnothing(p_args)
+                    # If we have background matrices, we need to fold them into the starting point?
+                    # params_to_unitary handles computed_matrices.
+                    # But here we only pass 'computed_matrices' which includes 'order' if it was computed?
+                    # No, get_p_args excludes 'order'.
+                    # Actually params_to_unitary just sums them.
+                    # Let's constructing a temp list for params_to_unitary.
+                    temp_mats = [m for (i, m) in enumerate(computed_matrices) if i != order && !isnothing(m)]
+                else
+                    temp_mats = []
+                end
+
+                U0 = params_to_unitary(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, temp_mats, dim, antihermitian, use_symmetry)
                 manifold = UnitaryMatrices(dim)
 
                 function cost_riemann(U, p)
@@ -474,7 +575,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
             else
                 # --- Euclidean Setup ---
-                p_args = length(computed_matrices) > 0 ? sum(computed_matrices) : nothing
+                p_args = get_p_args(order)
 
                 # Create Problem using global optf (defined outside loop)
                 prob = OptimizationProblem(optf, t_vals, p_args)
@@ -506,7 +607,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         # After loop, final coefficients are in t_vals
         coefficients = t_vals
 
-        loss = f_nongradient(t_vals, length(computed_matrices) > 0 ? sum(computed_matrices) : nothing)
+        loss = f_nongradient(t_vals, get_p_args(order))
         metric = sol # approx?
 
 
@@ -514,38 +615,43 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
         push!(metrics["other"], metric)
+
+        # Construct and Store Matrix
         if !use_symmetry
             if antihermitian
-                push!(computed_matrices, make_antihermitian(sparse(rows, cols, vals, dim, dim)))
+                computed_matrices[order] = make_antihermitian(sparse(rows, cols, vals, dim, dim))
             else
-                push!(computed_matrices, make_hermitian(sparse(rows, cols, vals, dim, dim)))
+                computed_matrices[order] = make_hermitian(sparse(rows, cols, vals, dim, dim))
             end
         else
-            push!(computed_matrices, sparse(rows, cols, vals, dim, dim))
+            computed_matrices[order] = sparse(rows, cols, vals, dim, dim)
         end
+
         println("Finished order $order")
         push!(metrics["loss"], loss)
         # push!(metrics["loss_std"], std(last(tmp_losses, 20)))
-        push!(computed_coefficients, coefficients)
-        push!(parameter_mappings, parameter_mapping)
-        push!(parities, parity)
+        computed_coefficients[order] = coefficients
+        parameter_mappings[order] = parameter_mapping
+        parities[order] = parity
+        # Store back into cache
+        operator_cache[order][:coefficients] = coefficients
+
+        # Metrics using all computed matrices
+        # Need to clean list for metrics?
+        clean_matrices = [m for m in computed_matrices if !isnothing(m)]
         for (k, func) in metric_functions
-            push!(metrics[k], func(state1, state2, computed_matrices, tmp_losses))
+            push!(metrics[k], func(state1, state2, clean_matrices, tmp_losses))
         end
-        # println("loss std: $(metrics["loss_std"][end])")
-        # if loss < ϵ
-        #     break
-        # end
     end
     # display(plot(loss_tracker, yscale=:log10))
     # println("hey")
-    return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics
+    return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics, operator_cache
 end
 
 
 function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
-    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=LBFGS
+    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
@@ -572,9 +678,9 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
                 spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
                 maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
                 metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer)
-            computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics = args
-            push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
-            push!(data_dict["norm2_metrics"], [norm(cm, 2) for cm in computed_matrices])
+            computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, _ = args
+            push!(data_dict["norm1_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices])
+            push!(data_dict["norm2_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices])
             push!(data_dict["all_matrices"], computed_matrices)
             push!(data_dict["coefficients"], coefficient_values)
             if isnothing(data_dict["coefficient_labels"])
@@ -599,6 +705,102 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
                 return data_dict
             end
         end
+    end
+
+    return data_dict
+end
+
+function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
+    spin_conserved::Bool=false;
+    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
+    save_folder::Union{String,Nothing}=nothing, save_name::String="scan_data"
+)
+    # instructions["u_range"] should be a range of indices, e.g., 1:10
+    # instructions["starting state"] should define the fixed reference state (state1)
+
+    data_dict = Dict{String,Any}("norm1_metrics" => [], "norm2_metrics" => [],
+        "loss_metrics" => [], "labels" => [], "loss_std_metrics" => [], "all_matrices" => [],
+        "coefficients" => [], "coefficient_labels" => nothing, "param_mapping" => nothing, "parities" => nothing)
+
+    shared_cache = Dict{Int,Dict{Symbol,Any}}()
+
+    u_indices = instructions["u_range"]
+
+    if !isnothing(save_folder)
+        mkpath(save_folder)
+    end
+    shared_data_saved = false
+
+    # Define state1 (fixed reference)
+    ref_u_idx = instructions["starting state"]["U index"]
+    ref_level = instructions["starting state"]["levels"][1] # assuming single level for reference
+
+    for u_idx in u_indices
+        println("\n--- Scanning U index: $u_idx ---")
+
+        if degen_rm_U isa AbstractMatrix
+            state1 = degen_rm_U[ref_u_idx, :]
+            state2 = degen_rm_U[u_idx, :]
+        else
+            state1 = degen_rm_U[ref_u_idx][:, ref_level]
+            state2 = degen_rm_U[u_idx][:, instructions["ending state"]["levels"][1]]
+        end
+
+        args = optimize_unitary(state1, state2, indexer;
+            spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
+            maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
+            metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
+            operator_cache=shared_cache)
+
+        computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, shared_cache = args
+
+        # Store results for this U
+        push!(data_dict["norm1_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices])
+        push!(data_dict["norm2_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices])
+        push!(data_dict["all_matrices"], computed_matrices)
+        push!(data_dict["coefficients"], coefficient_values)
+        if isnothing(data_dict["coefficient_labels"])
+            data_dict["coefficient_labels"] = coefficient_labels
+            data_dict["param_mapping"] = param_mapping
+            data_dict["parities"] = parities
+        end
+
+        # Save shared data once we have it
+        if !isnothing(save_folder) && !shared_data_saved && !isnothing(coefficient_labels)
+            shared_dict = Dict(
+                "coefficient_labels" => coefficient_labels,
+                "param_mapping" => param_mapping,
+                "parities" => parities,
+                "instructions" => instructions,
+                "u_range" => u_indices
+            )
+            JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
+            shared_data_saved = true
+        end
+
+        # Save iteration data
+        if !isnothing(save_folder)
+            iter_dict = Dict(
+                "u_idx" => u_idx,
+                "coefficient_values" => coefficient_values,
+                "metrics" => metrics,
+                "norm1" => [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices],
+                "norm2" => [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices]
+            )
+            JLD2.jldsave(joinpath(save_folder, "$(save_name)_u_$u_idx.jld2"); dict=iter_dict)
+        end
+
+        for (k, val) in metrics
+            if k * "_metrics" ∉ keys(data_dict)
+                data_dict[k*"_metrics"] = [val]
+            else
+                push!(data_dict[k*"_metrics"], val)
+            end
+        end
+        push!(data_dict["labels"], Dict(
+            "starting state" => Dict("level" => ref_level, "U index" => ref_u_idx),
+            "ending state" => Dict("level" => instructions["ending state"]["levels"][1], "U index" => u_idx))
+        )
     end
 
     return data_dict
