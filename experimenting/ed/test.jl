@@ -45,7 +45,7 @@ scan_instructions = Dict(
      "use symmetry" => true
 )
 
-scan_data = interaction_scan_map_to_state(all_full_eig_vecs[6], scan_instructions, indexer, !isa(meta_data["electron count"], Number);
+scan_data = interaction_scan_map_to_state(all_full_eig_vecs[1], scan_instructions, indexer, !isa(meta_data["electron count"], Number);
      maxiters=100, gradient=:adjoint_gradient,
      optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
      save_folder=folder_name, save_name="test_scan")

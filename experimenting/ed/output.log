@@ -1,0 +1,60 @@
+U in [1.0e-5, 2.463157894736842]
+
+--- Running Interaction Scan ---
+
+--- Scanning U index: 1 ---
+Initial loss: 4.440892098500626e-16
+Dimension: 400
+States are already equal
+
+--- Scanning U index: 2 ---
+Initial loss: 2.552642186515186e-8
+Dimension: 400
+  0.154190 seconds (287.83 k allocations: 12.618 MiB, 99.94% compilation time)
+  0.054044 seconds (489.73 k allocations: 61.226 MiB, 58.37% gc time, 4.55% compilation time)
+Parameter count: 4
+Solving with GradientDescent...
+loss=2.5526421754129558e-8 state=3.314672888123189e-10 gradient=4.902793196416491e-13 relative-change=0.004415243610129938 curvature=1.073316761887379e-22
+  5.083520 seconds (29.53 M allocations: 1.443 GiB, 2.39% gc time, 100.34% compilation time)
+Solving with LBFGS...
+loss=2.552642186515186e-8 state=6.094787704266616e-10 gradient=1.03401938323999e-12 relative-change=0.004537416759181882 curvature=3.7535872118103066e-22
+  0.512565 seconds (2.01 M allocations: 124.131 MiB, 4.03% gc time, 99.41% compilation time)
+Solving with GradientDescent...
+loss=2.552642186515186e-8 state=7.553313912862119e-10 gradient=1.1327733916178276e-12 relative-change=0.004050929502328949 curvature=5.882017762309982e-22
+  0.049116 seconds (5.31 k allocations: 23.535 MiB, 94.66% gc time)
+Solving with LBFGS...
+loss=2.5526421643107255e-8 state=6.062711806241659e-10 gradient=1.1726470412663623e-12 relative-change=0.004064067842342191 curvature=3.7498016879597576e-22
+  0.002313 seconds (5.37 k allocations: 23.538 MiB)
+Solving with GradientDescent...
+loss=2.5526421643107255e-8 state=8.568105890297796e-10 gradient=1.3951545285586883e-12 relative-change=0.0058820621165599375 curvature=7.415633270848571e-22
+  0.165300 seconds (5.31 k allocations: 23.535 MiB, 98.38% gc time)
+Solving with LBFGS...
+loss=2.5526421643107255e-8 state=6.871395880227037e-10 gradient=8.117849352033257e-13 relative-change=0.0032612617214230577 curvature=4.710777357420369e-22
+  0.002421 seconds (5.37 k allocations: 23.538 MiB)
+time=0.000167209 loss=2.5526421643107255e-8
+Finished order 1
+  0.000667 seconds (17.73 k allocations: 1.435 MiB)
+  0.280036 seconds (9.60 M allocations: 1.021 GiB, 26.39% gc time)
+Parameter count: 85
+Solving with GradientDescent...
+loss=2.552642230924107e-8 state=1.1365565580419623e-10 gradient=9.828014508248074e-13 relative-change=0.10663032630644971 curvature=1.4611552086936576e-23
+  0.827773 seconds (5.95 M allocations: 331.496 MiB, 2.86% gc time, 97.02% compilation time)
+Solving with LBFGS...
+loss=2.5526421643107255e-8 state=1.564945660832154e-10 gradient=1.2395250052556847e-12 relative-change=0.0927290775478993 curvature=2.553433632123945e-23
+  0.482128 seconds (3.21 M allocations: 191.555 MiB, 3.85% gc time, 94.06% compilation time)
+Solving with GradientDescent...
+loss=2.5526421754129558e-8 state=2.3032616197540887e-10 gradient=1.9674511203803743e-12 relative-change=-0.1128941278691855 curvature=3.777655489460956e-23
+  0.008424 seconds (21.93 k allocations: 31.116 MiB)
+Solving with LBFGS...
+loss=2.5526421754129558e-8 state=3.255771563873934e-10 gradient=3.1729514138108686e-12 relative-change=-4.887900874576826 curvature=8.847333235449079e-23
+  0.012156 seconds (21.94 k allocations: 31.134 MiB, 34.35% gc time)
+Solving with GradientDescent...
+loss=2.5526421754129558e-8 state=3.969791010313177e-10 gradient=5.55777837462661e-12 relative-change=0.3622249080427211 curvature=1.313023734083621e-22
+  0.009968 seconds (21.84 k allocations: 31.113 MiB, 22.31% gc time)
+Solving with LBFGS...
+loss=2.5526421976174163e-8 state=5.461125626632916e-10 gradient=6.356241949317564e-12 relative-change=0.0525553459965512 curvature=2.7583428297682016e-22
+  0.007898 seconds (21.90 k allocations: 31.132 MiB)
+time=0.00097525 loss=2.5526421976174163e-8
+Finished order 2
+
+Scan complete. Final losses: Any[Any[4.440892098500626e-16], Any[2.552642186515186e-8, 2.5526421643107255e-8, 2.5526421976174163e-8]]
