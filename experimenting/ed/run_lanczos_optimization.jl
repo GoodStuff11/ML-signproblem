@@ -1,5 +1,7 @@
 
-     
+using ManifoldsBase
+using OptimizationManopt
+using Manifolds  
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -74,7 +76,7 @@ function (@main)(ARGS)
         instructions = Dict(
             "starting state" => Dict("U index" => 1, "levels" => 1), # Level 1 = Ground state
             "ending state" => Dict("U index" => u_index, "levels" => 1),
-            "max_order" => 2,
+            "optimization_scheme" => [1, 2],
             "use symmetry" => use_symmetry
         )
 
@@ -85,8 +87,10 @@ function (@main)(ARGS)
             instructions,
             indexer,
             spin_conserved;
-            maxiters=500,#meta_data["maxiters"],
-            optimization=:adjoint_gradient
+            maxiters=200,#meta_data["maxiters"],
+            gradient=:adjoint_gradient,
+            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+            perturb_optimization=10.0
         )
         end
 

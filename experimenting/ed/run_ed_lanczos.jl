@@ -11,6 +11,7 @@ using Random
 using JSON
 using JLD2
 using KrylovKit
+using Zygote
 using ExponentialUtilities
 
 
@@ -26,12 +27,12 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (4, 2)
+    lattice_dimension = (3, 3)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 3
-        N_down = 3
+        N_up = 4
+        N_down = 5
         N = (N_up, N_down)
     else
         N = 6

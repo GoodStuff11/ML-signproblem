@@ -38,17 +38,16 @@ println("U in [", U_values[instructions["starting state"]["U index"]], ", ", U_v
 # New test using interaction_scan_map_to_state
 println("\n--- Running Interaction Scan ---")
 scan_instructions = Dict(
-     "starting state" => Dict("U index" => 1, "levels" => [1]),
-     "ending state" => Dict("U index" => 1, "levels" => [1]), # level index for targets
+     "starting level" => 1,
+     "ending level" => 1, # level index for targets
      "u_range" => 1:length(U_values),
      "optimization_scheme" => [1, 2],
      "use symmetry" => true
 )
 
-scan_data = interaction_scan_map_to_state(all_full_eig_vecs[1], scan_instructions, indexer, !isa(meta_data["electron count"], Number);
-     maxiters=100, gradient=:adjoint_gradient,
+scan_data = interaction_scan_map_to_state(all_full_eig_vecs[6], scan_instructions, indexer, !isa(meta_data["electron count"], Number);
+     maxiters=200, gradient=:adjoint_gradient,
      optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-     save_folder=folder_name, save_name="test_scan")
+     save_folder=nothing, save_name="test_scan")
 
 println("\nScan complete. Final losses: $(scan_data["loss_metrics"])")
-scan_data
