@@ -314,7 +314,7 @@ end
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
     maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1, 2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
-    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=2.0,
+    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=0.1,
     operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}()
 )
     # spin_conserved is only true when using (N↑, N↓) and not N
@@ -491,7 +491,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             end
 
             # println("loss=$loss_val state=$(sum(abs, state.u)/length(state.u)) $grad_msg")
-            println("loss=$loss_val state=$(norm(state.u)) $grad_msg")
+            println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
             # if optimizer == :riemann
             #     unitarity_err = norm(state.u' * state.u - I)
             #     println("loss=$loss_val unitarity_err=$unitarity_err")
@@ -540,7 +540,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         for optimizer_sym in optimizers
             # 1. Setup Phase
             if length(optimizers) > 1 && perturb_optimization > 1e-9
-                t_vals = t_vals + perturb_optimization * mean(abs.(t_vals)) * (2 * rand(length(t_vals)) .- 1)
+                t_vals = t_vals*(1-perturb_optimization) + perturb_optimization * mean(abs.(t_vals)) * (2 * rand(length(t_vals)) .- 1)
             end
             if optimizer_sym == :riemann
                 # --- Riemannian Setup ---
@@ -651,7 +651,8 @@ end
 
 function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
-    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS
+    maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), 
+    optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=2.0
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
@@ -677,7 +678,8 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
             args = optimize_unitary(state1, state2, indexer;
                 spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
                 maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
-                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer)
+                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer, 
+                perturb_optimization=perturb_optimization)
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, _ = args
             push!(data_dict["norm1_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices])
@@ -713,6 +715,7 @@ end
 function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
     maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
+    perturb_optimization::Float64=2.0,
     save_folder::Union{String,Nothing}=nothing, save_name::String="scan_data"
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
@@ -732,25 +735,20 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     shared_data_saved = false
 
     # Define state1 (fixed reference)
-    ref_u_idx = instructions["starting state"]["U index"]
-    ref_level = instructions["starting state"]["levels"][1] # assuming single level for reference
+    ref_u_idx = 1
+    ref_level = 1
 
     for u_idx in u_indices
         println("\n--- Scanning U index: $u_idx ---")
 
-        if degen_rm_U isa AbstractMatrix
-            state1 = degen_rm_U[ref_u_idx, :]
-            state2 = degen_rm_U[u_idx, :]
-        else
-            state1 = degen_rm_U[ref_u_idx][:, ref_level]
-            state2 = degen_rm_U[u_idx][:, instructions["ending state"]["levels"][1]]
-        end
+        state1 = degen_rm_U[ref_u_idx, :]
+        state2 = degen_rm_U[u_idx, :]
 
         args = optimize_unitary(state1, state2, indexer;
             spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
             maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
             metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
-            operator_cache=shared_cache)
+            operator_cache=shared_cache, perturb_optimization=perturb_optimization)
 
         computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, shared_cache = args
 
@@ -799,7 +797,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         end
         push!(data_dict["labels"], Dict(
             "starting state" => Dict("level" => ref_level, "U index" => ref_u_idx),
-            "ending state" => Dict("level" => instructions["ending state"]["levels"][1], "U index" => u_idx))
+            "ending state" => Dict("level" => instructions["starting level"], "U index" => u_idx))
         )
     end
 

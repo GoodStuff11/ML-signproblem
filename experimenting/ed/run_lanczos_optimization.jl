@@ -89,7 +89,8 @@ function (@main)(ARGS)
             spin_conserved;
             maxiters=200,#meta_data["maxiters"],
             gradient=:adjoint_gradient,
-            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS]
+            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+            perturb_optimization=10.0
         )
         end
 

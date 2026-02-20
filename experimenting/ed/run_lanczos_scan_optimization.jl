@@ -25,7 +25,7 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    folder = "/home/jek354/research/data/N=(4, 4)_4x2"
+    folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/N=(3, 3)_3x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -35,6 +35,9 @@ function (@main)(ARGS)
     all_full_eig_vecs = dic["all_full_eig_vecs"]
     all_E = dic["E"] # Needed for energy selection
     indexer = dic["indexer"]
+
+    println("Meta data:")
+    display(meta_data)
 
     # Extract N for saving
     N = meta_data["electron count"]
@@ -60,46 +63,20 @@ function (@main)(ARGS)
     # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
     target_vecs = all_full_eig_vecs[k_min]
 
-    # Snippet logic for instructions
-    # instructions = Dict("starting state"=>Dict("U index"=>1, "levels"=>1),
-    #                "ending state"=>Dict("U index"=>30, "levels"=>1), "max_order"=>2, "use symmetry"=>false)
+    scan_instructions = Dict(
+        "starting level" => 1,
+        "ending level" => 1, # level index for targets
+        "u_range" => 1:length(U_values),
+        "optimization_scheme" => [1, 2],
+        "use symmetry" => use_symmetry
+    )
 
-    # User had 30 explicitly. Assuming they want to optimize to U index 30 (or max avaliable).
-    # Let's target the last U value available if 30 is out of bounds, or just use 30 if valid.
-    selected_u_values = 1:length(U_values)
-    if length(ARGS) >= 2 # for parallelization
-        selected_u_values = parse(Int, ARGS[2]):parse(Int, ARGS[3])
-    end
+    interaction_scan_map_to_state(all_full_eig_vecs[6], scan_instructions, indexer,
+        spin_conserved;
+        maxiters=200, gradient=:adjoint_gradient,
+        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
 
-
-    for u_index in selected_u_values
-        instructions = Dict(
-            "starting state" => Dict("U index" => 1, "levels" => 1), # Level 1 = Ground state
-            "ending state" => Dict("U index" => u_index, "levels" => 1),
-            "optimization_scheme" => [1, 2],
-            "use symmetry" => use_symmetry
-        )
-
-        println("Running Optimization from U=$(U_values[instructions["starting state"]["U index"]]) to U=$(U_values[instructions["ending state"]["U index"]])")
-        duration = @elapsed begin
-        data_dict = test_map_to_state(
-            target_vecs,
-            instructions,
-            indexer,
-            spin_conserved;
-            maxiters=200,#meta_data["maxiters"],
-            gradient=:adjoint_gradient,
-            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS]
-        )
-        end
-
-        dic["optimization_results"] = data_dict
-        dic["symmetry_sector"] = k_min
-        dic["use_symmetry"] = use_symmetry
-        dic["optimization_time"] = duration
-
-        save_dictionary(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$N", data_dict)
-    end
 
     return 0
 end
