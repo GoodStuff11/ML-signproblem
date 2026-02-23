@@ -1,7 +1,3 @@
-
-using ManifoldsBase
-using OptimizationManopt
-using Manifolds
 using Lattices
 using LinearAlgebra
 using Combinatorics

@@ -1,5 +1,3 @@
-include("optimization_helpers.jl")
-
 """
 Apply exp(α M) * v efficiently.
 Uses expv if M is large & sparse, otherwise falls back to exp(M).
@@ -523,49 +521,23 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 if optimizer_idx > 1 && perturb_optimization > 1e-9 && mean(abs.(local_t_vals)) > 1e-1
                     local_t_vals = local_t_vals * (1 - perturb_optimization) + perturb_optimization * mean(abs.(local_t_vals)) * (2 * rand(length(local_t_vals)) .- 1)
                 end
-                
-                if optimizer_sym == :riemann
-                    # --- Riemannian Setup ---
-                    p_args = get_p_args(order)
-                    if !isnothing(p_args)
-                        temp_mats = [m for (i, m) in enumerate(computed_matrices) if i != order && !isnothing(m)]
-                    else
-                        temp_mats = []
-                    end
 
-                    U0 = params_to_unitary(local_t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, temp_mats, dim, antihermitian, use_symmetry)
-                    manifold = UnitaryMatrices(dim)
 
-                    function cost_riemann(U, p)
-                        return 1 - abs2(dot(state2, U * state1))
-                    end
-                    function grad_riemann(G, U, p)
-                        overlap = dot(state2, U * state1)
-                        project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, state1, state2, overlap)
-                        return G
-                    end
+                # --- Euclidean Setup ---
+                p_args = get_p_args(order)
 
-                    current_optf = OptimizationFunction(cost_riemann, grad=grad_riemann)
-                    prob = OptimizationProblem(current_optf, U0, manifold=manifold)
-                    opt_algo = OptimizationManopt.GradientDescentOptimizer()
+                # Create Problem using global optf (defined outside loop)
+                prob = OptimizationProblem(optf, local_t_vals, p_args)
 
+                # Determine Algorithm
+                if optimizer_sym == :LBFGS
+                    opt_algo = Optim.LBFGS()
+                elseif optimizer_sym == :BFGS
+                    opt_algo = OptimizationOptimJL.BFGS()
+                elseif optimizer_sym == :GradientDescent
+                    opt_algo = OptimizationOptimJL.GradientDescent()
                 else
-                    # --- Euclidean Setup ---
-                    p_args = get_p_args(order)
-
-                    # Create Problem using global optf (defined outside loop)
-                    prob = OptimizationProblem(optf, local_t_vals, p_args)
-
-                    # Determine Algorithm
-                    if optimizer_sym == :LBFGS
-                        opt_algo = Optim.LBFGS()
-                    elseif optimizer_sym == :BFGS
-                        opt_algo = OptimizationOptimJL.BFGS()
-                    elseif optimizer_sym == :GradientDescent
-                        opt_algo = OptimizationOptimJL.GradientDescent()
-                    else
-                        opt_algo = OptimizationOptimJL.LBFGS()
-                    end
+                    opt_algo = OptimizationOptimJL.LBFGS()
                 end
 
                 # 2. Execution Phase: Single Solve Call
@@ -574,14 +546,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 @time local_sol = Optimization.solve(prob, opt_algo, maxiters=current_maxiters, callback=callback)
 
                 # 3. Post-Process Phase
-                if optimizer_sym == :riemann
-                    local_t_vals = unitary_to_params(local_sol.u, ops, dim, antihermitian)
-                else
-                    local_t_vals = local_sol.u
-                end
+                local_t_vals = local_sol.u
                 local_loss = local_sol.objective
             end
-            
+
             return local_sol, local_t_vals, local_loss
         end
 
@@ -594,7 +562,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         elseif initialization_samples > 0
             println("Sampling $initialization_samples initial configurations over a range of magnitudes...")
             p_args = get_p_args(order)
-            
+
             good_samples = []
             initial_loss = loss
 
@@ -625,10 +593,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                     println("Sample $s (mag=$(round(mag, sigdigits=3))): loss=$l_tmp grad_norm=$gnorm (GOOD: $is_good)")
                 end
             end
-            
+
             sort!(good_samples, by=x -> x[1], rev=true)
             top_n = min(5, length(good_samples))
-            
+
             if top_n == 0
                 println("No good samples found, falling back to random initialization")
                 if use_symmetry
