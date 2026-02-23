@@ -67,7 +67,7 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "u_range" => 20:length(U_values),
+        "u_range" => 50:length(U_values),
         "optimization_scheme" => [2],
         "use symmetry" => use_symmetry
     )
