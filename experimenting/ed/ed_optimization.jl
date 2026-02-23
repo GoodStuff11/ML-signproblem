@@ -314,8 +314,8 @@ end
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
     maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1, 2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
-    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=0.1,
-    initial_coefficients::Vector{Any}=Any[],
+    antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=0.001,
+    initial_coefficients::Vector{Any}=Any[], initialization_samples::Int=20,
     operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}()
 )
     # spin_conserved is only true when using (N↑, N↓) and not N
@@ -339,6 +339,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     dim = length(indexer.inv_comb_dict)
     metrics = Dict{String,Vector{Any}}()
     loss = 1 - abs2(state1' * state2)
+    prev_loss = loss
     metrics["loss"] = Float64[loss]
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
@@ -359,7 +360,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return operator_cache[order]
         end
         # compute operator structure, initial coefficients and operators
-        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=true)
+        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)
@@ -413,7 +414,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     end
 
     # 1. Pre-population: realize matrices for any coefficients provided externally
+    # println(isempty(initial_coefficients), " ", initial_coefficients)
     if !isempty(initial_coefficients)
+        println("COMPUTED MATRICES")
         for order_idx in eachindex(initial_coefficients)
             coeffs = initial_coefficients[order_idx]
             if isnothing(coeffs) || isempty(coeffs)
@@ -459,58 +462,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         parameter_mapping = struct_data[:parameter_mapping]
         parity = struct_data[:parity]
         coefficient_labels[order] = t_keys
-        # Determine Initial Coefficients (t_vals) for this optimization order
-        magnitude_esimate = loss / length(t_keys)
 
-        if length(initial_coefficients) >= order && !isnothing(initial_coefficients[order])
-            t_vals = initial_coefficients[order]
-        else
-            if use_symmetry
-                # sym_data is (inv_param_map, ...)
-                t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
-            else
-                t_vals = real(collect(values(t_dict)))
-            end
-        end
-
-        println("Parameter count: $(length(t_vals))")
-        # for exp(sum_i t_i A_i), find A_i
-        # if !isnothing(parameter_mapping)
-        #     trotter_matrices = []
-        #     for p in parameter_mapping
-        #         push!(trotter_matrices, sparse(rows[p], cols[p], signs[p], dim, dim))
-        #     end
-        # end
-
-        tmp_losses = []
-        function callback(state, loss_val)
-            # state.gradient
-            # push!(loss_tracker, loss_val)
-            N = 20
-
-            grad_msg = if isnothing(state.grad)
-                "gradient=N/A relative-change=N/A curvature=N/A"
-            else
-                "gradient=$(sum(abs, state.grad)) relative-change=$(sum(state.grad ./ state.u)) curvature=$(sum(state.grad .* state.u))"
-            end
-
-            # println("loss=$loss_val state=$(sum(abs, state.u)/length(state.u)) $grad_msg")
-            println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
-            # if optimizer == :riemann
-            #     unitarity_err = norm(state.u' * state.u - I)
-            #     println("loss=$loss_val unitarity_err=$unitarity_err")
-            # else
-            #     println("loss=$loss_val")
-            # end
-
-            push!(tmp_losses, loss_val)
-            if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
-                # println("std: $(std(tmp_losses[end-N:end]))")
-                return true
-            end
-            return false
-        end
-
+        # helper functions for sampling and optimization
         function fg!(grad, t_vals, p=nothing)
             return approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state1, state2, use_symmetry, antihermitian, p=p)
         end
@@ -527,6 +480,27 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state2, state1, p, !use_symmetry, antihermitian)
         end
 
+        tmp_losses = []
+        function callback(state, loss_val)
+            # state.gradient
+            # push!(loss_tracker, loss_val)
+            N = 20
+
+            grad_msg = if isnothing(state.grad)
+                "gradient=N/A relative-change=N/A curvature=N/A"
+            else
+                "gradient=$(sum(abs, state.grad)) relative-change=$(sum(state.grad ./ state.u)) curvature=$(sum(state.grad .* state.u))"
+            end
+
+            println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
+
+            push!(tmp_losses, loss_val)
+            if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
+                return true
+            end
+            return false
+        end
+
         if gradient == :gradient
             optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
         elseif gradient == :manualgradient
@@ -537,81 +511,160 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             optf = Optimization.OptimizationFunction(f_nongradient)
         end
 
-
         optimizers = optimizer isa Vector ? optimizer : [optimizer]
 
-        sol = nothing
-        for optimizer_sym in optimizers
-            # 1. Setup Phase
-            if length(optimizers) > 1 && perturb_optimization > 1e-9
-                t_vals = t_vals * (1 - perturb_optimization) + perturb_optimization * mean(abs.(t_vals)) * (2 * rand(length(t_vals)) .- 1)
-            end
-            if optimizer_sym == :riemann
-                # --- Riemannian Setup ---
-                p_args = get_p_args(order)
-                if !isnothing(p_args)
-                    # If we have background matrices, we need to fold them into the starting point?
-                    # params_to_unitary handles computed_matrices.
-                    # But here we only pass 'computed_matrices' which includes 'order' if it was computed?
-                    # No, get_p_args excludes 'order'.
-                    # Actually params_to_unitary just sums them.
-                    # Let's constructing a temp list for params_to_unitary.
-                    temp_mats = [m for (i, m) in enumerate(computed_matrices) if i != order && !isnothing(m)]
+        function execute_optimization(current_t_vals, current_maxiters, _optimizers)
+            local_t_vals = copy(current_t_vals)
+            local_loss = loss
+            local_sol = nothing
+
+            for (optimizer_idx, optimizer_sym) in enumerate(_optimizers)
+                # 1. Setup Phase
+                if optimizer_idx > 1 && perturb_optimization > 1e-9 && mean(abs.(local_t_vals)) > 1e-1
+                    local_t_vals = local_t_vals * (1 - perturb_optimization) + perturb_optimization * mean(abs.(local_t_vals)) * (2 * rand(length(local_t_vals)) .- 1)
+                end
+                
+                if optimizer_sym == :riemann
+                    # --- Riemannian Setup ---
+                    p_args = get_p_args(order)
+                    if !isnothing(p_args)
+                        temp_mats = [m for (i, m) in enumerate(computed_matrices) if i != order && !isnothing(m)]
+                    else
+                        temp_mats = []
+                    end
+
+                    U0 = params_to_unitary(local_t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, temp_mats, dim, antihermitian, use_symmetry)
+                    manifold = UnitaryMatrices(dim)
+
+                    function cost_riemann(U, p)
+                        return 1 - abs2(dot(state2, U * state1))
+                    end
+                    function grad_riemann(G, U, p)
+                        overlap = dot(state2, U * state1)
+                        project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, state1, state2, overlap)
+                        return G
+                    end
+
+                    current_optf = OptimizationFunction(cost_riemann, grad=grad_riemann)
+                    prob = OptimizationProblem(current_optf, U0, manifold=manifold)
+                    opt_algo = OptimizationManopt.GradientDescentOptimizer()
+
                 else
-                    temp_mats = []
+                    # --- Euclidean Setup ---
+                    p_args = get_p_args(order)
+
+                    # Create Problem using global optf (defined outside loop)
+                    prob = OptimizationProblem(optf, local_t_vals, p_args)
+
+                    # Determine Algorithm
+                    if optimizer_sym == :LBFGS
+                        opt_algo = Optim.LBFGS()
+                    elseif optimizer_sym == :BFGS
+                        opt_algo = OptimizationOptimJL.BFGS()
+                    elseif optimizer_sym == :GradientDescent
+                        opt_algo = OptimizationOptimJL.GradientDescent()
+                    else
+                        opt_algo = OptimizationOptimJL.LBFGS()
+                    end
                 end
 
-                U0 = params_to_unitary(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, temp_mats, dim, antihermitian, use_symmetry)
-                manifold = UnitaryMatrices(dim)
+                # 2. Execution Phase: Single Solve Call
+                empty!(tmp_losses)
+                println("Solving with $optimizer_sym...")
+                @time local_sol = Optimization.solve(prob, opt_algo, maxiters=current_maxiters, callback=callback)
 
-                function cost_riemann(U, p)
-                    return 1 - abs2(dot(state2, U * state1))
-                end
-                function grad_riemann(G, U, p)
-                    overlap = dot(state2, U * state1)
-                    project_to_tangent_rank1!(G, U, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, antihermitian, use_symmetry, state1, state2, overlap)
-                    return G
-                end
-
-                current_optf = OptimizationFunction(cost_riemann, grad=grad_riemann)
-                prob = OptimizationProblem(current_optf, U0, manifold=manifold)
-                opt_algo = OptimizationManopt.GradientDescentOptimizer()
-
-            else
-                # --- Euclidean Setup ---
-                p_args = get_p_args(order)
-
-                # Create Problem using global optf (defined outside loop)
-                prob = OptimizationProblem(optf, t_vals, p_args)
-
-                # Determine Algorithm
-                if optimizer_sym == :LBFGS
-                    opt_algo = Optim.LBFGS()
-                elseif optimizer_sym == :BFGS
-                    opt_algo = OptimizationOptimJL.BFGS()
-                elseif optimizer_sym == :GradientDescent
-                    opt_algo = OptimizationOptimJL.GradientDescent()
+                # 3. Post-Process Phase
+                if optimizer_sym == :riemann
+                    local_t_vals = unitary_to_params(local_sol.u, ops, dim, antihermitian)
                 else
-                    opt_algo = OptimizationOptimJL.LBFGS()
+                    local_t_vals = local_sol.u
+                end
+                local_loss = local_sol.objective
+            end
+            
+            return local_sol, local_t_vals, local_loss
+        end
+
+        # Determine Initial Coefficients (t_vals) for this optimization order
+        magnitude_esimate = loss * 100
+
+        # find values for t_vals
+        if length(initial_coefficients) >= order && !isnothing(initial_coefficients[order])
+            t_vals = initial_coefficients[order]
+        elseif initialization_samples > 0
+            println("Sampling $initialization_samples initial configurations over a range of magnitudes...")
+            p_args = get_p_args(order)
+            
+            good_samples = []
+            initial_loss = loss
+
+            log_min = log10(1e-7)
+            log_max = log10(1e-1)
+
+            for s in 1:initialization_samples
+                mag = 10^(log_min + (log_max - log_min) * rand())
+
+                if use_symmetry
+                    t_sample = real(rand(typeof(signs[1]), length(sym_data[1])) * mag)
+                else
+                    t_sample = (2 * rand(length(t_dict)) .- 1) * mag
+                end
+
+                res = Zygote.withgradient(t -> f_adjoint(t, p_args), t_sample)
+                l_tmp = res.val
+                g_tmp = res.grad[1]
+                gnorm = norm(g_tmp)
+
+                is_good = (gnorm > 1e-8) && (l_tmp < initial_loss * 10)
+
+                if is_good
+                    push!(good_samples, (gnorm, l_tmp, copy(t_sample)))
+                end
+
+                if initialization_samples <= 50
+                    println("Sample $s (mag=$(round(mag, sigdigits=3))): loss=$l_tmp grad_norm=$gnorm (GOOD: $is_good)")
                 end
             end
-
-            # 2. Execution Phase: Single Solve Call
-            println("Solving with $optimizer_sym...")
-            @time sol = Optimization.solve(prob, opt_algo, maxiters=maxiters, callback=callback)
-
-            # 3. Post-Process Phase
-            if optimizer_sym == :riemann
-                t_vals = unitary_to_params(sol.u, ops, dim, antihermitian)
+            
+            sort!(good_samples, by=x -> x[1], rev=true)
+            top_n = min(5, length(good_samples))
+            
+            if top_n == 0
+                println("No good samples found, falling back to random initialization")
+                if use_symmetry
+                    t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
+                else
+                    t_vals = real(collect(values(t_dict)))
+                end
             else
-                t_vals = sol.u
+                best_t = nothing
+                best_loss = Inf
+                println("Performing quick optimization on top $top_n candidates...")
+                quick_maxiters = min(30, maxiters)
+                for i in 1:top_n
+                    candidate_t = good_samples[i][3]
+                    _, opt_t, opt_loss = execute_optimization(candidate_t, quick_maxiters, [:GradientDescent, :LBFGS])
+                    println("Candidate $i quick opt loss: $opt_loss")
+                    if opt_loss < best_loss
+                        best_loss = opt_loss
+                        best_t = opt_t
+                    end
+                end
+                t_vals = best_t
+                println("Selected best candidate with loss=$best_loss")
+            end
+        else
+            if use_symmetry
+                t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
+            else
+                t_vals = real(collect(values(t_dict)))
             end
         end
 
-        # After loop, final coefficients are in t_vals
-        coefficients = t_vals
+        println("Parameter count: $(length(t_vals))")
 
-        loss = f_nongradient(t_vals, get_p_args(order))
+        sol, t_vals, loss = execute_optimization(t_vals, maxiters, optimizers)
+        coefficients = t_vals
         metric = sol # approx?
 
 
@@ -733,6 +786,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     shared_cache = Dict{Int,Dict{Symbol,Any}}()
     current_coeffs = initial_coefficients
 
+    # u_indices = instructions["u_range"]
     u_indices = instructions["u_range"]
 
     if !isnothing(save_folder)
