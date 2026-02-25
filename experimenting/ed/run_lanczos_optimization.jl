@@ -1,8 +1,7 @@
 
-using ManifoldsBase
-using OptimizationManopt
-using Manifolds  
 using Lattices
+using ChainRulesCore
+using ExponentialUtilities
 using LinearAlgebra
 using Combinatorics
 using SparseArrays
@@ -18,14 +17,14 @@ using OptimizationOptimJL
 using JLD2
 
 
+
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
-include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    folder = "/home/jek354/research/data/N=(4, 4)_4x2"
+    folder = "/home/jek354/research/data/N=(, 4)_4x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -82,16 +81,16 @@ function (@main)(ARGS)
 
         println("Running Optimization from U=$(U_values[instructions["starting state"]["U index"]]) to U=$(U_values[instructions["ending state"]["U index"]])")
         duration = @elapsed begin
-        data_dict = test_map_to_state(
-            target_vecs,
-            instructions,
-            indexer,
-            spin_conserved;
-            maxiters=200,#meta_data["maxiters"],
-            gradient=:adjoint_gradient,
-            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-            perturb_optimization=10.0
-        )
+            data_dict = test_map_to_state(
+                target_vecs,
+                instructions,
+                indexer,
+                spin_conserved;
+                maxiters=200,#meta_data["maxiters"],
+                gradient=:adjoint_gradient,
+                optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+                perturb_optimization=10.0
+            )
         end
 
         dic["optimization_results"] = data_dict
