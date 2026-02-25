@@ -1,4 +1,6 @@
 using Lattices
+using ChainRulesCore
+using ExponentialUtilities
 using LinearAlgebra
 using Combinatorics
 using SparseArrays
@@ -19,10 +21,9 @@ include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
 
-
 function (@main)(ARGS)
     # folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/N=(3, 3)_3x2"
-    folder = "data/N=(4, 4)_4x2"
+    folder = "data/N=(3, 3)_3x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -41,11 +42,9 @@ function (@main)(ARGS)
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
     use_symmetry = ARGS[1] == "true"
 
-    # --- New Logic: Find lowest energy sector ---
     min_E = Inf
     k_min = 1
     for (k, E_vec) in enumerate(all_E)
-        # Assuming E_vec is sorted or we check the ground state (first element)
         if !isempty(E_vec)
             E_ground = E_vec[1]
             if E_ground < min_E
