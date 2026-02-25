@@ -571,15 +571,16 @@ end
 function update_values(
     signs::Vector{U},
     param_index_map::Vector{Int},
-    t_vals::Vector{U},
+    t_vals::Vector{V},
     parameter_mapping::Union{Vector{Int},Nothing}=nothing,
     parity::Union{Vector{Int},Nothing}=nothing
-) where {U<:Number}
+) where {U<:Number,V<:Number}
     # it's allowed for length(t_vals) < length(t_keys), but a parameter_mapping to make the difference is required.
     if isnothing(parameter_mapping)
         return [t_vals[param_index_map[i]] * signs[i] for i in eachindex(signs)]
     else
-        return [parameter_mapping[param_index_map[i]] == 0 ? U(0) : t_vals[parameter_mapping[param_index_map[i]]] * parity[param_index_map[i]] * signs[i]
+        type_UV = promote_type(U, V)
+        return [parameter_mapping[param_index_map[i]] == 0 ? zero(type_UV) : t_vals[parameter_mapping[param_index_map[i]]] * parity[param_index_map[i]] * signs[i]
                 for i in eachindex(signs)]
     end
 end
@@ -688,10 +689,6 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
 end
 
 
-# output is a minimal number of parameters that are a subset of t_dict values (t_dict should be random, so exactly which shouldn't matter)
-# as a vector reducedparameters, and also a parameter mapping vector parameter_mapping. 
-# parameter_mapping is defined such that values(t_dict)[i] = reduced_parameters[parameter_mapping[i]]
-# NOTE: this function only measures equivalences based on the symmetries, it doesn't care if the transformed states are actually in t_dict
 """
     find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=false, refl_y=false, spin_symmetry=false, hermitian=false, antihermitian=false)
 
@@ -707,8 +704,8 @@ Find groups of indices in X that are related by the specified symmetries.
 - `refl_x`: Include reflection symmetry about x axis (y → Ly + 1 - y) (NOTE: [σx, Tx] ≠ 0)
 - `refl_y`: Include reflection symmetry about y axis (x → Lx + 1 - x)
 - `spin_symmetry`: Include spin flip symmetry (s: 1 ↔ 2) (NOTE: this doesn't force symmetry with Sx, only e^{iπSx}.
-     It's an additional symmetry that the Hubbard model has, but it's a bit weaker than Sx. However, this does apply
-     to systems in which N↑=N↓)
+     It's an additional symmetry that the Hubbard model has, but it's a bit weaker than Sx. This always applies to 
+     fixed N systems but only applies on polarized systems when N↑=N↓)
 - `hermitian`: Include hermitian conjugation (:create ↔ :annihilate)
 - `antihermitian`: Include hermitian conjugation with a sign flip (anti-hermitian symmetry A† = -A)
 
@@ -786,9 +783,6 @@ function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=fa
         end
 
         if should_skip_group
-            # If the group is invalid (self-cancelling), we effectively discard it.
-            # We can mark it as visited but set parity to 0 to indicate it should be dropped?
-            # Or just set its inverse_map to 0?
             inverse_map[i] = 0 # Mark as zeroed
             parity[i] = 0
             for jdx in group
@@ -797,29 +791,10 @@ function find_symmetry_groups(X, Lx, Ly; trans_x=false, trans_y=false, refl_x=fa
                     parity[jdx] = 0
                 end
             end
-            # Remove the group from the list (or replace with empty/dummy)
-            # Since we appended to groups at the end, we just don't append it.
-            # But we incremented group_index.
-            # Let's clean up group_index usage.
-            # Wait, we incremented inverse_map with group_index.
-            # If we skip, we should handle that.
-            # Actually, reusing group_index logic:
-            # If we don't push(groups, group), indices shift? 
-            # inverse_map stores index into groups.
-            # So if we skip, we don't add to groups.
-            # But we already assigned group_index = length(groups) + 1.
-            # So if we don't push, subsequent groups will have wrong index?
-            # No, if we skip, group_index will be reused for next i.
-            # Wait, `group_index` variable is local.
-            # BUT we assigned `inverse_map[i] = group_index`.
-            # We should revert that.
         else
             push!(groups, group)
         end
     end
-
-    # Clean up inverse_map (optional, but good for safety)
-    # 0 values indicate terms that vanish due to symmetry constraints
 
     return groups, inverse_map, parity
 end
@@ -1953,4 +1928,140 @@ function reconstruct_full_vector(
     end
 
     return full_vec
+end
+
+
+"""
+    _map_symmetry_groups(t_vals_small, sym_small, sym_large, t_keys_small, t_keys_large)
+
+Constructs a set of symmetrically constrained parameters (`t_vals`) for a larger system size using 
+the converged solution from a smaller system size, padded with zeros for operators exclusive to the larger system.
+
+# Arguments
+- `t_vals_small`: A vector of parameter amplitudes mapped to the smaller system's symmetry groups.
+- `sym_small`: The symmetry group indices structure for the smaller system. Expected to be the output of `find_symmetry_groups()`.
+- `sym_large`: The symmetry group indices structure for the larger system. Expected to be the output of `find_symmetry_groups()`.
+- `t_keys_small`: The ordered list of string representation keys (operators) defining the parameters in the smaller system.
+- `t_keys_large`: The ordered list of string representation keys (operators) defining the parameters in the larger system.
+
+# Returns
+- `t_vals_large`: The mapped subset of parameters embedded inside a vector sized for `sym_large` representation.
+- `index_mapping`: An integer vector equal in length to `t_keys_large` denoting which index in `t_keys_small` corresponds to `t_keys_large[i]`. `0` denotes an operator exclusive to the larger system.
+"""
+function _map_symmetry_groups(t_vals_small, sym_small, sym_large, t_keys_small, t_keys_large)
+    # Create a lookup for the smaller system's t_keys
+    small_keys_dict = Dict(key => idx for (idx, key) in enumerate(t_keys_small))
+
+    # Pre-allocate the index mapping (size of large system's t_keys)
+    index_mapping = zeros(Int, length(t_keys_large))
+
+    # Populate the index mapping
+    for (i, key_large) in enumerate(t_keys_large)
+        if haskey(small_keys_dict, key_large)
+            index_mapping[i] = small_keys_dict[key_large]
+        end
+    end
+
+    # Pre-allocate the resulting t_vals for the larger system
+    t_vals_large = zeros(Float64, length(sym_large[1]))
+
+    # sym_large[1] contains vectors of indices in t_keys_large that belong to the same symmetry group
+    # sym_small[2] is the inverse map for the small system: index in t_keys_small -> group index
+    for (group_idx_large, group_large) in enumerate(sym_large[1])
+        # Check if any index in this large group maps to the smaller system
+        mapped_idx_small = 0
+        for idx_large in group_large
+            idx_small = index_mapping[idx_large]
+            if idx_small > 0
+                mapped_idx_small = idx_small
+                break
+            end
+        end
+
+        if mapped_idx_small > 0
+            # Find the group index in the smaller system
+            group_idx_small = sym_small[2][mapped_idx_small]
+
+            # Since t_vals is indexed by group index, we can just assign the corresponding value
+            t_vals_large[group_idx_large] = t_vals_small[group_idx_small]
+        end
+    end
+
+    return t_vals_large, index_mapping
+end
+
+"""
+    map_symmetry_groups(t_vals_small, subspace_small, subspace_large; 
+                                order=1, antihermitian=false, spin_symmetry=true, trans_x=true, trans_y=true, conserve_spin=true, omit_H_conj=true, cache=Dict{Symbol, Any}())
+
+Automates the parameter symmetry mapping routine between two system sizes by dynamically evaluating 
+their Hubbard subspace configurations and invoking `_map_symmetry_groups()`.
+
+This function abstracts away generating operator representations and finding symmetry groups by interpreting them 
+directly from the supplied subspace geometry and symmetric boundary considerations. 
+
+# Arguments
+- `t_vals_small`: The solved initial parameters corresponding to `subspace_small` (typically length equals number of symmetry groups in the small system).
+- `subspace_small`: `HubbardSubspace` instance representing the smaller lattice size.
+- `subspace_large`: `HubbardSubspace` instance representing the targeted larger lattice size.
+- `order`: The order limit of `create_randomized_nth_order_operator`. Defaults to 1 (hopping operators).
+- Keyword symmetries (`antihermitian`, `spin_symmetry`, `trans_x`, `trans_y`, `conserve_spin`, `omit_H_conj`): Dictate what physics to compute symmetry groups by.
+- `cache`: A dictionary to cache time-consuming setups like symmetry group determination and operator dictionary generation, enhancing optimization speeds.
+
+# Returns
+- `t_vals_large`: Solved and padded values generalized onto `subspace_large` groups.
+- `index_mapping`: Diagnostic list containing exact mappings for each target index operator into the smaller space.
+- `t_keys_large`: Generator structure corresponding to the output parameter configuration.
+- `sym_large`: Returns the raw calculated symmetry representation from `find_symmetry_groups` for `subspace_large`.
+"""
+function map_symmetry_groups(t_vals_small, subspace_small, subspace_large;
+    order=1, antihermitian=false, spin_symmetry=true, trans_x=true, trans_y=true, conserve_spin=true, omit_H_conj=true,
+    cache=Dict{Symbol,Any}())
+
+    if !haskey(cache, :setup_done)
+        lattice_small = subspace_small.lattice
+        lattice_large = subspace_large.lattice
+        Lx_small, Ly_small = size(lattice_small)
+        Lx_large, Ly_large = size(lattice_large)
+
+        # Create combinations indexers
+        indexer_small = CombinationIndexer(reduce(vcat, collect(sites(lattice_small))), get_subspace_info(subspace_small)...)
+        indexer_large = CombinationIndexer(reduce(vcat, collect(sites(lattice_large))), get_subspace_info(subspace_large)...)
+
+        # Generate t_keys (operators)
+        t_dict_small = create_randomized_nth_order_operator(order, indexer_small; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
+        t_keys_small = collect(keys(t_dict_small))
+
+        t_dict_large = create_randomized_nth_order_operator(order, indexer_large; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
+        t_keys_large = collect(keys(t_dict_large))
+
+        # Find symmetry groups
+        sym_small = find_symmetry_groups(t_keys_small, Lx_small, Ly_small;
+            trans_x=trans_x, trans_y=trans_y, spin_symmetry=spin_symmetry,
+            hermitian=!antihermitian, antihermitian=antihermitian)
+
+        sym_large = find_symmetry_groups(t_keys_large, Lx_large, Ly_large;
+            trans_x=trans_x, trans_y=trans_y, spin_symmetry=spin_symmetry,
+            hermitian=!antihermitian, antihermitian=antihermitian)
+
+        cache[:indexer_small] = indexer_small
+        cache[:indexer_large] = indexer_large
+        cache[:t_dict_small] = t_dict_small
+        cache[:t_dict_large] = t_dict_large
+        cache[:t_keys_small] = t_keys_small
+        cache[:t_keys_large] = t_keys_large
+        cache[:sym_small] = sym_small
+        cache[:sym_large] = sym_large
+        cache[:setup_done] = true
+    end
+
+    t_keys_small = cache[:t_keys_small]
+    t_keys_large = cache[:t_keys_large]
+    sym_small = cache[:sym_small]
+    sym_large = cache[:sym_large]
+
+    # Perform mapping
+    t_vals_large, index_mapping = _map_symmetry_groups(t_vals_small, sym_small, sym_large, t_keys_small, t_keys_large)
+
+    return t_vals_large, index_mapping, t_keys_large, sym_large
 end
