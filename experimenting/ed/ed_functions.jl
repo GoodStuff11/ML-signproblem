@@ -352,28 +352,38 @@ function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bo
     end
     return count
 end
-function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
+
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
+    # create_Sx! in momentum basis is exactly the same as position space,
+    # since S^x = \frac{1}{2} \sum_k (c^\dagger_{k\uparrow} c_{k\downarrow} + c^\dagger_{k\downarrow} c_{k\uparrow})
+    sorted_sites = sort(indexer.a)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
-                site_index = Set([site_index])
-                # println(conf[1])
-                # println(site_index)
-                # println(union(conf[1], site_index))
-                # println(indexer)
+                # Flip σ to 3-σ
+                # Annihilate σ, Create 3-σ
+                ops = [(site_index, σ, :annihilate), (site_index, 3 - σ, :create)]
+                sign = compute_jw_sign(conf, sorted_sites, ops)
+
                 if σ == 1
-                    i2 = index(indexer, setdiff(conf[1], site_index), union(conf[2], site_index))
+                    i2 = index(indexer, setdiff(conf[1], [site_index]), union(conf[2], [site_index]))
                 else
-                    i2 = index(indexer, union(conf[1], site_index), setdiff(conf[2], site_index))
+                    i2 = index(indexer, union(conf[1], [site_index]), setdiff(conf[2], [site_index]))
                 end
+
                 push!(rows, i1)
                 push!(cols, i2)
-                push!(vals, magnitude / 2)
+                push!(vals, magnitude / 2 * sign)
             end
         end
     end
 end
-function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; iequalsj::Bool=false, NN::Union{Missing,AbstractLattice}=missing)
+function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; iequalsj::Bool=false, NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false)
+    if momentum_basis
+        @warn "dense S_i^z S_j^z in momentum basis is not fully implemented for all J_ij patterns"
+        return
+    end
+
     if iequalsj
         create_chemical_potential!(rows, cols, vals, 1 / 4 * magnitude, indexer)
         create_hubbard_interaction!(rows, cols, vals, -1 / 2 * magnitude, false, indexer)
@@ -398,7 +408,11 @@ function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
         push!(vals, total / 4 * magnitude)
     end
 end
-function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing)
+function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false)
+    if momentum_basis
+        @warn "SiSj in momentum basis not fully implemented yet"
+        return
+    end
     # This is for i!=j
     # We want 0.5 * (S_i^+ S_j^- + S_i^- S_j^+)
     # This swaps spins: i_up j_down -> i_down j_up   OR   i_down j_up -> i_up j_down
@@ -410,17 +424,6 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
                     if !ismissing(NN) && !(site_index2 in neighbors(NN, site_index1))
                         continue
                     end
-
-                    # We are moving a spin σ from site1 to site2 (becoming 3-σ? No)
-                    # No, we are SWAPPING.
-                    # site1 starts with σ, ends with 3-σ.
-                    # site2 starts with 3-σ, ends with σ.
-
-                    # Operator: 
-                    # Annihilate (site1, σ)
-                    # Create (site1, 3-σ)
-                    # Annihilate (site2, 3-σ)
-                    # Create (site2, σ)
 
                     ops = [
                         (site_index2, σ, :create),
@@ -443,14 +446,61 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
             end
         end
     end
-    create_SziSzj!(rows, cols, vals, magnitude, indexer; iequalsj=false, NN=NN)
+    create_SziSzj!(rows, cols, vals, magnitude, indexer; iequalsj=false, NN=NN, momentum_basis=momentum_basis)
 end
-function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
-    # sum Si*Si
-    create_chemical_potential!(rows, cols, vals, 3 / 4 * magnitude, indexer)
-    create_hubbard_interaction!(rows, cols, vals, -3 / 2 * magnitude, false, indexer)
-    create_SiSj!(rows, cols, vals, magnitude, indexer)
-
+function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
+    # The algebraic form of total S^2 is invariant under any unitary single-particle basis transformation 
+    # (such as Fourier transform to momentum space) because it is a global SU(2) Casimir invariant. 
+    # Thus, the exact same configuration loop works perfectly for both position and momentum bases!
+    sorted_sites = sort(indexer.a)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+            sz = (length(conf[1]) - length(conf[2])) / 2.0
+            diagonal_val = sz * (sz + 1.0)
+            
+            # Add \sum_k n_{k \downarrow} (1 - n_{k \uparrow})
+            for k_down in conf[2]
+                if k_down ∉ conf[1]
+                    diagonal_val += 1.0
+                end
+            end
+            
+            # Now we add the S^- S^+ terms
+            for k_up_annihilate ∈ conf[1]
+                for k_down_annihilate ∈ conf[2]
+                    # Note S^+ annihilates down and creates up: c^\dagger_{k'\uparrow} c_{k'\downarrow}
+                    # So k' = k_down_annihilate. And we create up at k'.
+                    # S^- annihilates up and creates down: c^\dagger_{k\downarrow} c_{k\uparrow}
+                    # So k = k_up_annihilate. And we create down at k.
+                    k_up_create = k_down_annihilate
+                    k_down_create = k_up_annihilate
+                    
+                    if k_up_create != k_up_annihilate && k_up_create ∉ conf[1] && k_down_create ∉ conf[2]
+                        # creating k_up_create, k_down_create and annihilating k_up_annihilate, k_down_annihilate
+                        new_up = union(setdiff(conf[1], [k_up_annihilate]), [k_up_create])
+                        new_down = union(setdiff(conf[2], [k_down_annihilate]), [k_down_create])
+                        i2 = index(indexer, new_up, new_down)
+                        
+                        # operator: c^\dagger_{k\downarrow} c_{k\uparrow} c^\dagger_{k'\uparrow} c_{k'\downarrow}
+                        ops = [
+                            (k_down_create, 2, :create),
+                            (k_up_annihilate, 1, :annihilate),
+                            (k_up_create, 1, :create),
+                            (k_down_annihilate, 2, :annihilate)
+                        ]
+                        sign = compute_jw_sign(conf, sorted_sites, ops)
+                        push!(rows, i1)
+                        push!(cols, i2)
+                        push!(vals, magnitude * sign)
+                    end
+                end
+            end
+            
+        if abs(diagonal_val) > 1e-12
+            push!(rows, i1)
+            push!(cols, i1)
+            push!(vals, magnitude * diagonal_val)
+        end
+    end
 end
 function general_single_body!(
     rows::Vector{Int},
@@ -659,7 +709,7 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     return val < 1e-10
 end
 function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer;
-    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false) where T
+    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false, conserve_momentum::Bool=false) where T
     # function creates a dictionary of free parameters in the form of a dictionary. 
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
@@ -669,9 +719,29 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
     all_ops(label) = combinations([(s, σ, label) for s in site_list for σ in 1:2], n)
     equal_spin(create, annihilate) = sum((σ * 2 - 3) for (s, σ, _) in create) == sum((σ * 2 - 3) for (s, σ, _) in annihilate)
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] <= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
+    
     for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
         key = [ops_create; ops_annihilate]
-        if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate))
+
+        # We must conserve momentum if the user specified conserve_momentum=true
+        # OR if the indexer is explicitly restricted to a momentum sector (which means non-conserving ops will jump out of the Hilbert space)
+        must_conserve_momentum = conserve_momentum || (!isnothing(indexer.k) && !isnothing(indexer.lattice_dims))
+        
+        if must_conserve_momentum
+            tot_k = zeros(Int, length(indexer.lattice_dims))
+            for (s, σ, _) in ops_create
+                tot_k .+= (s.coordinates .- 1)
+            end
+            for (s, σ, _) in ops_annihilate
+                tot_k .-= (s.coordinates .- 1)
+            end
+            tot_k = tot_k .% indexer.lattice_dims
+            is_momentum_conserved = all(tot_k .== 0)
+        else
+            is_momentum_conserved = true
+        end
+
+        if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved
             if key ∉ keys(t_dict)
                 t_dict[key] = (2 * rand() - 1) / 2 * magnitude
             else
@@ -1046,10 +1116,51 @@ function reflect_y(config, Lx)
 end
 
 
-function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer)
+function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer; momentum_basis::Bool=false)
     if isa(t, Number)
         t = [t]
     end
+    
+    if momentum_basis
+        # In momentum basis, the hopping H_t is diagonal!
+        # \epsilon_k = -2t (\sum_d \cos(2\pi k_d / L_d))
+        # Note: assuming simple cubic/square lattice where order 1 is nearest neighbor, order 2 is NNN etc.
+        # This requires knowing the lattice dimensions. 
+        # For simplicity, if t is a number, we assume nearest neighbor.
+        dims = indexer.lattice_dims
+        for (i, conf) in enumerate(indexer.inv_comb_dict)
+            energy = 0.0
+            for σ ∈ [1, 2]
+                for k_coord ∈ conf[σ]
+                    # k_coord.coordinates are 1-indexed. k_i \in \{1, ..., L\}
+                    # The actual momentum is p_j = 2\pi (k_j - 1) / L_j
+                    for d in 1:length(dims)
+                        p_d = 2 * π * (k_coord.coordinates[d] - 1) / dims[d]
+                        # For order=1 (nearest neighbor), the band structure is -2t \sum \cos(p_d)
+                        if length(t) >= 1
+                            energy += -2 * t[1] * cos(p_d)
+                        end
+                        if length(t) >= 2
+                            # For order=2 (next nearest neighbor on 2D square), assuming diagonal hops
+                            # -4t' \cos(p_x) \cos(p_y) etc... but this might depend on the lattice.
+                            # We will just do order 1 for now if momentum_basis is used, or print a warning.
+                            if d < length(dims)
+                                p_d_next = 2 * π * (k_coord.coordinates[d+1] - 1) / dims[d+1]
+                                energy += -4 * t[2] * cos(p_d) * cos(p_d_next)
+                            end
+                        end
+                    end
+                end
+            end
+            if abs(energy) > 1e-12
+                push!(rows, i)
+                push!(cols, i)
+                push!(vals, energy)
+            end
+        end
+        return
+    end
+
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index1 ∈ conf[σ]
@@ -1080,7 +1191,55 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
     end
 end
 
-function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer)
+function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer; momentum_basis::Bool=false)
+    if momentum_basis
+        # H_U = (U/N) \sum_{k,k',q} c^\dagger_{k-q,\uparrow} c_{k,\uparrow} c^\dagger_{k'+q,\downarrow} c_{k',\downarrow}
+        # N is the number of sites.
+        N = isnothing(indexer.lattice_dims) ? length(indexer.a) : prod(indexer.lattice_dims)
+        V = U / N
+        sorted_sites = sort(indexer.a)
+        
+        for (i1, conf) in enumerate(indexer.inv_comb_dict)
+            for k_up_annihilate ∈ conf[1]
+                for k_down_annihilate ∈ conf[2]
+                    for k_up_create ∈ indexer.a
+                        # momentum conservation: k_up_create + k_down_create = k_up_annihilation + k_down_annihilation
+                        # so k_down_create = k_up_annihilate + k_down_annihilate - k_up_create (mod dims)
+                        k_down_create_coords = mod.(k_up_annihilate.coordinates .+ k_down_annihilate.coordinates .- k_up_create.coordinates .- 1, indexer.lattice_dims) .+ 1
+                        k_down_create = Coordinate(k_down_create_coords...)
+
+                        # ensure k_up_create and k_down_create are valid
+                        if k_up_create == k_up_annihilate && k_down_create == k_down_annihilate
+                            # diagonal term
+                            push!(rows, i1)
+                            push!(cols, i1)
+                            push!(vals, V)
+                        elseif k_up_create ∉ conf[1] && k_down_create ∉ conf[2]
+                            # off-diagonal
+                            # creating k_up_create, k_down_create and annihilating k_up_annihilate, k_down_annihilate
+                            new_up = union(setdiff(conf[1], [k_up_annihilate]), [k_up_create])
+                            new_down = union(setdiff(conf[2], [k_down_annihilate]), [k_down_create])
+                            i2 = index(indexer, new_up, new_down)
+                            
+                            # operator ordering: c^\dagger_{up} c_{up} c^\dagger_{down} c_{down}
+                            ops = [
+                                (k_up_create, 1, :create),
+                                (k_up_annihilate, 1, :annihilate),
+                                (k_down_create, 2, :create),
+                                (k_down_annihilate, 2, :annihilate)
+                            ]
+                            sign = compute_jw_sign(conf, sorted_sites, ops)
+                            push!(rows, i1)
+                            push!(cols, i2)
+                            push!(vals, V * sign)
+                        end
+                    end
+                end
+            end
+        end
+        return
+    end
+
     # this corresponds to only n_{i up} n_{i down}
     if half_filling
         for (i, conf) in enumerate(indexer.inv_comb_dict)
@@ -1106,7 +1265,7 @@ function create_chemical_potential!(rows::Vector{Int}, cols::Vector{Int}, vals::
         push!(vals, μ * (length(conf[1]) + length(conf[2]))) #+ 1e-7*sum(conf[1]) + 43e-7*sum(conf[2]) 
     end
 end
-function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
+function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
     sorted_sites = sort(indexer.a)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         i2 = index(indexer, conf[2], conf[1])
@@ -1116,34 +1275,6 @@ function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
             in_up = site in conf[1]
             in_down = site in conf[2]
             if in_up && in_down
-                # Doublon: swap u and d. c^dag_u c^dag_d c_d c_u
-                # Or simply: destroy u, destroy d, create d, create u
-                # But we want to map u->d, d->u.
-                # Actually, parity operator P = prod (c^dag_d c_u + c^dag_u c_d + ...)
-                # On doublon: (c^dag_d c_u)(c^dag_u c_d) is zero? No.
-                # P = (c^dag_d c_u + c^dag_u c_d) c^dag_u c^dag_d |0>
-                # = c^dag_d c_u c^dag_u c^dag_d |0> (second term is 0)
-                # = c^dag_d (1 - c^dag_u c_u) c^dag_d |0>
-                # = c^dag_d c^dag_d |0> = 0.
-                # WAIT. Parity operator KILLs doublons?
-                # Pauli x: |0> -> 0, |1> -> |0>, |0> -> |1>, |1> -> 0 ? NO.
-                # Pauli x is for spin 1/2.
-                # |up> -> |down>. |down> -> |up>.
-                # This operator is defined on SINGLE spin.
-                # If we have doublons, we have TWO spins?
-                # Hubbard model site with 2 electrons is a precise state.
-                # Usually we define P = prod_j (c^dag_j,down c_j,up + c^dag_j,up c_j,down + (c^dag_d c^dag_u c_u c_d)?).
-                # User code said: `new_conf1 = conf[2]`, `new_conf2 = conf[1]`.
-                # This SWAPS populations.
-                # |ud> -> |ud>.
-                # This preserves doublons.
-                # So the operator is NOT prod sigma_x (which kills doublons).
-                # It is the "SWAP SPINS" operator.
-                # Physical meaning: map spin up to spin down everywhere.
-                # For doublons: u->d, d->u. Result is d, u. Still doublon.
-                # Sign?
-                # We simply destroy u, destroy d, create u, create d?
-                # Yes.
                 push!(ops, (site, 1, :annihilate))
                 push!(ops, (site, 2, :annihilate))
                 push!(ops, (site, 2, :create))
@@ -1210,73 +1341,71 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
         push!(vals, magnitude * sign)
     end
 end
-function create_L2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
-    # sum Sz^2 operator
-    create_hubbard_interaction!(rows, cols, vals, magnitude, false, indexer)
-    for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        Nup = length(conf[1])
-        Ndown = length(conf[2])
-        n = length(indexer.a)
-        push!(rows, i1)
-        push!(cols, i1)
-        push!(vals, magnitude * ((Nup + Ndown - n)^2 / 4 - (Nup + Ndown - n)))
 
-        # L+L-  +  L-L+
-        for site_index1 ∈ intersect(conf[1], conf[2])
-            for site_index2 ∈ setdiff(indexer.a, union(conf[1], conf[2]))
-                i2 = index(indexer, replace(conf[1], site_index1 => site_index2), replace(conf[2], site_index1 => site_index2))
-                push!(rows, i1)
-                push!(cols, i2)
-                push!(vals, magnitude * (-1)^(sum(site_index1.coordinates) + sum(site_index2.coordinates)))
-            end
-        end
-    end
-end
-
-function create_operator(Hs::HubbardSubspace, op; kind=1)
+function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false)
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(reduce(vcat, collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(Hs)
     rows = Int[]
     cols = Int[]
     vals = Float64[]
 
     #insert stuff here
-    if op == :σ
-        mapping = reflection_mapping(Hs.lattice, kind)
-        create_transform!(rows, cols, vals, 1.0, mapping, indexer)
-    elseif op == :Sx
-        create_Sx!(rows, cols, vals, 1.0, indexer)
+    if op == :Sx
+        create_Sx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
     elseif op == :∏σx
-        create_∏σx!(rows, cols, vals, 1.0, indexer)
+        create_∏σx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
     elseif op == :S2
-        create_S2!(rows, cols, vals, 1.0, indexer)
-    elseif op == :L2
-        create_L2!(rows, cols, vals, 1.0, indexer)
+        create_S2!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
     elseif op == :T
-        mapping = translation_mapping(Hs.lattice, kind)
-        create_transform!(rows, cols, vals, 1.0, mapping, indexer)
+        if momentum_basis
+            # Translation operator is exactly diagonal in momentum basis.
+            # T(\Delta r) |k> = exp(-i k \cdot \Delta r) |k>
+            # kind should specify the direction of translation, e.g. 1 for x, 2 for y.
+            shift = zeros(Int, length(size(Hs.lattice)))
+            shift[kind] = 1 # shift by one site in 'kind' direction
+            
+            for (i, conf) in enumerate(indexer.inv_comb_dict)
+                total_phase = 0.0
+                for σ ∈ [1, 2]
+                    for k_coord ∈ conf[σ]
+                        p_val = 2 * π * (k_coord.coordinates[kind] - 1) / size(Hs.lattice)[kind]
+                        total_phase += p_val
+                    end
+                end
+                push!(rows, i)
+                push!(cols, i)
+                push!(vals, exp(1im * total_phase)) # Note: values will be complex now, should convert sparse matrix type if so, but sparse() handles it below
+            end
+        else
+            mapping = translation_mapping(Hs.lattice, kind)
+            create_transform!(rows, cols, vals, 1.0, mapping, indexer)
+        end
     end
 
-    H = sparse(rows, cols, vals, dim, dim)
-
+    H = sparse(rows, cols, promote_type(eltype(vals), Float64)[v for v in vals], dim, dim)
     return H
 end
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing)
+
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing, momentum_basis::Bool=false)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
     if isnothing(indexer)
-        indexer = CombinationIndexer(reduce(vcat, collect(sites(Hs.lattice))), get_subspace_info(Hs)...)
+        indexer = CombinationIndexer(Hs)
     end
     rows = Int[]
     cols = Int[]
     vals = Float64[]
 
+    if !(Hs.k === nothing)
+        momentum_basis = true
+    end
+
     #Constructs the sparse hopping Hamiltonian matrix \sum_{<i,j>} c^\dagger_i c_j.
-    if Hm.t > 0
-        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer)
+    if Hm.t > 0 || (Hm.t isa AbstractArray)
+        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer; momentum_basis=momentum_basis)
     end
     if Hm.U > 0
-        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer)
+        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer; momentum_basis=momentum_basis)
     end
     if Hm.μ > 0
         create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
@@ -1297,7 +1426,7 @@ end
 function create_Heisenberg(t, J, Hs::HubbardSubspace)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(collect(1:prod(size(Hs.lattice))), get_subspace_info(Hs)...)
+    indexer = CombinationIndexer(Hs)
 
     rows = Int[]
     cols = Int[]
@@ -2025,8 +2154,8 @@ function map_symmetry_groups(t_vals_small, subspace_small, subspace_large;
         Lx_large, Ly_large = size(lattice_large)
 
         # Create combinations indexers
-        indexer_small = CombinationIndexer(reduce(vcat, collect(sites(lattice_small))), get_subspace_info(subspace_small)...)
-        indexer_large = CombinationIndexer(reduce(vcat, collect(sites(lattice_large))), get_subspace_info(subspace_large)...)
+        indexer_small = CombinationIndexer(subspace_small)
+        indexer_large = CombinationIndexer(subspace_large)
 
         # Generate t_keys (operators)
         t_dict_small = create_randomized_nth_order_operator(order, indexer_small; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)

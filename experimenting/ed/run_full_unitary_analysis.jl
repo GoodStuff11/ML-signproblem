@@ -76,7 +76,7 @@ function (@main)(ARGS)
     degen_rm_U = create_consistent_basis(H, ops;reference_index=reference_index)
 
     # dim = get_subspace_dimension(subspace)
-    indexer = CombinationIndexer(reduce(vcat,collect(sites(subspace.lattice))), get_subspace_info(subspace)...)
+    indexer = CombinationIndexer(subspace)
     difference_dict = collect_all_conf_differences(indexer)
 
     data = full_unitary_analysis(degen_rm_U,difference_dict, U_values)

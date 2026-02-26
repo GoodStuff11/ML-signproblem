@@ -352,8 +352,12 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
     antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=0.001,
     initial_coefficients::Vector{Any}=Any[], initialization_samples::Int=20,
-    operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}()
+    operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}(),
+    momentum_basis::Bool=false
 )
+    if momentum_basis
+        use_symmetry = false # Disable spatial symmetries when working directly in momentum space
+    end
     # spin_conserved is only true when using (N↑, N↓) and not N
     max_order_scheme = isempty(optimization_scheme) ? 0 : maximum(optimization_scheme)
     max_order_cache = isempty(operator_cache) ? 0 : maximum(keys(operator_cache))
@@ -396,7 +400,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return operator_cache[order]
         end
         # compute operator structure, initial coefficients and operators
-        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false)
+        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
         t_keys = collect(keys(t_dict))
         param_index_map = build_param_index_map(ops_list, t_keys)

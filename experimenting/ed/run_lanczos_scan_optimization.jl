@@ -22,7 +22,7 @@ include("utility_functions.jl")
 
 function (@main)(ARGS)
     # folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/N=(3, 3)_3x2"
-    folder = "data/N=(4, 4)_4x2"
+    folder = "data/N=(3, 3)_3x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -39,7 +39,7 @@ function (@main)(ARGS)
     # Extract N for saving
     N = meta_data["electron count"]
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
-    use_symmetry = ARGS[1] == "true"
+    use_symmetry = length(ARGS) > 0 ? ARGS[1] == "true" : false
 
     # --- New Logic: Find lowest energy sector ---
     min_E = Inf
@@ -59,20 +59,23 @@ function (@main)(ARGS)
     # Select the eigenvectors for this sector
     # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
     target_vecs = all_full_eig_vecs[k_min]
+    if indexer isa Vector
+        indexer = indexer[k_min]
+    end
 
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "u_range" => 50:length(U_values),
+        "u_range" => 25:length(U_values),
         "optimization_scheme" => [2],
         "use symmetry" => use_symmetry
     )
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
-        maxiters=50, gradient=:adjoint_gradient,
+        maxiters=200, gradient=:adjoint_gradient,
         optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
+        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
 
 
     return 0

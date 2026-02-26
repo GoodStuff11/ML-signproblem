@@ -24,7 +24,7 @@ subspace_large = HubbardSubspace(2, 2, lattice_large)
 
 println("Generating dummy t_vals_small...")
 Lx_small, Ly_small = size(lattice_small)
-indexer_small = CombinationIndexer(reduce(vcat, collect(sites(lattice_small))), get_subspace_info(subspace_small)...)
+indexer_small = CombinationIndexer(subspace_small)
 t_dict_small = create_randomized_nth_order_operator(1, indexer_small; omit_H_conj=true, conserve_spin=true)
 t_keys_small = collect(keys(t_dict_small))
 sym_small = find_symmetry_groups(t_keys_small, Lx_small, Ly_small; trans_x=true, trans_y=true, spin_symmetry=true, hermitian=true)
