@@ -424,7 +424,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             end
             sym_data = (inv_param_map, parameter_mapping, parity)
         else
-            for k in collect(keys(t_dict))
+            for k in t_keys
                 _rows, _cols, _signs, _ = build_n_body_structure(Dict(k => 1.0), indexer)
                 if antihermitian
                     push!(ops, make_antihermitian(sparse(_rows, _cols, _signs, dim, dim)))
@@ -437,7 +437,6 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
 
         cache_entry = Dict(
-            :t_dict => t_dict,
             :rows => rows,
             :cols => cols,
             :signs => signs,
@@ -447,7 +446,6 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             :sym_data => sym_data,
             :ops => ops,
             :parameter_mapping => parameter_mapping,
-            :parity => parity,
             :parity => parity
         )
         operator_cache[order] = cache_entry
@@ -491,7 +489,6 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         struct_data = ensure_operator_structure!(order)
 
         # Extract variables for convenience from struct_data
-        t_dict = struct_data[:t_dict]
         rows = struct_data[:rows]
         cols = struct_data[:cols]
         signs = struct_data[:signs]
@@ -618,7 +615,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 if use_symmetry
                     t_sample = real(rand(typeof(signs[1]), length(sym_data[1])) * mag)
                 else
-                    t_sample = (2 * rand(length(t_dict)) .- 1) * mag
+                    t_sample = (2 * rand(length(t_keys)) .- 1) * mag
                 end
 
                 res = Zygote.withgradient(t -> f_adjoint(t, p_args), t_sample)
@@ -645,7 +642,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 if use_symmetry
                     t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
                 else
-                    t_vals = real(collect(values(t_dict)))
+                    t_vals = (2 * rand(length(t_keys)) .- 1) * magnitude_esimate
                 end
             else
                 best_t = nothing
@@ -668,7 +665,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             if use_symmetry
                 t_vals = real(rand(typeof(signs[1]), length(sym_data[1])) * magnitude_esimate)
             else
-                t_vals = real(collect(values(t_dict)))
+                t_vals = (2 * rand(length(t_keys)) .- 1) * magnitude_esimate
             end
         end
 
@@ -795,9 +792,12 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         "coefficients" => [], "coefficient_labels" => nothing, "param_mapping" => nothing, "parities" => nothing)
 
     shared_cache = Dict{Int,Dict{Symbol,Any}}()
-    current_coeffs = initial_coefficients
+    if haskey(instructions, "load_file")
+        current_coeffs = load(instructions["load_file"])["dict"]["coefficients"]
+    else
+        current_coeffs = initial_coefficients
+    end
 
-    # u_indices = instructions["u_range"]
     u_indices = instructions["u_range"]
 
     if !isnothing(save_folder)
@@ -852,7 +852,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         if !isnothing(save_folder)
             iter_dict = Dict(
                 "u_idx" => u_idx,
-                "coefficient_values" => coefficient_values,
+                "coefficients" => coefficient_values,
                 "metrics" => metrics,
                 "norm1" => [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices],
                 "norm2" => [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices]

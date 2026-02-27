@@ -1,0 +1,200 @@
+┌ Warning: some parameters could not be resolved for type OptimizationFunction{true,AutoZygote,JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}},Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME),Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing}; reading as OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}
+└ @ JLD2 ~/.julia/packages/JLD2/hbsZG/src/data/reconstructing_datatypes.jl:580
+┌ Warning: some parameters could not be resolved for type OptimizationFunction{true,AutoZygote,JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}},JLD2.ReconstructedMutable{Symbol("#grad#16{Nothing,OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol(\"#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}\"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing},AutoZygote}"), (:p, :f, :adtype, :prep_grad), Tuple{Nothing, OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, AutoZygote, Any}},Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME),Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing,Nothing}; reading as OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, JLD2.ReconstructedMutable{Symbol("#grad#16{Nothing,OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol(\"#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}\"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing},AutoZygote}"), (:p, :f, :adtype, :prep_grad), Tuple{Nothing, OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, AutoZygote, Any}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}
+└ @ JLD2 ~/.julia/packages/JLD2/hbsZG/src/data/reconstructing_datatypes.jl:580
+┌ Warning: some parameters could not be resolved for type OptimizationCache{LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}},true,OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, JLD2.ReconstructedMutable{Symbol("#grad#16{Nothing,OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol(\"#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}\"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing},AutoZygote}"), (:p, :f, :adtype, :prep_grad), Tuple{Nothing, OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, AutoZygote, Any}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing},OptimizationBase.ReInitCache{Vector{Float64}, Nothing},Nothing,Nothing,Nothing,Nothing,Nothing,Bool,JLD2.ReconstructedMutable{Symbol("#callback#155{Vector{Any}}"), (:tmp_losses,), Tuple{Any}},Nothing,OptimizationVerbosity{InfoLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, CustomLevel}}; reading as OptimizationCache{LBFGS{Nothing, LineSearches.InitialStatic{Float64}, LineSearches.HagerZhang{Float64, Base.RefValue{Bool}}, Returns{Nothing}}, true, OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, JLD2.ReconstructedMutable{Symbol("#grad#16{Nothing,OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol(\"#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}\"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing},AutoZygote}"), (:p, :f, :adtype, :prep_grad), Tuple{Nothing, OptimizationFunction{true, AutoZygote, JLD2.ReconstructedMutable{Symbol("#f_adjoint#154{Bool,Vector{ComplexF64},Vector{ComplexF64},Int64,Nothing,Nothing,Vector{Any},Vector{Int64},Vector{Float64},Vector{Int64},Vector{Int64}}"), (:use_symmetry, :antihermitian, :state1, :state2, :dim, :parity, :parameter_mapping, :ops, :param_index_map, :signs, :cols, :rows), Tuple{Any, Bool, Any, Any, Int64, Nothing, Nothing, Vararg{Any, 5}}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, AutoZygote, Any}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, OptimizationBase.ReInitCache{Vector{Float64}, Nothing}, Nothing, Nothing, Nothing, Nothing, Nothing, Bool, JLD2.ReconstructedMutable{Symbol("#callback#155{Vector{Any}}"), (:tmp_losses,), Tuple{Any}}, Nothing, OptimizationVerbosity{InfoLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, WarnLevel, CustomLevel}}
+└ @ JLD2 ~/.julia/packages/JLD2/hbsZG/src/data/reconstructing_datatypes.jl:580
+Meta data:
+Dict{String, Any} with 8 entries:
+  "U_values" => [1.0e-5, 0.001, 0.0013434, 0.00180472, 0.00242446, 0.00325702, 0.00437548, 0.00587802, 0.00789652, 0.0106082, 0.014251, 0.0191448, 0.0257191, 0.0345511, 0.0464159, 0.0623551, 0.0837678, 0.112534, 0.151178, 0.203092, 0.272833, 0.366524, 0.492388, 0.661474, 0.888624, 1.19378, 1.60372, 2.1, 2.15443, 2.46316, 2.82632, 2.89427, 3.18947, 3.55263, 3.88816, 3.91579, 4.27895, 4.64211, 5.00526, 5.22335, 5.36842, 5.73158, 6.09474, 6.45789, 6.82105, 7.01704, 7.18421, 7.54737, 7.91053, 8.27368, 8.63684, 9.0, 9.42668, 12.6638, 17.0125, 22.8546, 30.7029, 41.2463, 55.4102, 74.438, 100.0]
+  "maxiters" => 200
+  "optimizer" => "BFGS"
+  "sites" => "3x2"
+  "solver" => "Lanczos"
+  "basis" => "adiabatic"
+  "bc" => "periodic"
+  "electron count" => (3, 3)
+Selected lowest energy symmetry sector: 1 with Energy -11.999985000011588
+
+--- Scanning U index: 29 ---
+Initial loss: 0.09326063116170868
+Dimension: 68
+COMPUTED MATRICES
+  0.227847 seconds (748.80 k allocations: 35.584 MiB, 98.89% compilation time)
+  0.006570 seconds (173.72 k allocations: 19.504 MiB, 36.05% compilation time)
+Parameter count: 180
+Solving with GradientDescent...
+loss=0.21299639560447348 avg_coef=0.038144022555563095 gradient=3.3978745407488846 relative-change=2480.897503775812 curvature=0.2223436530169619
+loss=0.08964271087669407 avg_coef=0.033879447426599534 gradient=0.5039485358803504 relative-change=130.9991628849964 curvature=-0.006204327102449385
+loss=0.08770865425103525 avg_coef=0.03455962518917714 gradient=0.47302882839341465 relative-change=5.837923073333227 curvature=-0.00977515240109531
+loss=0.0852106217594858 avg_coef=0.036474535048141445 gradient=0.864116506632197 relative-change=-50.51364133739967 curvature=-0.014040939959592933
+loss=0.08064998693870762 avg_coef=0.03736533596239795 gradient=0.7684927070497456 relative-change=-27.174391624419968 curvature=-0.021371634862293903
+loss=0.07241818533426159 avg_coef=0.04115237684800211 gradient=1.7155826501998033 relative-change=-853.3031662377323 curvature=-0.031246491624178235
+loss=0.061679816750912164 avg_coef=0.043063194938474936 gradient=1.0371433693335292 relative-change=27.176127694480908 curvature=-0.031764039125064564
+loss=0.05379954854895974 avg_coef=0.04521523426227902 gradient=1.1728661811237429 relative-change=-103.34015522121733 curvature=-0.03888849550295114
+loss=0.048038987380378595 avg_coef=0.047031103232400215 gradient=0.7911010606455935 relative-change=-21.423105097042498 curvature=-0.023995101263868883
+loss=0.04317355195935657 avg_coef=0.04939371691270622 gradient=1.0534979852520763 relative-change=6.598107962162667 curvature=-0.025229189325409213
+loss=0.038879660938397786 avg_coef=0.05047371266812938 gradient=0.7273026451598587 relative-change=-20.92959123102854 curvature=-0.009440912072986845
+  5.699994 seconds (43.08 M allocations: 2.354 GiB, 6.17% gc time, 95.35% compilation time)
+Solving with LBFGS...
+loss=0.038879660938397786 avg_coef=0.05047371266812938 gradient=0.7273026451598587 relative-change=-20.92959123102854 curvature=-0.009440912072986845
+loss=0.03413010671166494 avg_coef=0.05253458506805975 gradient=1.0446535124197145 relative-change=-22.20794917250446 curvature=-0.01539901839371884
+loss=0.014997409537636175 avg_coef=0.06230321975551011 gradient=0.663540991937659 relative-change=6.221580949299333 curvature=0.04456684979151979
+loss=0.010909284233570626 avg_coef=0.06397545842839504 gradient=0.5205804036642634 relative-change=-325.70102392942334 curvature=0.05321458226265697
+loss=0.005951361697053459 avg_coef=0.05895255763725572 gradient=0.4294020385233108 relative-change=-42.423194182027515 curvature=-0.0014372457271465261
+loss=0.004434152752868625 avg_coef=0.058388115068588105 gradient=0.27092079090099996 relative-change=-8.064228742153517 curvature=0.0066166742661595244
+loss=0.0034840252852263998 avg_coef=0.05730116959247171 gradient=0.2717149314744333 relative-change=11.512525504931542 curvature=0.0002158758907190874
+loss=0.0022161631176558227 avg_coef=0.05746934620116213 gradient=0.1901425596686938 relative-change=1.441857685760217 curvature=0.0039815219414757585
+loss=0.0018335467617979218 avg_coef=0.057417509403862775 gradient=0.15440498664741223 relative-change=1.7051168088915731 curvature=0.0012302114720679882
+loss=0.001588137872713835 avg_coef=0.05730386069460661 gradient=0.13454758955204016 relative-change=-2.5361310278016496 curvature=-0.0012414225667367774
+loss=0.0012389837922983649 avg_coef=0.05864748979300552 gradient=0.1251682033356731 relative-change=1.1100875422752732 curvature=0.0038606704801282146
+  0.838956 seconds (5.25 M allocations: 558.445 MiB, 3.17% gc time, 65.18% compilation time)
+Solving with GradientDescent...
+loss=0.0012389837922983649 avg_coef=0.05864748979300552 gradient=0.1251682033356731 relative-change=1.1100875422752732 curvature=0.0038606704801282146
+loss=0.0011778390944368056 avg_coef=0.0583802734326982 gradient=0.10152823554848167 relative-change=-0.14130374788994002 curvature=-0.0008303693438969521
+loss=0.0011354931621430087 avg_coef=0.05843714120871072 gradient=0.09297629568388222 relative-change=1.4181494308296625 curvature=0.003304498419713654
+loss=0.001103014086526466 avg_coef=0.058223315420819245 gradient=0.0858353318113428 relative-change=0.17959766393962473 curvature=-0.000741842316398084
+loss=0.001072157024559539 avg_coef=0.058274439587361705 gradient=0.08216145567919586 relative-change=1.911593198073844 curvature=0.0027997836116462004
+loss=0.0010474193612368676 avg_coef=0.058096191058225444 gradient=0.07674754924180335 relative-change=3.426160054682234 curvature=-0.0007715359395640243
+loss=0.0010226412048577327 avg_coef=0.05814884624579173 gradient=0.07482527013696544 relative-change=-7.561325236149782 curvature=0.0024222679262751864
+loss=0.0010023789598576638 avg_coef=0.05799972440010049 gradient=0.0702829663287836 relative-change=-0.27714277864015285 curvature=-0.0008157189359667786
+loss=0.0009813347137839212 avg_coef=0.058054209672734836 gradient=0.069744218708756 relative-change=0.03288240023565774 curvature=0.002145840329803018
+loss=0.0009639223401901598 avg_coef=0.05792305814685525 gradient=0.06536015247002075 relative-change=-0.10392788877945659 curvature=-0.0008523631561260606
+loss=0.0009453773617991157 avg_coef=0.05797863059829929 gradient=0.06604598647108671 relative-change=0.44734237720718867 curvature=0.0019416119112124967
+  0.241856 seconds (1.37 M allocations: 318.465 MiB, 4.53% gc time)
+Solving with LBFGS...
+loss=0.0009453773617991157 avg_coef=0.05797863059829929 gradient=0.06604598647108671 relative-change=0.44734237720718867 curvature=0.0019416119112124967
+loss=0.0009299389521219004 avg_coef=0.05786010722984069 gradient=0.06177823782075426 relative-change=-0.020829563278227953 curvature=-0.0008835940166921161
+loss=0.0006081991107278473 avg_coef=0.05701770655778795 gradient=0.05835644922525716 relative-change=1.2626578334461613 curvature=-0.0007569711014794684
+loss=0.0003848479162978924 avg_coef=0.05818473864819667 gradient=0.05893067587115935 relative-change=1.9656834541271764 curvature=0.0006629861379930771
+loss=0.0002891802067436222 avg_coef=0.058144600209233656 gradient=0.06244818483758613 relative-change=-3.198756279832428 curvature=0.0016313255824419745
+loss=0.00022935874692853186 avg_coef=0.05816816959695672 gradient=0.0417199855192821 relative-change=-0.19618539002838123 curvature=0.0011220000910503395
+loss=0.00021065441510292882 avg_coef=0.0580716605823026 gradient=0.0375384789982005 relative-change=0.03211294672913768 curvature=0.00033708661302570475
+loss=0.0001760969337405438 avg_coef=0.057927902999334376 gradient=0.042202775929918765 relative-change=-0.4910253136956457 curvature=-0.0013038298806912786
+loss=0.00013106991565159376 avg_coef=0.05778688245780138 gradient=0.0430884208360547 relative-change=0.16267669150780747 curvature=0.0001435646912652644
+loss=0.0001024811825138805 avg_coef=0.05760416861755385 gradient=0.023625975598283208 relative-change=-55.01151446046634 curvature=0.001263119437894428
+loss=9.510670487100636e-5 avg_coef=0.05747806054610062 gradient=0.016477664826455962 relative-change=-8.756121243873162 curvature=0.0006152162274548575
+  0.301313 seconds (1.71 M allocations: 397.952 MiB, 3.17% gc time)
+Finished order 2
+
+--- Scanning U index: 30 ---
+Initial loss: 0.11516552272485836
+Dimension: 68
+COMPUTED MATRICES
+Parameter count: 180
+Solving with GradientDescent...
+loss=0.0014819053641824675 avg_coef=0.05747806054610062 gradient=0.5440030591086014 relative-change=291.17915662079116 curvature=0.0003434047509978648
+loss=0.0006311354628953936 avg_coef=0.05754421917733331 gradient=0.20515001431903038 relative-change=-3.6058613098909666 curvature=-0.01624936317210534
+loss=0.00028801524989274796 avg_coef=0.058440238707525155 gradient=0.1694153314621593 relative-change=-12.476099635492494 curvature=0.0010108822396292481
+loss=0.00019986612948519333 avg_coef=0.05840868856166318 gradient=0.06396779388240914 relative-change=-11.231115545688057 curvature=-0.0049888811400276185
+loss=0.00016085181415004257 avg_coef=0.05868324627867955 gradient=0.06004170962988587 relative-change=5.167961665031192 curvature=0.0009869474122209114
+loss=0.0001520764923783613 avg_coef=0.05866144687276664 gradient=0.02413482123039936 relative-change=6.66955369553329 curvature=-0.001111802160150102
+loss=0.00014578438839518704 avg_coef=0.058740143381258804 gradient=0.02981480857123174 relative-change=0.8749850574467616 curvature=0.0010917742379677096
+loss=0.00014401730172952654 avg_coef=0.05871388115393035 gradient=0.014396791490248976 relative-change=-0.8087867923491977 curvature=-5.131149683181374e-5
+loss=0.00014193234506754138 avg_coef=0.058701250776999066 gradient=0.02748968392761516 relative-change=1.2525585166518205 curvature=0.001143372708699096
+loss=0.000140633746330443 avg_coef=0.0586742337170487 gradient=0.012955892986213611 relative-change=0.564007267838421 curvature=9.950922706000891e-5
+loss=0.0001390896115037732 avg_coef=0.05864390725866702 gradient=0.026470491953353534 relative-change=-0.4881534976662363 curvature=0.0011626212397411312
+  0.295825 seconds (1.50 M allocations: 348.260 MiB, 11.02% gc time)
+Solving with LBFGS...
+loss=0.0001390896115037732 avg_coef=0.05864390725866702 gradient=0.026470491953353534 relative-change=-0.4881534976662363 curvature=0.0011626212397411312
+loss=0.0001378848863533566 avg_coef=0.05861566873719986 gradient=0.012336491812070229 relative-change=-0.7667262971066593 curvature=0.00013884477771185417
+loss=0.00011205943070402569 avg_coef=0.05701216023787016 gradient=0.04391605448309825 relative-change=0.40166952204735684 curvature=0.000310467758776201
+loss=0.00010376121445276887 avg_coef=0.05648714920024979 gradient=0.029755353073578874 relative-change=7.102700472767561 curvature=0.00016117964260712163
+loss=9.670293306518474e-5 avg_coef=0.05587624593715754 gradient=0.040987395247769204 relative-change=0.6925496883654656 curvature=0.001677894912189968
+loss=9.289264913969753e-5 avg_coef=0.05502331040983336 gradient=0.025962848578876294 relative-change=-0.46066298043803333 curvature=-0.0005542659170134454
+loss=7.977816426929518e-5 avg_coef=0.05384783259555529 gradient=0.039387283222801044 relative-change=0.7132872948596388 curvature=0.0005336315080575549
+loss=6.547259190126109e-5 avg_coef=0.05277385901565469 gradient=0.02109374321407843 relative-change=-16.079834237081965 curvature=0.00031645850424053326
+loss=6.0965770142695774e-5 avg_coef=0.052444432289613464 gradient=0.025198316197690904 relative-change=0.43401495477412894 curvature=0.00024212533215460681
+loss=5.060756524954968e-5 avg_coef=0.05165940790528369 gradient=0.017444717578342164 relative-change=0.2892444307939423 curvature=-5.7846186774268504e-5
+loss=4.7571867452633754e-5 avg_coef=0.05146377842172917 gradient=0.018070388113656546 relative-change=-4.215386888697375 curvature=0.00022483554066208276
+  0.327737 seconds (1.76 M allocations: 407.884 MiB, 3.95% gc time)
+Solving with GradientDescent...
+loss=4.7571867452633754e-5 avg_coef=0.05146377842172917 gradient=0.018070388113656546 relative-change=-4.215386888697375 curvature=0.00022483554066208276
+loss=4.4771825715050895e-5 avg_coef=0.051415199120849395 gradient=0.015082520894127122 relative-change=0.007508394789754321 curvature=9.03499622306338e-5
+loss=4.2849634649622104e-5 avg_coef=0.05140352283647067 gradient=0.016085183588486585 relative-change=-0.2618444790819858 curvature=0.0005150945610728666
+loss=4.227153875213663e-5 avg_coef=0.051378851324715855 gradient=0.0137459223201377 relative-change=0.04776236735183785 curvature=-0.00017572279720969592
+loss=4.151792328999093e-5 avg_coef=0.05137780542190448 gradient=0.012935909785084927 relative-change=0.23063696961857183 curvature=0.0004609885235575154
+loss=4.1240916038853825e-5 avg_coef=0.05135620052729859 gradient=0.012353018618404873 relative-change=0.30360946808776784 curvature=-0.0001464599778033839
+loss=4.0596251599356314e-5 avg_coef=0.05135525737331774 gradient=0.012349332499444792 relative-change=0.5775490659090031 curvature=0.00044645505182208905
+loss=4.036882596314406e-5 avg_coef=0.05133454728709511 gradient=0.01174582927391732 relative-change=0.728227316870436 curvature=-0.00013268107182836712
+loss=3.978157470874155e-5 avg_coef=0.051333355829500084 gradient=0.011824956447047836 relative-change=1.703174625036092 curvature=0.0004334774925035323
+loss=3.958926402147789e-5 avg_coef=0.05131325289956399 gradient=0.011270651780991042 relative-change=-13.909910162408917 curvature=-0.00012177903551907531
+loss=3.9048015870846164e-5 avg_coef=0.05131235860622588 gradient=0.011362030138517014 relative-change=-1.6055468780320343 curvature=0.00042210378194088466
+  0.263820 seconds (1.29 M allocations: 298.602 MiB, 4.71% gc time)
+Solving with LBFGS...
+loss=3.9048015870846164e-5 avg_coef=0.05131235860622588 gradient=0.011362030138517014 relative-change=-1.6055468780320343 curvature=0.00042210378194088466
+loss=3.888380243910472e-5 avg_coef=0.05129338183952769 gradient=0.01086729371641898 relative-change=-0.525847170719772 curvature=-0.00011247966579269328
+loss=3.182844792881667e-5 avg_coef=0.050752039665845294 gradient=0.010133397516841933 relative-change=-0.3665313319390216 curvature=0.0001418838260049742
+loss=2.9391639072784415e-5 avg_coef=0.0503381640080354 gradient=0.008699102385632604 relative-change=0.28733431254761566 curvature=0.00011877626511996357
+loss=2.9102121681168214e-5 avg_coef=0.049879265811426106 gradient=0.01686206734109163 relative-change=0.19418489840758912 curvature=0.00034272156760871647
+loss=2.910215078255618e-5 avg_coef=0.049600514213521296 gradient=0.01047952408469962 relative-change=0.13266105249062282 curvature=0.0003218512013404331
+loss=2.9102179884277213e-5 avg_coef=0.04954173896914965 gradient=0.009723625448040289 relative-change=0.1074512857964205 curvature=0.00029270456847848143
+loss=2.9102208985554157e-5 avg_coef=0.04950163156820462 gradient=0.009272713733076149 relative-change=0.10775433601882033 curvature=0.0002724643654927557
+loss=2.9102238085720877e-5 avg_coef=0.049377515695198305 gradient=0.008749751939284229 relative-change=0.07177044637485272 curvature=0.00024582596480697474
+loss=2.9102267187330888e-5 avg_coef=0.04935181651995925 gradient=0.008550244419376279 relative-change=0.0626100106965316 curvature=0.0002401134166574532
+loss=2.9102296288829876e-5 avg_coef=0.04935170308482679 gradient=0.008549722075386835 relative-change=0.06256356980571463 curvature=0.0002400843828460761
+  3.297387 seconds (15.84 M allocations: 3.589 GiB, 9.80% gc time)
+Finished order 2
+
+--- Scanning U index: 31 ---
+Initial loss: 0.14150159653036665
+Dimension: 68
+COMPUTED MATRICES
+Parameter count: 180
+Solving with GradientDescent...
+loss=0.0017073774333241643 avg_coef=0.04935170308482679 gradient=0.6473886012729537 relative-change=-6.489648297094212 curvature=-6.963613335509247e-5
+loss=0.0007256343578312396 avg_coef=0.04939399144062208 gradient=0.23895136256265423 relative-change=-1.5941591962326092 curvature=-0.020905949779230843
+loss=0.0002542079888525617 avg_coef=0.050419454177018284 gradient=0.22623461566683517 relative-change=4.683128750779252 curvature=0.0012908054434822176
+loss=0.0001266972275744127 avg_coef=0.0503840288590158 gradient=0.07865114988507711 relative-change=-21.760735516584607 curvature=-0.007171014553903328
+loss=6.539471995015145e-5 avg_coef=0.05077172865293559 gradient=0.07721926954904827 relative-change=1.2888159937042756 curvature=0.001113064054691958
+loss=5.2872777995927045e-5 avg_coef=0.05075217019257806 gradient=0.024458384620958395 relative-change=-0.21913788948981214 curvature=-0.0017859791848492252
+loss=4.5301105846995426e-5 avg_coef=0.050877664708688215 gradient=0.02429682793636521 relative-change=0.7513611503351161 curvature=0.0006561316896201522
+loss=4.4184304817007636e-5 avg_coef=0.050865078694655154 gradient=0.010196920243476654 relative-change=0.3808604418764432 curvature=-0.0003425198978169353
+loss=4.26564685630515e-5 avg_coef=0.05088306435365181 gradient=0.01728903688998239 relative-change=0.5404460878103564 curvature=0.0005465391154784358
+loss=4.22788292171461e-5 avg_coef=0.05087166586110453 gradient=0.006933911825391151 relative-change=0.42191648262126935 curvature=-0.00011960315362911708
+loss=4.1534114682217904e-5 avg_coef=0.050864781024467565 gradient=0.014767023961176294 relative-change=0.6742129639094121 curvature=0.0005036843968205588
+  0.300539 seconds (1.59 M allocations: 368.123 MiB, 3.48% gc time)
+Solving with LBFGS...
+loss=4.1534114682217904e-5 avg_coef=0.050864781024467565 gradient=0.014767023961176294 relative-change=0.6742129639094121 curvature=0.0005036843968205588
+loss=4.1270644094204556e-5 avg_coef=0.05085296445715526 gradient=0.006047040547959352 relative-change=0.47588580168593203 curvature=-8.305522168086294e-5
+loss=3.66713726754897e-5 avg_coef=0.05058227016486257 gradient=0.01943284533147011 relative-change=-2.4316784286243567 curvature=0.0001733807629393051
+loss=3.2922161202320055e-5 avg_coef=0.0503869977135872 gradient=0.009910661236804716 relative-change=2.3164230031673454 curvature=0.00017173101045679727
+loss=3.208488832884271e-5 avg_coef=0.050211948843026384 gradient=0.01211738333368965 relative-change=2.8844935610601485 curvature=0.00016187240525891095
+loss=3.128309660938022e-5 avg_coef=0.050002069788969705 gradient=0.00982852735554013 relative-change=-0.49222899761239053 curvature=-7.159333409642055e-6
+loss=2.8331148237414894e-5 avg_coef=0.049579564826395826 gradient=0.020014058580895302 relative-change=0.0643023137208528 curvature=-0.0004675556710922063
+loss=2.6882822399598716e-5 avg_coef=0.04937405531365167 gradient=0.011123283744630164 relative-change=0.6939512320303102 curvature=0.0004925239356980786
+loss=2.679238542324658e-5 avg_coef=0.048793392860362675 gradient=0.016312452795223444 relative-change=0.8140533089948808 curvature=-0.0007090170592978735
+loss=2.4742730219018405e-5 avg_coef=0.04824383755778995 gradient=0.013182801916979297 relative-change=-0.9826714699558652 curvature=9.461528254460003e-6
+loss=2.1514483765527892e-5 avg_coef=0.04759435985484131 gradient=0.012652614699109804 relative-change=-0.2032929190698617 curvature=0.0007211860252759894
+  0.364736 seconds (1.80 M allocations: 417.813 MiB, 3.97% gc time)
+Solving with GradientDescent...
+loss=2.1514483765527892e-5 avg_coef=0.04759435985484131 gradient=0.012652614699109804 relative-change=-0.2032929190698617 curvature=0.0007211860252759894
+loss=2.0472468067467275e-5 avg_coef=0.04754739819158579 gradient=0.012928360956869165 relative-change=2.4855848832740812 curvature=0.0005201705186364187
+loss=2.0266515768585514e-5 avg_coef=0.047534673192908126 gradient=0.009326383291148606 relative-change=-11.45600734834168 curvature=-5.553362188594853e-5
+loss=1.992210933032812e-5 avg_coef=0.04753297955535274 gradient=0.010365062591558854 relative-change=-2.4565624842501115 curvature=0.00041344129361300323
+loss=1.9847514694748547e-5 avg_coef=0.04752270219173663 gradient=0.007924066405960701 relative-change=-0.34492047367854234 curvature=-4.442720646382564e-5
+loss=1.9583330478356586e-5 avg_coef=0.04752114932793435 gradient=0.009652180107481714 relative-change=-0.8412606968769668 curvature=0.00038181452718001054
+loss=1.9535336424514327e-5 avg_coef=0.04751155622881986 gradient=0.007336927278704597 relative-change=0.24099049798651676 curvature=-3.7533587541977786e-5
+loss=1.9308033927356583e-5 avg_coef=0.047509828465617666 gradient=0.00907945343829764 relative-change=-0.6927169984838756 curvature=0.0003620309002995572
+loss=1.9278231800146095e-5 avg_coef=0.047500663011362465 gradient=0.006889023765442277 relative-change=0.6848030907065658 curvature=-2.9764545556991836e-5
+loss=1.907963922553879e-5 avg_coef=0.047498702436422666 gradient=0.008590155112791575 relative-change=-1.3514632559527138 curvature=0.00034767042805186534
+loss=1.906365878678873e-5 avg_coef=0.047489860824648865 gradient=0.006533062302073988 relative-change=1.3667239228563257 curvature=-2.251449962157062e-5
+  0.303965 seconds (1.46 M allocations: 338.328 MiB, 3.90% gc time)
+Solving with LBFGS...
+loss=1.906365878678873e-5 avg_coef=0.047489860824648865 gradient=0.006533062302073988 relative-change=1.3667239228563257 curvature=-2.251449962157062e-5
+loss=1.8888084819090878e-5 avg_coef=0.04748770726559271 gradient=0.008178609612999642 relative-change=12.259971249350954 curvature=0.0003361791439677136
+loss=1.835716775755447e-5 avg_coef=0.0472825066980384 gradient=0.006097467429522233 relative-change=-0.594361529868992 curvature=0.00010858191344061677
+loss=1.8357186116757518e-5 avg_coef=0.04717800161347206 gradient=0.003983575275645571 relative-change=-0.20349977880629566 curvature=0.00010410770687413256
+loss=1.835720447240785e-5 avg_coef=0.04717799558746608 gradient=0.003983506635408862 relative-change=-0.20393513979340003 curvature=0.00010410274834333909
+loss=1.8357222828169206e-5 avg_coef=0.04717798067307566 gradient=0.003983490592345653 relative-change=-0.20466989191676002 curvature=0.00010411096755789665
+loss=1.835724118437465e-5 avg_coef=0.047177972551666086 gradient=0.0039834178745600775 relative-change=-0.20500367928610408 curvature=0.00010410876694612456
+loss=1.8357259540913162e-5 avg_coef=0.04717796466688043 gradient=0.003983386897489962 relative-change=-0.20525075130177123 curvature=0.00010410525817536162
+loss=1.8357277900338254e-5 avg_coef=0.0471779494958636 gradient=0.003983304633011175 relative-change=-0.20578228309757787 curvature=0.00010410935946154059
+loss=1.8357296257875966e-5 avg_coef=0.047177937738746165 gradient=0.0039832481380259015 relative-change=-0.2061297172143133 curvature=0.0001041093781767074
+loss=1.83573146155247e-5 avg_coef=0.047177929838545886 gradient=0.003983216997196558 relative-change=-0.2063381836531563 curvature=0.00010410552914200824
+  4.799010 seconds (22.82 M allocations: 5.170 GiB, 6.91% gc time)
+Finished order 2
+--- COEFF DRIFT CHECK ---
+U step 1 coefficients (first 5): [0.016959213218668952, -0.061577331568451216, 3.4554522082294126e-6, -0.026262451593310573, 0.011629040381440034]
+U step 2 coefficients (first 5): [0.0009183935032178242, -0.030293182806492094, 0.0033504387600600026, -0.0046700420846721375, 0.00024265373820908705]
+U step 3 coefficients (first 5): [0.0010370121358371912, -0.01852810310231748, 0.00656703098913633, -0.0002520662913827693, 0.0019125025326749644]

@@ -66,17 +66,18 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "u_range" => 25:length(U_values),
+        "u_range" => 26:-1:1,
         "optimization_scheme" => [2],
-        "use symmetry" => use_symmetry
+        "use symmetry" => use_symmetry,
+        "load_file" => joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_28.jld2")
     )
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
         maxiters=200, gradient=:adjoint_gradient,
         optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
-
+        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N"
+    )
 
     return 0
 end
