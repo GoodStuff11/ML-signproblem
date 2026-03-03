@@ -72,7 +72,7 @@ function (@main)(ARGS)
     end
 
     degen_rm_U = create_consistent_basis(H, ops;reference_index=reference_index)
-    indexer = CombinationIndexer(reduce(vcat,collect(sites(subspace.lattice))), get_subspace_info(subspace)...)
+    indexer = CombinationIndexer(subspace)
 
     meta_data = Dict(
         "electron count"=>N, 

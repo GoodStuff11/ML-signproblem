@@ -1,7 +1,3 @@
-
-using ManifoldsBase
-using OptimizationManopt
-using Manifolds
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -43,7 +39,7 @@ function (@main)(ARGS)
     # Extract N for saving
     N = meta_data["electron count"]
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
-    use_symmetry = ARGS[1] == "true"
+    use_symmetry = length(ARGS) > 0 ? ARGS[1] == "true" : false
 
     # --- New Logic: Find lowest energy sector ---
     min_E = Inf
@@ -63,13 +59,17 @@ function (@main)(ARGS)
     # Select the eigenvectors for this sector
     # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
     target_vecs = all_full_eig_vecs[k_min]
+    if indexer isa Vector
+        indexer = indexer[k_min]
+    end
 
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
         "u_range" => 15:length(U_values),
         "optimization_scheme" => [2],
-        "use symmetry" => use_symmetry
+        "use symmetry" => use_symmetry,
+        # "load_file" => joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_28.jld2")
     )
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
