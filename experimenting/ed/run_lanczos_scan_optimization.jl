@@ -26,7 +26,7 @@ include("utility_functions.jl")
 
 function (@main)(ARGS)
     # folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/N=(3, 3)_3x2"
-    folder = "data/N=(4, 4)_4x2"
+    folder = "data/N=(3, 3)_3x2"
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -67,16 +67,16 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "u_range" => 20:length(U_values),
+        "u_range" => 15:length(U_values),
         "optimization_scheme" => [2],
         "use symmetry" => use_symmetry
     )
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
-        maxiters=50, gradient=:adjoint_gradient,
-        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
+        maxiters=200, gradient=:adjoint_gradient,
+        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
 
 
     return 0

@@ -1,11 +1,11 @@
 #!/bin/bash
-#SBATCH -J 2x4                                   # Job name
-#SBATCH -o scan_unitary_optimization_n4_%j.out       # output file (%j expands to jobID)
-#SBATCH -e scan_unitary_optimization_n4_%j.err       # error log file (%j expands to jobID)
+#SBATCH -J 4x2                                   # Job name
+#SBATCH -o scan_unitary_optimization_4x2_%j.out       # output file (%j expands to jobID)
+#SBATCH -e scan_unitary_optimization_4x2_%j.err       # error log file (%j expands to jobID)
 #SBATCH --mail-type=ALL                      # Request status by email 
 #SBATCH --mail-user=jek354@cornell.edu        # Email address to send results to.
 #SBATCH -N 1                                 # Total number of nodes requested
-#SBATCH -n 20                                 # Total number of cores requested
+#SBATCH -n 40                                 # Total number of cores requested
 #SBATCH --get-user-env                       # retrieve the users login environment
 #SBATCH --mem=16G                             # server memory requested (per node)
 #SBATCH -t 48:00:00                           # Time limit (hh:mm:ss)
