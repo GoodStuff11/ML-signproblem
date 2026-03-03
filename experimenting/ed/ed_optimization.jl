@@ -558,7 +558,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
             for (optimizer_idx, optimizer_sym) in enumerate(_optimizers)
                 # 1. Setup Phase
-                if optimizer_idx > 1 && perturb_optimization > 1e-9 && mean(abs.(local_t_vals)) > 1e-1
+                if optimizer_idx > 1 && perturb_optimization > 1e-9 && mean(abs.(local_t_vals)) > 1.5
                     local_t_vals = local_t_vals * (1 - perturb_optimization) + perturb_optimization * mean(abs.(local_t_vals)) * (2 * rand(length(local_t_vals)) .- 1)
                 end
 

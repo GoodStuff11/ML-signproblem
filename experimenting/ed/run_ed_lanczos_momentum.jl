@@ -27,19 +27,18 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (3, 2)
+    lattice_dimension = (4, 2)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 3
-        N_down = 3
+        N_up = 4
+        N_down = 4
         N = (N_up, N_down)
     else
         N = 6
     end
     # file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
-    file_name = "/home/jonathon/Dropbox/programming/cornell courses/research/experimenting/ed/data/N=$(N)_" * join(lattice_dimension, "x")
-
+    file_name = joinpath(@__DIR__, "data", "N=$(N)_" * join(lattice_dimension, "x"))
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
         Periodic()
@@ -63,20 +62,20 @@ function (@main)(ARGS)
 
         eig_indices = collect(eig_indices)
         k_tuple = Tuple(eig_indices)
-        
+
         if spin_polarized
             subspace = HubbardSubspace(N_up, N_down, lattice; k=k_tuple)
         else
             subspace = HubbardSubspace(N, lattice; k=k_tuple)
         end
-        
+
         dim = get_subspace_dimension(subspace)
         if dim == 0
             push!(all_full_eig_vecs, [])
             push!(all_indexers, nothing)
             continue
         end
-        
+
         new_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, momentum_basis=true)
         new_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=true)
 
@@ -171,8 +170,8 @@ function (@main)(ARGS)
                 overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
                 if overlap < 0.8
                     println(E)
-                    eig_value = real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])
-                    if !isapprox(eig_value,round(eig_value), atol=1e-9)
+                    eig_value = real(all_eig_vecs[i, :]' * ops[1] * all_eig_vecs[i, :])
+                    if !isapprox(eig_value, round(eig_value), atol=1e-9)
                         println("overlap: $U $overlap $(eig_value) $vec_idx")
                         error("error is bad: $overlap")
                     end
