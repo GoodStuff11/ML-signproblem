@@ -307,4 +307,3 @@ function merge_jld2_folder(folder::String; include_keys=String[], file_filter=[]
 
     return merged
 end
-

@@ -673,13 +673,13 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         sol, t_vals, loss = execute_optimization(t_vals, maxiters, optimizers)
         coefficients = t_vals
-        metric = sol # approx?
+        # metric = sol # approx?
 
 
         vals = update_values(signs, param_index_map, coefficients, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
-        push!(metrics["other"], metric)
+        # push!(metrics["other"], metric)
 
         # Construct and Store Matrix
         if !use_symmetry
