@@ -27,12 +27,12 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (3, 3)
+    lattice_dimension = (3, 2)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 4
-        N_down = 5
+        N_up = 3
+        N_down = 2
         N = (N_up, N_down)
     else
         N = 6
@@ -78,7 +78,7 @@ function (@main)(ARGS)
     all_full_eig_vecs = []
     all_E = []
 
-    
+
 
     for (k, eig_indices) in enumerate(all_eig_indices)
         push!(all_E, [])
@@ -184,8 +184,8 @@ function (@main)(ARGS)
                 overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
                 if overlap < 0.8
                     println(E)
-                    eig_value = real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])
-                    if !isapprox(eig_value,round(eig_value), atol=1e-9)
+                    eig_value = real(all_eig_vecs[i, :]' * ops[1] * all_eig_vecs[i, :])
+                    if !isapprox(eig_value, round(eig_value), atol=1e-9)
                         println("overlap: $U $overlap $(eig_value) $vec_idx")
                         error("error is bad: $overlap")
                     end

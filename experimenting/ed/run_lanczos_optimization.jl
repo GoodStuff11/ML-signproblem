@@ -1,7 +1,3 @@
-
-using ManifoldsBase
-using OptimizationManopt
-using Manifolds  
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -25,7 +21,19 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    folder = "/home/jek354/research/data/N=(4, 4)_4x2"
+    # folder = "/home/jek354/research/data/N=(3, 2)_3x2"
+
+    lattice_dimension = (3, 2)
+    spin_polarized = true
+
+    if spin_polarized
+        N_up = 3
+        N_down = 2
+        N = (N_up, N_down)
+    else
+        N = 6
+    end
+    folder = joinpath(@__DIR__, "data", "N=$(N)_" * join(lattice_dimension, "x"))
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -39,7 +47,7 @@ function (@main)(ARGS)
     # Extract N for saving
     N = meta_data["electron count"]
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
-    use_symmetry = ARGS[1] == "true"
+    use_symmetry = length(ARGS) >= 1 ? ARGS[1] == "true" : false
 
     # --- New Logic: Find lowest energy sector ---
     min_E = Inf
@@ -82,16 +90,16 @@ function (@main)(ARGS)
 
         println("Running Optimization from U=$(U_values[instructions["starting state"]["U index"]]) to U=$(U_values[instructions["ending state"]["U index"]])")
         duration = @elapsed begin
-        data_dict = test_map_to_state(
-            target_vecs,
-            instructions,
-            indexer,
-            spin_conserved;
-            maxiters=200,#meta_data["maxiters"],
-            gradient=:adjoint_gradient,
-            optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-            perturb_optimization=10.0
-        )
+            data_dict = test_map_to_state(
+                target_vecs,
+                instructions,
+                indexer,
+                spin_conserved;
+                maxiters=200,#meta_data["maxiters"],
+                gradient=:adjoint_gradient,
+                optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+                perturb_optimization=10.0
+            )
         end
 
         dic["optimization_results"] = data_dict

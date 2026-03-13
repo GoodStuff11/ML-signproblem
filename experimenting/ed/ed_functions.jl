@@ -548,7 +548,7 @@ function build_n_body_structure(
     indexer::CombinationIndexer;
     skip_lower_triangular::Bool=false
 ) where {T,U<:Number}
-    build_n_body_structure_from_keys(collect(keys(t)), indexer, U; skip_lower_triangular)
+    build_n_body_structure_from_keys(sort!(collect(keys(t))), indexer, U; skip_lower_triangular)
 end
 
 function build_n_body_structure_from_keys(
@@ -643,7 +643,8 @@ function general_n_body!(
 ) where {T,U<:Number}
     # requires applying Hermitian to the resulting sparse matrix
     _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false)
-    _vals = update_values(signs, ops_list, collect(keys(t)), collect(values(t)))
+    t_keys = sort!(collect(keys(t)))
+    _vals = update_values(signs, ops_list, t_keys, [t[k] for k in t_keys])
     append!(rows, _rows)
     append!(cols, _cols)
     append!(vals, _vals)
@@ -2159,10 +2160,10 @@ function map_symmetry_groups(t_vals_small, subspace_small, subspace_large;
 
         # Generate t_keys (operators)
         t_dict_small = create_randomized_nth_order_operator(order, indexer_small; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
-        t_keys_small = collect(keys(t_dict_small))
+        t_keys_small = sort!(collect(keys(t_dict_small)))
 
         t_dict_large = create_randomized_nth_order_operator(order, indexer_large; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
-        t_keys_large = collect(keys(t_dict_large))
+        t_keys_large = sort!(collect(keys(t_dict_large)))
 
         # Find symmetry groups
         sym_small = find_symmetry_groups(t_keys_small, Lx_small, Ly_small;

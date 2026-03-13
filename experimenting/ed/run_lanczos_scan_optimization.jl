@@ -75,9 +75,9 @@ function (@main)(ARGS)
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
         maxiters=200, gradient=:adjoint_gradient,
-        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+        perturb_optimization=0.0,
+        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
         save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
-
 
     return 0
 end

@@ -402,7 +402,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         # compute operator structure, initial coefficients and operators
         @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
         @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
-        t_keys = collect(keys(t_dict))
+        t_keys = sort!(collect(keys(t_dict)))
         param_index_map = build_param_index_map(ops_list, t_keys)
 
         # create matrix operators to make gradient computation faster
@@ -418,7 +418,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                     tmp_t_dict[t_keys[key_idx]] = parity[key_idx]
                 end
                 _rows, _cols, _signs, _ops_list = build_n_body_structure(tmp_t_dict, indexer)
-                _param_index_map = build_param_index_map(_ops_list, collect(keys(tmp_t_dict)))
+                _param_index_map = build_param_index_map(_ops_list, sort!(collect(keys(tmp_t_dict))))
                 _vals = update_values(_signs, _param_index_map, collect(values(tmp_t_dict)))
                 push!(ops, sparse(_rows, _cols, _vals, dim, dim))
             end
@@ -558,8 +558,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
             for (optimizer_idx, optimizer_sym) in enumerate(_optimizers)
                 # 1. Setup Phase
-                if optimizer_idx > 1 && perturb_optimization > 1e-9 && mean(abs.(local_t_vals)) > 1.5
-                    local_t_vals = local_t_vals * (1 - perturb_optimization) + perturb_optimization * mean(abs.(local_t_vals)) * (2 * rand(length(local_t_vals)) .- 1)
+                if optimizer_idx > 1 && perturb_optimization > 1e-9 #&& mean(abs.(local_t_vals)) > 1.5
+                    used_perturb_optimization = perturb_optimization^(1 + (optimizer_idx - 1) / 3)
+                    local_t_vals = local_t_vals * (1 - used_perturb_optimization) + used_perturb_optimization * mean(abs.(local_t_vals)) * (2 * rand(length(local_t_vals)) .- 1)
                 end
 
 
@@ -673,13 +674,13 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         sol, t_vals, loss = execute_optimization(t_vals, maxiters, optimizers)
         coefficients = t_vals
-        metric = sol # approx?
+        # metric = sol # approx?
 
 
         vals = update_values(signs, param_index_map, coefficients, parameter_mapping, parity)
 
         # loss = f(new_tvals, if length(computed_matrices) > 0 sum(computed_matrices) else nothing end)
-        push!(metrics["other"], metric)
+        # push!(metrics["other"], metric)
 
         # Construct and Store Matrix
         if !use_symmetry
@@ -717,7 +718,7 @@ end
 function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
     maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
-    initial_coefficients::Vector{Any}=Any[], perturb_optimization::Float64=0.1
+    initial_coefficients::Vector{Any}=Any[], perturb_optimization::Float64=0.2
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
