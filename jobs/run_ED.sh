@@ -13,4 +13,4 @@
 #SBATCH --nodelist=aimi-cpu-01
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
-julia --project=/home/jek354/research/ML-signproblem/experimenting run_ed_lanczos.jl
+julia --project=/home/jek354/research/ML-signproblem/experimenting run_ed_lanczos_momentum.jl

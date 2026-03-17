@@ -1,7 +1,7 @@
 #!/bin/bash
-#SBATCH -J 4x2                                   # Job name
-#SBATCH -o scan_unitary_optimization_4x2_%j.out       # output file (%j expands to jobID)
-#SBATCH -e scan_unitary_optimization_4x2_%j.err       # error log file (%j expands to jobID)
+#SBATCH -J 3x3                                   # Job name
+#SBATCH -o scan_unitary_optimization_3x3_%j.out       # output file (%j expands to jobID)
+#SBATCH -e scan_unitary_optimization_3x3_%j.err       # error log file (%j expands to jobID)
 #SBATCH --mail-type=ALL                      # Request status by email 
 #SBATCH --mail-user=jek354@cornell.edu        # Email address to send results to.
 #SBATCH -N 1                                 # Total number of nodes requested
