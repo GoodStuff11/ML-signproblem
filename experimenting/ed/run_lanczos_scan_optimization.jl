@@ -39,7 +39,7 @@ function (@main)(ARGS)
     # Extract N for saving
     N = meta_data["electron count"]
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
-    use_symmetry = length(ARGS) > 0 ? ARGS[1] == "true" : false
+    use_symmetry = false
 
     # --- New Logic: Find lowest energy sector ---
     min_E = Inf
@@ -66,18 +66,37 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "u_range" => 20:length(U_values),
-        "optimization_scheme" => [2],
+        "optimization_scheme" => [3, 2,1],
         "use symmetry" => use_symmetry,
-        "load_file" => joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_20.jld2")
     )
+    if length(ARGS) == 1
+        v1 = tryparse(Int, ARGS[1])
+        if isnothing(v1)
+            if ARGS[1] == "foward"
+                println("Forward")
+                scan_instructions["u_range"] = 26:length(U_values)
+            else ARGS[1] == "backward"
+                println("Forward")
+                scan_instructions["u_range"] = 24:-1:1
+            end
+            scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_25.jld2")
+        else
+            println("doing: $v1")
+            scan_instructions["u_range"] = v1:v1
+            # scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_$(v1).jld2")
+        end 
+    else
+        scan_instructions["u_range"] = 25:25
+    end
+
+
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
         maxiters=200, gradient=:adjoint_gradient,
-        perturb_optimization=0.0,
-        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
+        perturb_optimization=0.01,
+        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
+        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
 
     return 0
 end

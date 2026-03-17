@@ -32,7 +32,7 @@ function (@main)(ARGS)
 
     if spin_polarized
         N_up = 4
-        N_down = 5
+        N_down = 4
         N = (N_up, N_down)
     else
         N = 6

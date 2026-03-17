@@ -794,8 +794,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     shared_cache = Dict{Int,Dict{Symbol,Any}}()
     if haskey(instructions, "load_file")
-        current_coeffs = load(instructions["load_file"])["dict"]["coefficients"]
+        dic = load(instructions["load_file"])["dict"]
+        current_coeffs = dic["coefficients"]
+        starting_loss = dic["metrics"]["loss"][end]
     else
+        starting_loss = Inf
         current_coeffs = initial_coefficients
     end
 
@@ -818,7 +821,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         args = optimize_unitary(state1, state2, indexer;
             spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-            maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
+            maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
             metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
             operator_cache=shared_cache, initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization)
 
@@ -850,7 +853,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         end
 
         # Save iteration data
-        if !isnothing(save_folder)
+        if !isnothing(save_folder) && metrics["loss"][end] < starting_loss
             iter_dict = Dict(
                 "u_idx" => u_idx,
                 "coefficients" => coefficient_values,
