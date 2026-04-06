@@ -13,6 +13,8 @@ This optimization is performed for a selected initial state (the ground state of
 
 For the optimization, the gradient is computed with adjoint gradients to make it as efficient as possible. It is also implemented by exactly computing the exponential as supposed to trotterizing it in any way. 
 
+# Hints
+
 
 # Setup
 Run setup with (note the threads can be changed to suit the system)
