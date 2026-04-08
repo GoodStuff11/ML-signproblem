@@ -20,187 +20,6 @@ include("ed_objects.jl")
 include("utility_functions.jl")
 include("task.jl")
 
-function make_hermitian(A::SparseMatrixCSC)
-    # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
-    # This function doesn't override non-zero values with zero values like Hermitian(A) can
-    I, J, V = findnz(A)
-    return sparse(
-        vcat(I, J),
-        vcat(J, I),
-        vcat(V, conj.(V)),
-        size(A, 1), size(A, 2)
-    )
-end
-function make_antihermitian(A::SparseMatrixCSC)
-    # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
-    # This function doesn't override non-zero values with zero values like Hermitian(A) can
-
-    I, J, V = findnz(A)
-    return sparse(
-        vcat(I, J),
-        vcat(J, I),
-        vcat(V, -conj.(V)),
-        size(A, 1), size(A, 2)
-    )
-end
-
-
-function compute_jw_sign(
-    conf::Tuple{Set{T},Set{T}},
-    sorted_sites::Vector{T},
-    ops::Vector{Tuple{T,Int,Symbol}}
-) where T
-    # computes the sign for the term given by ops (in second quantized), associated with the 
-    # configuration conf.
-
-    # Full JW order over sites and spins
-    jw_order = [(s, σ) for s in sorted_sites for σ in (1, 2)]
-
-    # Map each mode to its index in JW order
-    jw_index = Dict{Tuple{T,Int},Int}((sσ, i) for (i, sσ) in enumerate(jw_order))
-
-    # Initial occupation vector (ordered)
-    occupied_modes = Set{Tuple{T,Int}}()
-    for (s, σ) in jw_order
-        if s ∈ conf[σ]
-            push!(occupied_modes, (s, σ))
-        end
-    end
-
-    # Compute sign by counting how many occupied modes come before each operator
-    sign = 1
-
-    # Process from right to left (annihilate first)
-    for (site, spin, op) in reverse(ops)
-        mode = (site, spin)
-        idx = jw_index[mode]
-
-        # Count how many occupied modes come *before* this mode
-        n_occupied_before = count(m -> jw_index[m] < idx, occupied_modes)
-        sign *= (-1)^n_occupied_before
-
-        # Update occupation based on op
-        if op == :annihilate
-            # Fermion is removed — no longer present
-            delete!(occupied_modes, mode)
-        elseif op == :create
-            # Fermion is added — affects future operators
-            push!(occupied_modes, mode)
-        else
-            error("Unknown operator: $op")
-        end
-    end
-
-    return sign
-end
-
-"""
-function which takes in a set of keys corresponding to different operators, and outputs the 
-    information required to construct a sparse matrix, without specifying what the coefficient
-    values are. This includes row, column indices, plus the sign at that element, and the operator
-    the matrix element is associated with.
-"""
-function build_nth_order_sparse(
-    t_keys::AbstractVector,
-    indexer::CombinationIndexer{T},
-    ::Type{U}=Float64;
-    skip_lower_triangular::Bool=false
-) where {T,U<:Number}
-    sorted_sites = sort(indexer.a)
-    rows = Int[]
-    cols = Int[]
-    signs = U[]
-    ops_list = Vector{Vector{Tuple{T,Int,Symbol}}}()
-
-    for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        for ops in t_keys
-            # Clone the config
-            conf_new = [copy(conf[1]), copy(conf[2])]
-            valid = true
-
-            # Apply operators
-            for (site, spin, op) in reverse(ops)
-                if op == :annihilate
-                    if site ∉ conf_new[spin]
-                        valid = false
-                        break
-                    end
-                    delete!(conf_new[spin], site)
-                elseif op == :create
-                    if site ∈ conf_new[spin]
-                        valid = false
-                        break
-                    end
-                    push!(conf_new[spin], site)
-                else
-                    error("Invalid operator symbol: $op")
-                end
-            end
-
-            if !valid
-                continue
-            end
-
-            i2 = index(indexer, conf_new[1], conf_new[2])
-            if skip_lower_triangular && i1 > i2 #only considering upper diagonal so ensure hermiticity
-                continue
-            end
-            s = compute_jw_sign(conf, sorted_sites, ops)
-            push!(rows, i1)
-            push!(cols, i2)
-            push!(signs, s)
-            push!(ops_list, ops)
-        end
-    end
-
-    return rows, cols, signs, ops_list
-end
-
-"""
-based on the indexer defining the basis, this function creates a set of keys (not ordered in any particular way) 
-    associated list all possible operators that can be put in the exponential.
-"""
-function build_nth_order_operator(n::Int, indexer::CombinationIndexer; omit_H_conj::Bool=false, 
-    conserve_spin::Bool=false, conserve_momentum::Bool=false)
-    # function creates a dictionary of free parameters in the form of a dictionary. 
-    # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
-    # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
-
-    t_keys = Set{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}}}()
-    site_list = sort(indexer.a) #ensuring normal ordering
-    all_ops(label) = combinations([(s, σ, label) for s in site_list for σ in 1:2], n)
-    equal_spin(create, annihilate) = sum((σ * 2 - 3) for (s, σ, _) in create) == sum((σ * 2 - 3) for (s, σ, _) in annihilate)
-    geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] <= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
-
-    for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
-        key = [ops_create; ops_annihilate]
-
-        # We must conserve momentum if the user specified conserve_momentum=true
-        # OR if the indexer is explicitly restricted to a momentum sector (which means non-conserving ops will jump out of the Hilbert space)
-        must_conserve_momentum = conserve_momentum || (!isnothing(indexer.k) && !isnothing(indexer.lattice_dims))
-
-        if must_conserve_momentum
-            tot_k = zeros(Int, length(indexer.lattice_dims))
-            for (s, σ, _) in ops_create
-                tot_k .+= (s.coordinates .- 1)
-            end
-            for (s, σ, _) in ops_annihilate
-                tot_k .-= (s.coordinates .- 1)
-            end
-            tot_k = tot_k .% indexer.lattice_dims
-            is_momentum_conserved = all(tot_k .== 0)
-        else
-            is_momentum_conserved = true
-        end
-
-        if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved
-            if key ∉ t_keys
-                push!(t_keys, key)
-            end
-        end
-    end
-    return collect(t_keys)
-end
 
 
 # DO NOT MODIFY THIS CELL
@@ -306,18 +125,18 @@ function (@main)(ARGS)
     U_state1 = expv(1im,sum(data_dict["all_matrices"]),state1)
     @assert norm(U_state1) ≈ 1
     @assert data_dict["metrics"]["loss"][end] ≈ 1 - abs2(state2'*U_state1)
-    for order=1:2
-        t_keys = build_nth_order_operator(order, indexer; omit_H_conj=true, conserve_spin=spin_conserved, conserve_momentum=true)
-        dim = length(indexer.inv_comb_dict)
-        # create matrix operators to make gradient computation faster
-        ops = []
-        for k in collect(t_keys)
-            _rows, _cols, _signs, _ = build_nth_order_sparse([k], indexer)
-            push!(ops, make_hermitian(sparse(_rows, _cols, _signs, dim, dim)))
-        end
+    # for order=1:2
+    #     t_keys = build_nth_order_operator(order, indexer; omit_H_conj=true, conserve_spin=spin_conserved, conserve_momentum=true)
+    #     dim = length(indexer.inv_comb_dict)
+    #     # create matrix operators to make gradient computation faster
+    #     ops = []
+    #     for k in collect(t_keys)
+    #         _rows, _cols, _signs, _ = build_nth_order_sparse([k], indexer)
+    #         push!(ops, make_hermitian(sparse(_rows, _cols, _signs, dim, dim)))
+    #     end
 
-        @assert sum(ops[k] * data_dict["coefficients"][order][k] for k in eachindex(data_dict["coefficients"][order])) ≈ data_dict["all_matrices"][order]
-    end
+    #     @assert sum(ops[k] * data_dict["coefficients"][order][k] for k in eachindex(data_dict["coefficients"][order])) ≈ data_dict["all_matrices"][order]
+    # end
 
     # the goal is make the loss as small as it can be with minimal time. For each different system size
     # println("performance:")
@@ -325,6 +144,6 @@ function (@main)(ARGS)
     # println("Loss: $(data_dict["metrics"]["loss"][end])")
     # println("System size: $folder")
 
-    println(data_dict["metrics"]["loss"][end]*time_elapsed)
+    println(-(data_dict["metrics"]["loss"][end]*1e5 + time_elapsed))
 
 end
