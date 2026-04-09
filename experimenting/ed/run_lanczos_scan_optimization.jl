@@ -21,8 +21,12 @@ include("utility_functions.jl")
 
 
 function (@main)(ARGS)
-    # folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/N=(3, 3)_3x2"
-    folder = "data/N=(4, 5)_3x3"
+    if length(ARGS) >= 1 && startswith(ARGS[1], "data/")
+        folder = ARGS[1]
+        ARGS = ARGS[2:end]
+    else
+        folder = "data/N=(5, 5)_4x4"
+    end
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
     dic = load_saved_dict(file_path)
@@ -32,6 +36,7 @@ function (@main)(ARGS)
     all_full_eig_vecs = dic["all_full_eig_vecs"]
     all_E = dic["E"] # Needed for energy selection
     indexer = dic["indexer"]
+    precomputed_structures = get(dic, "precomputed_structures", Dict())
 
     println("Meta data:")
     display(meta_data)
@@ -66,25 +71,34 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "optimization_scheme" => [3, 2,1],
+        "optimization_scheme" => [2],
         "use symmetry" => use_symmetry,
+        "multi_start_iters" => 50, # 30
+        "multi_start_samples" => 20, #5
+        "initialization_samples" => 100,#20
     )
+    println("ARGS: $(length(ARGS))")
     if length(ARGS) == 1
         v1 = tryparse(Int, ARGS[1])
         if isnothing(v1)
-            if ARGS[1] == "foward"
+            if ARGS[1] == "forward"
                 println("Forward")
                 scan_instructions["u_range"] = 26:length(U_values)
             else ARGS[1] == "backward"
-                println("Forward")
-                scan_instructions["u_range"] = 24:-1:1
+                println("backward")
+                scan_instructions["u_range"] = 60:-1:1
             end
-            scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_25.jld2")
+            scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_61.jld2")
+            println("Load: $(scan_instructions["load_file"])")
         else
             println("doing: $v1")
             scan_instructions["u_range"] = v1:v1
             # scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_$(v1).jld2")
         end 
+    elseif length(ARGS) == 2
+        v1 = tryparse(Int, ARGS[1])
+        v2 = tryparse(Int, ARGS[2])
+        scan_instructions["u_range"] = v1:-1:v2
     else
         scan_instructions["u_range"] = 25:25
     end
@@ -93,10 +107,11 @@ function (@main)(ARGS)
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
-        maxiters=200, gradient=:adjoint_gradient,
+        maxiters=20, gradient=:adjoint_gradient,
         perturb_optimization=0.01,
         optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N")
+        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
+        precomputed_structures=precomputed_structures)
 
     return 0
 end

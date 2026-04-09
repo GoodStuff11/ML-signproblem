@@ -12,6 +12,7 @@ using JLD2
 using Zygote
 using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
+using ExponentialUtilities
 
 include("ed_objects.jl")
 include("ed_functions.jl")
@@ -19,9 +20,9 @@ include("ed_optimization.jl")
 include("utility_functions.jl")
 
 
-function run_pruning_analysis()
+function run_pruning_analysis(folder, data_label)
     # folder = "/media/jonathon/Jonathon HDD/datasets/HubbardED/N=3"
-    folder = raw"./data/N=(3, 2)_3x2"
+    folder = joinpath(folder, data_label)
 
     # Load energy and eigen data
     println("Loading energy and meta data...")
@@ -151,7 +152,7 @@ function run_pruning_analysis()
             summed_mat = isempty(pruned_mats) ? sparse(zeros(ComplexF64, dim, dim)) : sum(pruned_mats)
 
             # Overlap Calculation with mapped state
-            mapped_state = exp(1im * Matrix(summed_mat)) * state1
+            mapped_state = expv(1im, summed_mat, state1)
             mapped_overlap = state2' * mapped_state
             true_loss = 1 - abs2(mapped_overlap)
 
@@ -162,7 +163,7 @@ function run_pruning_analysis()
 
     println("Done evaluating Overlaps. Saving metrics to disk...")
     # Optionally save results out
-    JLD2.jldsave(joinpath(folder, "pruning_analysis_results.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
+    JLD2.jldsave(joinpath(folder, "pruning_analysis.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
 
     println("\n=== SUMMARY STATISTICS ===")
     println("Largest threshold applied: ", thresholds[end])
@@ -182,5 +183,5 @@ end
 
 # Check if script is run directly
 function @main(ARGS)
-    run_pruning_analysis()
+    run_pruning_analysis("./data", "N=(4, 5)_3x3_3")
 end

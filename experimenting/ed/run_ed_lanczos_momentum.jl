@@ -1,4 +1,3 @@
-
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -21,23 +20,20 @@ include("ed_optimization.jl")
 include("utility_functions.jl")
 
 
-
-
 function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (3, 3)
+    lattice_dimension = (4, 4)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 4
-        N_down = 4
+        N_up = 5
+        N_down = 5
         N = (N_up, N_down)
     else
         N = 6
     end
-    # file_name = "/home/jek354/research/data/N=$(N)_" * join(lattice_dimension, "x")
     file_name = joinpath(@__DIR__, "data", "N=$(N)_" * join(lattice_dimension, "x"))
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
@@ -49,18 +45,17 @@ function (@main)(ARGS)
     hopping_model = HubbardModel(1.0, 0.0, 0.0, false)
     interaction_model = HubbardModel(0.0, 1.0, 0.0, false)
 
-    # create symmetry projected states
     n_eigs = collect(lattice_dimension)
     all_eig_indices = collect(Iterators.product([1:n for n in lattice_dimension]...))
+    n_sectors = length(all_eig_indices)
 
-    all_full_eig_vecs = []
-    all_E = []
-    all_indexers = []
+    # Pre-allocate result arrays so parallel writes go to distinct indices (thread-safe)
+    all_full_eig_vecs = Vector{Any}(undef, n_sectors)
+    all_E             = Vector{Any}(undef, n_sectors)
+    all_indexers      = Vector{Any}(undef, n_sectors)
 
-    for (k, eig_indices) in enumerate(all_eig_indices)
-        push!(all_E, [])
-
-        eig_indices = collect(eig_indices)
+    Threads.@threads for k in 1:n_sectors
+        eig_indices = collect(all_eig_indices[k])
         k_tuple = Tuple(eig_indices)
 
         if spin_polarized
@@ -71,8 +66,9 @@ function (@main)(ARGS)
 
         dim = get_subspace_dimension(subspace)
         if dim == 0
-            push!(all_full_eig_vecs, [])
-            push!(all_indexers, nothing)
+            all_full_eig_vecs[k] = []
+            all_E[k]             = []
+            all_indexers[k]      = nothing
             continue
         end
 
@@ -95,7 +91,7 @@ function (@main)(ARGS)
         println("k=$k")
 
         all_eig_vecs = zeros(ComplexF64, length(U_values), dim)
-
+        E_values     = Vector{Float64}(undef, length(U_values))
 
         targets = Float64[]
         should_project = false
@@ -103,25 +99,19 @@ function (@main)(ARGS)
         for (i, U) in enumerate(U_values)
             new_h = new_hopping + new_interaction * U
             E, H_vecs = eigsolve(new_h, rand(ComplexF64, size(new_h)[1]), 5, :SR, ishermitian=true)
-            # println(E)
 
             vec_idx = nothing
             if i == 1
                 vec_idx = 1
 
-                # Check for degeneracy: |E0 - E1| < 1e-10
                 if length(E) >= 2 && abs(E[1] - E[2]) < 1e-10
                     println("Degeneracy detected at U=$U. Fixing gauge.")
                     should_project = true
 
-                    # Project to the first allowed eigenvalue for each operator
-                    # and store them as targets
                     for (op, allowed_vals) in zip(ops, eig_values)
-                        # Target the first allowed value (e.g. min Sz)
                         target = allowed_vals[1]
                         push!(targets, target)
 
-                        # Find index of target in allowed_vals
                         target_idx = findfirst(x -> abs(x - target) < 1e-9, allowed_vals)
                         if target_idx === nothing
                             target_idx = 1
@@ -132,25 +122,22 @@ function (@main)(ARGS)
                     end
                 end
 
-                println("overlap: $U $(real(H_vecs[1]' * ops[1]* real(H_vecs[1])))")
+                println("overlap: $U $(real(H_vecs[1]' * ops[1] * real(H_vecs[1])))")
             else
-                # Find vector with highest overlap with previous one
+                # Adiabatic tracking: sequential dependency, cannot parallelize over U
                 prev_vec = all_eig_vecs[i-1, :]
-                for k in eachindex(H_vecs)
-                    if abs(H_vecs[k]' * prev_vec) > 0.9
-                        vec_idx = k
+                for ki in eachindex(H_vecs)
+                    if abs(H_vecs[ki]' * prev_vec) > 0.9
+                        vec_idx = ki
                         break
                     end
                 end
             end
+
             if vec_idx === nothing
-                # println(E)
-                # println([real(H_vecs[k]' * op * H_vecs[k]) for k in eachindex(H_vecs) for op in ops])
-                # error("Could not find vector with overlap > 0.9 at U=$U")
                 vec_idx = 1
             end
 
-            # If we decided to project at i=1, enforce it at subsequent steps too
             if should_project && i > 1
                 for (j, op) in enumerate(ops)
                     target = targets[j]
@@ -163,8 +150,8 @@ function (@main)(ARGS)
                 end
             end
 
-            push!(all_E[end], E[vec_idx])
-            all_eig_vecs[i, :] = H_vecs[vec_idx]
+            E_values[i]          = E[vec_idx]
+            all_eig_vecs[i, :]  .= H_vecs[vec_idx]
 
             if i >= 2
                 overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
@@ -176,14 +163,33 @@ function (@main)(ARGS)
                         error("error is bad: $overlap")
                     end
                 end
-                println("overlap: $U $overlap $(real(all_eig_vecs[i, :]' * ops[1]* all_eig_vecs[i, :])) $vec_idx")
+                println("overlap: $U $overlap $(real(all_eig_vecs[i, :]' * ops[1] * all_eig_vecs[i, :])) $vec_idx")
             end
         end
-        push!(all_full_eig_vecs, all_eig_vecs)
-        push!(all_indexers, indexer)
+
+        # Write results to pre-allocated slots — each k writes to a distinct index
+        all_full_eig_vecs[k] = all_eig_vecs
+        all_E[k]             = E_values
+        all_indexers[k]      = indexer
     end
 
-    # save data
+    selected_index = 1
+    minimum_energy = Inf
+    for i in eachindex(all_E)
+        if !isempty(all_E[i]) && all_E[i][30] < minimum_energy
+            minimum_energy = all_E[i][30]
+            selected_index = i
+        end
+    end
+
+    # --- Precompute operator structures for optimization ---
+    println("Precomputing n_body_structure for optimization...")
+    main_indexer = all_indexers[selected_index]
+    precomputed_structures = Dict()
+    if main_indexer !== nothing
+        precomputed_structures = precompute_n_body_structures(main_indexer, 2; spin_conserved=!isa(N, Number), momentum_basis=true)
+    end
+
     meta_data = Dict(
         "electron count" => N,
         "sites" => join(lattice_dimension, "x"),
@@ -197,12 +203,12 @@ function (@main)(ARGS)
 
     dict = Dict(
         "meta_data" => meta_data,
-        "E" => all_E,
-        "all_full_eig_vecs" => all_full_eig_vecs,
-        "indexer" => all_indexers,
-        "all_eig_indices" => all_eig_indices,
+        "E" => [all_E[selected_index]],
+        "all_full_eig_vecs" => [all_full_eig_vecs[selected_index]],
+        "indexer" => [all_indexers[selected_index]],
+        "all_eig_indices" => [all_eig_indices[selected_index]],
+        "precomputed_structures" => precomputed_structures
     )
-
 
     save_energy_with_metadata(file_name, dict)
 

@@ -247,7 +247,14 @@ function load_saved_dict(filename::AbstractString)
         if !haskey(file, "dict")
             error("File '$filename' does not contain a saved dictionary under key \"dict\".")
         end
-        file["dict"]
+        d = file["dict"]
+        # Merge any root-level keys into the dictionary to allow efficient updates (this is more of a hack for efficiency)
+        for k in keys(file)
+            if k != "dict"
+                d[k] = file[k]
+            end
+        end
+        return d
     end
 end
 

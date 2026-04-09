@@ -348,12 +348,13 @@ end
 
 
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
-    maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[1, 2], spin_conserved::Bool=false, use_symmetry::Bool=false,
+    maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
     antihermitian::Bool=false, optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS, perturb_optimization::Float64=0.001,
-    initial_coefficients::Vector{Any}=Any[], initialization_samples::Int=20,
+    initial_coefficients::Vector{Any}=Any[], initialization_samples::Int=40,
     operator_cache::Dict{Int,Dict{Symbol,Any}}=Dict{Int,Dict{Symbol,Any}}(),
-    momentum_basis::Bool=false
+    momentum_basis::Bool=false, multi_start_samples::Int=5, multi_start_iters::Int=30,
+    precomputed_structures::Dict=Dict()
 )
     if momentum_basis
         use_symmetry = false # Disable spatial symmetries when working directly in momentum space
@@ -400,32 +401,56 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             return operator_cache[order]
         end
         # compute operator structure, initial coefficients and operators
-        @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
-        @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
-        t_keys = sort!(collect(keys(t_dict)))
-        param_index_map = build_param_index_map(ops_list, t_keys)
+        if haskey(precomputed_structures, (order, use_symmetry))
+            println("Loading precomputed structure for order $order, use_symmetry=$use_symmetry")
+            struct_cache = precomputed_structures[(order, use_symmetry)]
+            rows, cols, signs, ops_list = struct_cache[:rows], struct_cache[:cols], struct_cache[:signs], struct_cache[:ops_list]
+            t_keys, param_index_map = struct_cache[:t_keys], struct_cache[:param_index_map]
+        else
+            @time t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
+            @time rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
+            t_keys = sort!(collect(keys(t_dict)))
+            param_index_map = build_param_index_map(ops_list, t_keys)
+        end
 
         # create matrix operators to make gradient computation faster
         ops = []
         sym_data = nothing
+        
+        # Pre-group indices using param_index_map to avoid calling build_n_body_structure O(N) times
+        indices_by_param = [Int[] for _ in 1:length(t_keys)]
+        for k in eachindex(param_index_map)
+            push!(indices_by_param[param_index_map[k]], k)
+        end
+
         if use_symmetry
             inv_param_map, parameter_mapping, parity = find_symmetry_groups(t_keys, maximum(indexer.a).coordinates...,
                 hermitian=!antihermitian, antihermitian=antihermitian, trans_x=true, trans_y=true, spin_symmetry=true) # have caution with this being true for N↑≠N↓
 
             for key_idcs in inv_param_map
-                tmp_t_dict::Dict{Array{Tuple{Coordinate{2,Int64},Int64,Symbol},1},Float64} = Dict()
+                idx = Int[]
                 for key_idx in key_idcs
-                    tmp_t_dict[t_keys[key_idx]] = parity[key_idx]
+                    append!(idx, indices_by_param[key_idx])
                 end
-                _rows, _cols, _signs, _ops_list = build_n_body_structure(tmp_t_dict, indexer)
-                _param_index_map = build_param_index_map(_ops_list, sort!(collect(keys(tmp_t_dict))))
-                _vals = update_values(_signs, _param_index_map, collect(values(tmp_t_dict)))
+                
+                _vals = zeros(Float64, length(idx))
+                for (k, j) in enumerate(idx)
+                    _vals[k] = signs[j] * parity[param_index_map[j]]
+                end
+                
+                _rows = rows[idx]
+                _cols = cols[idx]
+                
                 push!(ops, sparse(_rows, _cols, _vals, dim, dim))
             end
             sym_data = (inv_param_map, parameter_mapping, parity)
         else
-            for k in t_keys
-                _rows, _cols, _signs, _ = build_n_body_structure(Dict(k => 1.0), indexer)
+            for i in 1:length(t_keys)
+                idx = indices_by_param[i]
+                _rows = rows[idx]
+                _cols = cols[idx]
+                _signs = signs[idx]
+                
                 if antihermitian
                     push!(ops, make_antihermitian(sparse(_rows, _cols, _signs, dim, dim)))
                 else
@@ -636,7 +661,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             end
 
             sort!(good_samples, by=x -> x[1], rev=true)
-            top_n = min(5, length(good_samples))
+            top_n = min(multi_start_samples, length(good_samples))
 
             if top_n == 0
                 println("No good samples found, falling back to random initialization")
@@ -649,7 +674,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 best_t = nothing
                 best_loss = Inf
                 println("Performing quick optimization on top $top_n candidates...")
-                quick_maxiters = min(30, maxiters)
+                quick_maxiters = min(multi_start_iters, maxiters)
                 for i in 1:top_n
                     candidate_t = good_samples[i][3]
                     _, opt_t, opt_loss = execute_optimization(candidate_t, quick_maxiters, [:GradientDescent, :LBFGS])
@@ -718,7 +743,7 @@ end
 function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any}, indexer::CombinationIndexer,
     spin_conserved::Bool=false;
     maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
-    initial_coefficients::Vector{Any}=Any[], perturb_optimization::Float64=0.2
+    initial_coefficients::Vector{Any}=Any[], perturb_optimization::Float64=0.2, precomputed_structures::Dict=Dict()
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
@@ -743,9 +768,12 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
             end
             args = optimize_unitary(state1, state2, indexer;
                 spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [1, 2]), gradient=gradient,
+                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
                 metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
-                initial_coefficients=initial_coefficients, perturb_optimization=perturb_optimization)
+                initial_coefficients=initial_coefficients, perturb_optimization=perturb_optimization,
+                initialization_samples=get!(instructions, "initialization_samples", 50),
+                multi_start_iters=get!(instructions, "multi_start_iters", 30),multi_start_samples=get!(instructions, "multi_start_samples", 5),
+                precomputed_structures=precomputed_structures)
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, _ = args
             push!(data_dict["norm1_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices])
             push!(data_dict["norm2_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices])
@@ -783,7 +811,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
     perturb_optimization::Float64=0.1,
     save_folder::Union{String,Nothing}=nothing, save_name::String="scan_data",
-    initial_coefficients::Vector{Any}=Any[]
+    initial_coefficients::Vector{Any}=Any[], precomputed_structures::Dict=Dict()
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -796,9 +824,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     if haskey(instructions, "load_file")
         dic = load(instructions["load_file"])["dict"]
         current_coeffs = dic["coefficients"]
-        starting_loss = dic["metrics"]["loss"][end]
+        # starting_loss = dic["metrics"]["loss"][end] # bugged right now
     else
-        starting_loss = Inf
+        # starting_loss = Inf
         current_coeffs = initial_coefficients
     end
 
@@ -820,27 +848,28 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         state2 = degen_rm_U[u_idx, :]
 
         args = optimize_unitary(state1, state2, indexer;
-            spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-            maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
-            metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
-            operator_cache=shared_cache, initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization)
-
-        computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, shared_cache = args
-        current_coeffs = coefficient_values
+                spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
+                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
+                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
+                initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization,
+                initialization_samples=get!(instructions, "initialization_samples", 50),
+                multi_start_iters=get!(instructions, "multi_start_iters", 30),multi_start_samples=get!(instructions, "multi_start_samples", 5),
+                precomputed_structures=precomputed_structures)
+        computed_matrices, coefficient_labels, current_coeffs, param_mapping, parities, metrics, shared_cache = args
 
         # Store results for this U
         push!(data_dict["norm1_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices])
         push!(data_dict["norm2_metrics"], [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices])
         push!(data_dict["all_matrices"], computed_matrices)
-        push!(data_dict["coefficients"], coefficient_values)
+        push!(data_dict["coefficients"], current_coeffs)
         if isnothing(data_dict["coefficient_labels"])
             data_dict["coefficient_labels"] = coefficient_labels
             data_dict["param_mapping"] = param_mapping
             data_dict["parities"] = parities
         end
-
         # Save shared data once we have it
         if !isnothing(save_folder) && !shared_data_saved && !isnothing(coefficient_labels)
+            println("saved")
             shared_dict = Dict(
                 "coefficient_labels" => coefficient_labels,
                 "param_mapping" => param_mapping,
@@ -848,15 +877,16 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 "instructions" => instructions,
                 "u_range" => u_indices
             )
+            println(joinpath(save_folder, "$(save_name)_shared.jld2"))
             JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
             shared_data_saved = true
         end
 
         # Save iteration data
-        if !isnothing(save_folder) && metrics["loss"][end] < starting_loss
+        if !isnothing(save_folder)# && metrics["loss"][end] < starting_loss
             iter_dict = Dict(
                 "u_idx" => u_idx,
-                "coefficients" => coefficient_values,
+                "coefficients" => current_coeffs,
                 "metrics" => metrics,
                 "norm1" => [isnothing(cm) ? 0.0 : norm(cm, 1) for cm in computed_matrices],
                 "norm2" => [isnothing(cm) ? 0.0 : norm(cm, 2) for cm in computed_matrices]
@@ -880,22 +910,6 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     return data_dict
 end
 
-function test_map_sd_sum(degen_rm_U::Vector, instructions::Dict{String,Any}, indexer::CombinationIndexer; maxiters=maxiters)
-    data_dict = Dict{String,Any}("norm1_metrics" => [], "norm2_metrics" => [],
-        "loss_metrics" => [], "labels" => [], "coefficients" => [])
-    for j in instructions["goal state"]["levels"]
-        goal_state = degen_rm_U[instructions["goal state"]["U index"]][:, j]
-        computed_matrices, coefficients, losses = optimize_sd_sum_2(goal_state, indexer; maxiters=maxiters)
-        push!(data_dict["norm1_metrics"], [norm(cm, 1) for cm in computed_matrices])
-        push!(data_dict["norm2_metrics"], [norm(cm, 2) for cm in computed_matrices])
-        push!(data_dict["coefficients"], coefficients)
-        push!(data_dict["loss_metrics"], losses)
-        push!(data_dict["labels"], Dict(
-            "goal state" => Dict("level" => j, "U index" => instructions["goal state"]["U index"]))
-        )
-    end
-    return data_dict
-end
 # -----------------------------------------------------------------------------
 # Optimized Adjoint Gradient Logic
 # -----------------------------------------------------------------------------

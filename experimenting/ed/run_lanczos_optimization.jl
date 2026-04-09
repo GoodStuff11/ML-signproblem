@@ -23,12 +23,12 @@ include("utility_functions.jl")
 function (@main)(ARGS)
     # folder = "/home/jek354/research/data/N=(3, 2)_3x2"
 
-    lattice_dimension = (3, 2)
+    lattice_dimension = (4, 4)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 3
-        N_down = 2
+        N_up = 5
+        N_down = 5
         N = (N_up, N_down)
     else
         N = 6
@@ -43,6 +43,7 @@ function (@main)(ARGS)
     all_full_eig_vecs = dic["all_full_eig_vecs"]
     all_E = dic["E"] # Needed for energy selection
     indexer = dic["indexer"]
+    precomputed_structures = get(dic, "precomputed_structures", Dict())
 
     # Extract N for saving
     N = meta_data["electron count"]
@@ -98,7 +99,8 @@ function (@main)(ARGS)
                 maxiters=200,#meta_data["maxiters"],
                 gradient=:adjoint_gradient,
                 optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-                perturb_optimization=10.0
+                perturb_optimization=10.0,
+                precomputed_structures=precomputed_structures
             )
         end
 

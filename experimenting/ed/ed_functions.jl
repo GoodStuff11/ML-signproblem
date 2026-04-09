@@ -618,6 +618,29 @@ function build_param_index_map(
     return [key_to_idx[ops_list[i]] for i in eachindex(ops_list)]
 end
 
+"""
+    precompute_n_body_structures(indexer, max_order=2; spin_conserved=false, momentum_basis=false)
+
+Precompute and cache `n_body_structure` for optimization, avoiding expensive generation at runtime.
+Computes for both `use_symmetry` branches (true/false).
+"""
+function precompute_n_body_structures(indexer::CombinationIndexer, max_order::Int=2; spin_conserved::Bool=false, momentum_basis::Bool=false)
+    precomputed_structures = Dict()
+    for order in 1:max_order
+        for use_sym in [true, false]
+            t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=1.0+0im, omit_H_conj=!use_sym, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
+            rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
+            t_keys = sort!(collect(keys(t_dict)))
+            param_index_map = build_param_index_map(ops_list, t_keys)
+            precomputed_structures[(order, use_sym)] = Dict(
+                :rows => rows, :cols => cols, :signs => signs, 
+                :ops_list => ops_list, :t_keys => t_keys, :param_index_map => param_index_map
+            )
+        end
+    end
+    return precomputed_structures
+end
+
 function update_values(
     signs::Vector{U},
     param_index_map::Vector{Int},
@@ -1782,27 +1805,8 @@ function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::
 
     v_proj = zeros(ComplexF64, size(v))
 
-    # Hanning Window to suppress side lobes
-    # W(n) = 0.5 * (1 - cos(2π * n / (N-1)))
-
-
     # Current evolved vector v(t) initialized at t=0 -> v
     v_evolved = copy(v)
-
-    # Pre-compute exp(i * H * dt) operator if possible? 
-    # No, H is likely sparse. calculating exp(iHdt) dense is memory intensive if N is large.
-    # We will use expv iteratively. 
-    # However, repeatedly calling expv might be slow due to overhead.
-    # But it's O(K) instead of O(K^2).
-
-    # First term for k=0 (t=0)
-    # window(0) = 0? No, window(tau) = 0.5*(1-cos(2pi*tau))
-    # tau=0 -> cos(0)=1 -> window=0.
-    # So k=0 term is zero. 
-    # Actually check loop: k=0 to K.
-    # k=0 -> t=0 -> tau=0 -> window=0. coeff=0.
-    # So we can skip k=0 Update?
-    # But we need v_evolved for k=1.
 
     for k in 0:K
         # t = k * dt
@@ -1825,7 +1829,14 @@ function project_hermitian(H, v::AbstractVector, target_eig_idx::Int, all_eigs::
         # Evolve for next step: v(t+dt) = exp(i*H*dt) * v(t)
         # We do this for all k < K. For k=K we don't need next step.
         if k < K
-            v_evolved = expv(im * dt, H, v_evolved)
+            try
+                v_evolved = expv(im * dt, H, v_evolved)
+            catch
+                # println("Hey")
+                # save("debug.jld2", H=H, v_evolved=v_evolved)
+                # error("hey")
+                v_evolved = exponentiate(H, im * dt, v_evolved)
+            end
         end
     end
 
