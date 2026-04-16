@@ -356,6 +356,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     momentum_basis::Bool=false, multi_start_samples::Int=5, multi_start_iters::Int=30,
     precomputed_structures::Dict=Dict()
 )
+    initialization_samples = 2
     if momentum_basis
         use_symmetry = false # Disable spatial symmetries when working directly in momentum space
     end
@@ -637,14 +638,15 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
             for s in 1:initialization_samples
                 mag = 10^(log_min + (log_max - log_min) * rand())
-
+                println("starting")
                 if use_symmetry
                     t_sample = real(rand(typeof(signs[1]), length(sym_data[1])) * mag)
                 else
                     t_sample = (2 * rand(length(t_keys)) .- 1) * mag
                 end
-
-                res = Zygote.withgradient(t -> f_adjoint(t, p_args), t_sample)
+                println("computing gradient")
+                @time res = Zygote.withgradient(t -> f_adjoint(t, p_args), t_sample)
+                println("Finished gradient")
                 l_tmp = res.val
                 g_tmp = res.grad[1]
                 gnorm = norm(g_tmp)

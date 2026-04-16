@@ -25,7 +25,7 @@ function (@main)(ARGS)
         folder = ARGS[1]
         ARGS = ARGS[2:end]
     else
-        folder = "data/N=(5, 5)_4x4"
+        folder = "data/N=(4, 4)_4x2"
     end
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
@@ -110,7 +110,7 @@ function (@main)(ARGS)
         maxiters=20, gradient=:adjoint_gradient,
         perturb_optimization=0.01,
         optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
+        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
         precomputed_structures=precomputed_structures)
 
     return 0

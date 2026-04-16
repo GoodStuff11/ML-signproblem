@@ -1,228 +1,122 @@
+using LsqFit
+# using Pkg
+# Pkg.activate("/home/jek354/research/ML-signproblem")
+# Pkg.update()
+
+using Lattices
 using LinearAlgebra
+using Combinatorics
 using SparseArrays
+using Plots
+import Graphs
+using LaTeXStrings
+using Statistics
+using Random
+using Zygote
+using Optimization, OptimizationOptimisers
+using JSON
+using OptimizationOptimJL
+using JLD2
+using ExponentialUtilities
 
 
-# The number of components in a_i and M_i
+include("../ed_objects.jl")
+include("../ed_functions.jl")
+include("../ed_optimization.jl")
+include("../utility_functions.jl")
 
-DIM = 2
-N = 1000 # Order of truncation
-Hs_dim = 4
+softplus(x,b) = max(x, zero(x)) + log(b) + log1p(exp(-abs(x))/b)
+scaled_softplus(x, p1, p2) = 1/log(1+p2)*softplus(p1*x, p2)
+model(x,p) = @. 1-( p[6]*scaled_softplus(p[5]*(x-1), p[1], p[2]) + (1-p[6])*scaled_softplus(p[5]*(x-1), p[3], p[4]))
+println(scaled_softplus.([1,0.5], 1, 1.0))
 
-# Make up some coeffcients
-v_1, v_2 = ones(Hs_dim), ones(Hs_dim)
-M = [sparse(0.01 * rand(Hs_dim, Hs_dim)) for _ in 1:DIM]
+electrons = (3,3)
+file_label = "N=$(electrons)_3x2"
+folder = joinpath(@__DIR__, "..", "data", "$(file_label)_3")
+# folder="data/tmp"
 
-# The objective function.
-objective = (a) -> 1 - abs2(v_1' * exp(Matrix(sum(i -> a[i] * M[i], 1:DIM))) * v_2)
+e_metadata = load_saved_dict(joinpath(folder, "meta_data_and_E.jld2"))
+interaction_data = e_metadata["meta_data"]["U_values"]
 
-# The analytic derivative, truncated to N = 1000.
-# This is a slow implementation prioritizing clarity.
+file_label_pair = [
+    (L"N_\uparrow=3, N_\downarrow=3, 3\times 2","N=(3, 3)_3x2_3"), 
+    (L"N_\uparrow=3, N_\downarrow=3, 3\times2","N=(3, 3)_3x2_2"),
+    (L"N_\uparrow=4, N_\downarrow=4, 3\times3", "N=(4, 4)_3x3_2"),
+    (L"N_\uparrow=4, N_\downarrow=4, 4\times2", "N=(4, 4)_4x2_2"),
+    (L"N_\uparrow=4, N_\downarrow=5, 3\times3", "N=(4, 5)_3x3_3"),
+    (L"N_\uparrow=4, N_\downarrow=5, 3\times3", "N=(4, 5)_3x3"),
+    ]
 
-function d_objective_sparse(a)
-    # Type assertions for globals to ensure performance
-    local M_typed::Vector{SparseMatrixCSC{Float64,Int}} = M
-    local v1_typed::Vector{Float64} = v_1
-    local v2_typed::Vector{Float64} = v_2
-    local N_typed::Int = N
-    local Hs_dim_typed::Int = Hs_dim
-    local DIM_typed::Int = DIM
+# fit_params2 = []
 
-    invN = 1.0 / N_typed
 
-    # Forward Pass
-    # Store r[k] = A^(k-1) * v_1
-    # We allocate N+1 slots. r[k] corresponds to A^(k-1) v_1
-    r = Vector{Vector{Float64}}(undef, N_typed + 1)
+for (label,file_label) in file_label_pair
+    # push!(fit_params2, [])
+    for i = 22:22
 
-    # We can pre-allocate the vectors in r to be contiguous in memory?
-    # For now, separate allocations is fine unless N is huge.
+        folder = "/home/jek354/research/ML-signproblem/experimenting/ed/data/$(file_label)/pruning_analysis.jld2"
+        folder2 = "/home/jek354/research/ML-signproblem/experimenting/ed/data/$(file_label)/meta_data_and_E.jld2"
+        d = load(folder2)["dict"]
+        hilbert_space_size = size(d["all_full_eig_vecs"][1],2)
+        line_width = sqrt(hilbert_space_size)/20
 
-    r[1] = v1_typed
+        d = load(folder)
+        filt = d["removed_terms"][:,i] .> 0
 
-    # Pre-allocate buffer for matrix-vector product result
-    # We will reuse this buffer logic or just allocate fresh. 
-    # To be safe and simple: new allocation per step (or copy)
+        err = max.(abs.(d["error_data"][:,i][filt]),1e-16)
+        overlap = 1 .- err
+        # rel_err = (err .- err[1]) ./ err
+        # println(d["removed_terms"][:,i])
+        # println(d["removed_terms"][:,i][filt])
+        x = d["removed_terms"][:,i][filt]./maximum(d["removed_terms"][:,i][filt])
+        y = (overlap .- overlap[end])./(overlap[1] .- overlap[end])
 
-    for k in 1:N_typed
-        # r[k+1] = A * r[k] = r[k] + 1/N * sum(a_j * M_j * r[k])
-        rk = r[k]
-        r_next = copy(rk) # Starts as Identity * rk
 
-        # Add contribution from each M_j
-        for j in 1:DIM_typed
-            m = M_typed[j]
-            aj_invN = a[j] * invN
+        filt2 = y .>= y[end] #.||(x .< 0.9 .|| x .>= 0.99)
 
-            rows = rowvals(m)
-            vals = nonzeros(m)
+        lb = [-Inf, 1e-5, -Inf, 1e-5, -Inf, 0.0]
+        ub = [Inf, Inf, Inf, Inf, Inf, 1.0]
 
-            # M_j * rk
-            # Iterate columns of m
-            for col in 1:size(m, 2)
-                rj = rk[col]
-                # If rj is small, we could skip, but check cost usually > mult cost
-                for idx in nzrange(m, col)
-                    row = rows[idx]
-                    val = vals[idx]
-                    r_next[row] += aj_invN * val * rj
-                end
+        fit = nothing
+        for iter in 1:4
+            # Fit the model using the current inliers
+            fit = curve_fit(model, x[filt2], y[filt2], y[filt2].^8, [1.0, 1.0, 1.0, 1.0, 1.0, 0.5], lower=lb, upper=ub)
+            
+            # Calculate residuals for ALL data points
+            residuals = abs.(y .- model(x, fit.param))
+            
+            # Use the standard deviation of the current inliers' residuals as a threshold basis
+            inlier_std = max(std(residuals[filt2]), 1e-8)
+            
+            # Keep points that are within 2.0 standard deviations (to remove noise of later data)
+            new_filt2 = residuals .<= 3.0 * inlier_std
+            
+            # Stop if the filter has converged
+            if new_filt2 == filt2
+                break
             end
+            
+            # Safety check to avoid dropping too many points
+            if sum(new_filt2) < length(fit.param) + 2
+                break
+            end
+            
+            filt2 = new_filt2
         end
-        r[k+1] = r_next
+        fit = curve_fit(model, x[filt2], y[filt2], y[filt2].^8, [1.0, 1.0, 1.0, 1.0, 1.0, 0.5], lower=lb, upper=ub)
+        
+        p = scatter(x[filt2], y[filt2], label="inliers", color=:blue, ylim=(-0.01,1.01))
+        if any(.!filt2)
+            scatter!(p, x[.!filt2], y[.!filt2], label="outliers", color=:red)
+        end
+        plot!(p, LinRange(0,1,200), model(LinRange(0, 1,200),fit.param), label="fit", color=:black)
+        display(p)
+        # push!(fit_params2[end], fit.param)
+
+        
     end
-
-    # Backward Pass
-    grads = zeros(Float64, DIM_typed)
-    l = copy(v2_typed)
-    l_next = similar(l)
-
-    for i in N_typed:-1:1
-        r_current = r[i+1]
-
-        # Gradient accumulation
-        # val_j = l' * M_j * r_current
-        for j in 1:DIM_typed
-            m = M_typed[j]
-            rows = rowvals(m)
-            vals = nonzeros(m)
-            val = 0.0
-            for c in 1:size(m, 2)
-                rc = r_current[c]
-                for idx in nzrange(m, c)
-                    val += l[rows[idx]] * vals[idx] * rc
-                end
-            end
-            grads[j] += val
-        end
-
-        # Update l for next step: l = A' * l
-        # l_new = l + 1/N * sum(a_j * M_j' * l)
-        if i > 1
-            copyto!(l_next, l)
-
-            for j in 1:DIM_typed
-                m = M_typed[j]
-                aj_invN = a[j] * invN
-                rows = rowvals(m)
-                vals = nonzeros(m)
-
-                # Compute M_j' * l
-                # (M^T l)_col = sum_row M_row,col * l_row
-                # Since we iterate cols of M (which are rows of M^T),
-                # for a given col, we sum over rows of M.
-
-                for col in 1:size(m, 2)
-                    delta = 0.0
-                    for idx in nzrange(m, col)
-                        row = rows[idx]
-                        val = vals[idx]
-                        delta += val * l[row]
-                    end
-                    l_next[col] += aj_invN * delta
-                end
-            end
-            copyto!(l, l_next)
-        end
-    end
-
-    return grads ./ N_typed
 end
 
-function d_objective_dense(a)
-    # Type assertions for globals to ensure performance
-    local M_typed::Vector{SparseMatrixCSC{Float64,Int}} = M
-    local v1_typed::Vector{Float64} = v_1
-    local v2_typed::Vector{Float64} = v_2
-    local N_typed::Int = N # determines the accuracy of the method
-    local Hs_dim_typed::Int = Hs_dim
-    local DIM_typed::Int = DIM
+# savefig("good_images/extras/U=$(interaction_data[i])_relative_loss.png")
+# savefig("good_images/extras/U=$(interaction_data[i])_relative_loss.pdf")
 
-    # Reconstruct X (dense)
-    X = zeros(eltype(M_typed[1]), Hs_dim_typed, Hs_dim_typed)
-    for i in 1:DIM_typed
-        # In Julia, adding sparse to dense is generally fast enough, 
-        # but since we know they are disjoint, we are just filling vals.
-        rows = rowvals(M_typed[i])
-        vals = nonzeros(M_typed[i])
-        v = a[i]
-        for col in 1:size(M_typed[i], 2)
-            for k in nzrange(M_typed[i], col)
-                row = rows[k]
-                val_k = vals[k]
-                X[row, col] += v * val_k
-            end
-        end
-    end
-
-    # Pre-compute Operator A = I + X/N
-    invN = 1.0 / N_typed
-    A = Matrix{Float64}(I, Hs_dim_typed, Hs_dim_typed)
-    @. A += X * invN
-
-    # Forward Pass
-    # Store r[k] = A^(k-1) * v_1
-    # We need r corresponding to A^1 ... A^N.
-    # Let's allocate N+1 slots, r[k] = A^(k-1) * v_1
-    r = Vector{Vector{Float64}}(undef, N_typed + 1)
-    r[1] = v1_typed
-    for k in 1:N_typed
-        r[k+1] = A * r[k]
-    end
-
-    # Backward Pass
-    grads = zeros(Float64, DIM_typed)
-    # l calculates v_2' * A^(N-i)
-    # i goes N down to 1.
-    l = copy(v2_typed) # Left vector
-
-    # Temporary buffer for l update
-    l_next = similar(l)
-
-    for i in N_typed:-1:1
-        # Current term: v_2' * A^(N-i) * M[j] * A^i * v_1
-        # l holds (A^T)^(N-i) * v_2. So l' corresponds to v_2' A^(N-i).
-        # r_vec should be A^i * v_1.
-        # r index mapping: r[k] = A^(k-1) v_1. So we need r[i+1].
-
-        r_current = r[i+1]
-
-        # Accumulate gradients for each j
-        for j in 1:DIM_typed
-            # Compute scalar: l' * M[j] * r_current
-            # Efficiently using sparse structure of M[j]
-            m = M_typed[j]
-            rows = rowvals(m)
-            vals = nonzeros(m)
-            val = 0.0
-
-            # Iterate columns of sparse matrix
-            for c in 1:size(m, 2)
-                rc = r_current[c]
-                # If rc is 0, we can skip? No, dense vector usually not 0.
-                for k in nzrange(m, c)
-                    # M[row, c] * r[c] * l[row]
-                    val += l[rows[k]] * vals[k] * rc
-                end
-            end
-            grads[j] += val
-        end
-
-        # Update l for next step (next i is smaller, so N-i is larger by 1 -> multiply by A')
-        # l = A' * l
-        if i > 1
-            mul!(l_next, A', l)
-            l .= l_next
-        end
-    end
-
-    return grads ./ N_typed
-end
-
-# Compare with finite differece.
-finite_difference_check = [
-    objective([1, 1]) - objective([0.999, 1]),
-    objective([1, 1]) - objective([1, 0.999])
-] * 1000
-
-
-isapprox(d_objective_dense([1, 1]), finite_difference_check, atol=1e-3)
