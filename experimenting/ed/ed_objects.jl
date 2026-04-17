@@ -1,29 +1,4 @@
 # lattice #
-function reflection_mapping(lattice::AbstractLattice, dims)
-    # kind is an integer specifying which axis the reflection is on. 
-    # this number ranges from 1 to (whatever the rotational symmetry of lattice)
-    d = Dict()
-    for (s, sp) ∈ zip(sites(lattice), reverse(collect(sites(lattice)), dims=dims))
-        d[s] = sp
-    end
-    return d
-end
-function rotation_mapping(lattice::AbstractLattice)
-    d = Dict()
-    for (s, sp) ∈ zip(_s, mapslices(rotr90, collect(sites(lattice)), dims=[1, 2]))
-        d[s] = sp
-    end
-    return d
-end
-function translation_mapping(lattice::AbstractLattice, dims)
-    d = Dict()
-    shift = zeros(length(size(sites(lattice))))
-    shift[dims] = 1
-    for (s, sp) ∈ zip(sites(lattice), circshift(collect(sites(lattice)), shift))
-        d[s] = sp
-    end
-    return d
-end
 # defining comparing of coordinates
 for (k, op) in enumerate([:>, :isless, :<, :>=, :<=])
     @eval function Base.$op(x::Coordinate{N}, y::Coordinate{N}) where N

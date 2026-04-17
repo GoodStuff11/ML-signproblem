@@ -1,6 +1,5 @@
 
 
-# MUTABLE CELL #
 """ used to optimize update_values """
 function build_param_index_map(
     ops_list::Vector{Vector{Tuple{T,Int,Symbol}}},
@@ -340,7 +339,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
     else
         A = make_hermitian(A)
     end
-    
+
     if !isnothing(p) && !(p isa SciMLBase.NullParameters)
         A = A + p
     end

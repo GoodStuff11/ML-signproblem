@@ -1,0 +1,10 @@
+FROM gcr.io/kaggle-gpu-images/python
+
+RUN julia -e 'using Pkg; Pkg.add("IJulia"); using IJulia; installkernel("Julia",env=Dict("JULIA_NUM_THREADS"=>"auto"))'
+
+WORKDIR /app
+
+COPY data /app/data
+COPY input_notebook.ipynb Manifest.toml Project.toml data/* ed_objects.jl ./ 
+
+ENTRYPOINT ["papermill", "/app/input_notebook.ipynb", "/app/output_notebook.ipynb", "-k", "julia-1.11"]
