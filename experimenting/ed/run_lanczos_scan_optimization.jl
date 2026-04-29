@@ -25,7 +25,7 @@ function (@main)(ARGS)
         folder = ARGS[1]
         ARGS = ARGS[2:end]
     else
-        folder = "data/N=(4, 4)_4x2"
+        folder = "data/N=(2, 2)_3x2"
     end
     file_path = joinpath(folder, "meta_data_and_E.jld2")
 
@@ -71,7 +71,7 @@ function (@main)(ARGS)
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "optimization_scheme" => [2],
+        "optimization_scheme" => [2,1],
         "use symmetry" => use_symmetry,
         "multi_start_iters" => 50, # 30
         "multi_start_samples" => 20, #5
@@ -86,9 +86,9 @@ function (@main)(ARGS)
                 scan_instructions["u_range"] = 26:length(U_values)
             else ARGS[1] == "backward"
                 println("backward")
-                scan_instructions["u_range"] = 60:-1:1
+                scan_instructions["u_range"] = 18:-1:1
             end
-            scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_61.jld2")
+            scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_19.jld2")
             println("Load: $(scan_instructions["load_file"])")
         else
             println("doing: $v1")
@@ -109,8 +109,8 @@ function (@main)(ARGS)
         spin_conserved;
         maxiters=20, gradient=:adjoint_gradient,
         perturb_optimization=0.01,
-        optimizer=[:GradientDescent, :LBFGS, :GradientDescent, :LBFGS, :GradientDescent, :LBFGS],
-        save_folder=nothing, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
+        optimizer=[:GradientDescent, :LBFGS],
+        save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
         precomputed_structures=precomputed_structures)
 
     return 0

@@ -183,5 +183,9 @@ end
 
 # Check if script is run directly
 function @main(ARGS)
-    run_pruning_analysis("./data", "N=(4, 5)_3x3_3")
+    if length(ARGS) == 1
+        run_pruning_analysis("./data", "$(ARGS[1])")
+    else
+        run_pruning_analysis("./data", "N=(4, 4)_3x3_2")
+    end
 end

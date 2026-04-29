@@ -27,7 +27,7 @@ end
 # defining comparing of coordinates
 for (k, op) in enumerate([:>, :isless, :<, :>=, :<=])
     @eval function Base.$op(x::Coordinate{N}, y::Coordinate{N}) where N
-        for (a, b) ∈ zip(x.coordinates, y.coordinates)
+        for (a, b) ∈ reverse(collect(zip(x.coordinates, y.coordinates)))
             if a != b
                 return $op(a, b)
             end
@@ -65,27 +65,70 @@ struct HubbardModel
     half_filling::Bool
 end
 
+"""
+    _each_comb(f, a, b)
+
+Call `f(view)` for every size-`b` combination of `a` in strictly ascending index order
+`a[i₁], a[i₂], …, a[iᵦ]` with `1 ≤ i₁ < i₂ < … < iᵦ ≤ length(a)`.
+
+Uses a single pre-allocated index buffer — zero per-combination heap allocations.
+"""
+@inline function _each_comb(f::F, a::Vector{T}, b::Int) where {F,T}
+    n = length(a)
+    b == 0 && (f(T[]); return)  # empty combination
+    b > n  && return             # no combinations exist
+    # indices[j] = current 1-based position in `a` for the j-th chosen element
+    # Ordering: leftmost index is fastest-changing (increments first),
+    # rightmost index is slowest-changing. Example b=3:
+    #   (1,2,3),(1,2,4),(1,3,4),(2,3,4),(1,2,5),(1,3,5),...
+    indices = collect(1:b)
+    buf = Vector{T}(undef, b)   # reused across all calls — one alloc total
+    while true
+        @inbounds for j in 1:b
+            buf[j] = a[indices[j]]
+        end
+        f(buf)
+        # Advance: find the LEFTMOST index that can be incremented
+        j = 1
+        while j <= b
+            max_val = j < b ? indices[j+1] - 1 : n
+            if indices[j] < max_val
+                indices[j] += 1
+                # Reset everything to the left back to 1, 2, ..., j-1
+                @inbounds for k in 1:j-1
+                    indices[k] = k
+                end
+                break
+            end
+            j += 1
+        end
+        j > b && break  # no index could advance → done
+    end
+end
+
 function _combination_indexer!(a::Vector{T}, b::Int, c::Int, idx::Int, comb_dict, inv_comb_dict; k=nothing, lattice_dims=nothing) where T
-    for comb1 in combinations(a, b)
+    check_k = !isnothing(k) && !isnothing(lattice_dims)
+    ndims_k  = check_k ? length(lattice_dims) : 0
+    tot_k    = check_k ? zeros(Int, ndims_k) : Int[]  # one alloc, reused
+    _each_comb(a, b) do comb1
         set1 = Set(comb1)
-        for comb2 in combinations(a, c)
-            set2 = Set(comb2)
-            if !isnothing(k) && !isnothing(lattice_dims)
-                # check if total momentum matches k
-                # assuming objects in combination are Coordinate
-                # total momentum is sum of momenta mod lattice_dims
-                tot_k = zeros(Int, length(lattice_dims))
+        _each_comb(a, c) do comb2
+            if check_k
+                @inbounds for d in 1:ndims_k
+                    tot_k[d] = 0
+                end
                 for coord in comb1
-                    tot_k .+= (coord.coordinates .- 1)
+                    @inbounds tot_k .+= (coord.coordinates .- 1)
                 end
                 for coord in comb2
-                    tot_k .+= (coord.coordinates .- 1)
+                    @inbounds tot_k .+= (coord.coordinates .- 1)
                 end
-                tot_k = (tot_k .% lattice_dims) .+ 1
-                if tuple(tot_k...) != k
-                    continue
+                @inbounds for d in 1:ndims_k
+                    tot_k[d] = (tot_k[d] % lattice_dims[d]) + 1
                 end
+                tuple(tot_k...) != k && return
             end
+            set2 = Set(comb2)
             pair = (set1, set2)
             comb_dict[pair] = idx
             push!(inv_comb_dict, pair)
@@ -128,7 +171,7 @@ struct CombinationIndexer{T}
         new{T}(a, comb_dict, inv_comb_dict, nothing, nothing)
     end
     function CombinationIndexer(Hs::HubbardSubspace)
-        a = reduce(vcat, collect(sites(Hs.lattice)))
+        a = sort(reduce(vcat, collect(sites(Hs.lattice)))) # sort to standardize the order of sites
         lattice_dims = size(Hs.lattice)
         k = Hs.k
         iter = Hs.N == -1 ? Iterators.product((Hs.N_up isa Number ? (Hs.N_up:Hs.N_up) : Hs.N_up),

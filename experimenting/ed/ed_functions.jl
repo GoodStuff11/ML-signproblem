@@ -288,8 +288,9 @@ function compute_jw_sign(
     # computes the sign for the term given by ops (in second quantized), associated with the 
     # configuration conf.
 
-    # Full JW order over sites and spins
-    jw_order = [(s, σ) for s in sorted_sites for σ in (1, 2)]
+    # Full JW order over sites and spins: spin-major (all ↑ first, then all ↓)
+    # This matches the external dataset's fermionic sign convention.
+    jw_order = [(s, σ) for σ in (1, 2) for s in sorted_sites]
 
     # Map each mode to its index in JW order
     jw_index = Dict{Tuple{T,Int},Int}((sσ, i) for (i, sσ) in enumerate(jw_order))
