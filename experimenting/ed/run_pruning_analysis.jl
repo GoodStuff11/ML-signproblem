@@ -23,41 +23,13 @@ include("utility_functions.jl")
 function run_pruning_analysis(folder, data_label)
     # folder = "/media/jonathon/Jonathon HDD/datasets/HubbardED/N=3"
     folder = joinpath(folder, data_label)
-
-    # Load energy and eigen data
-    println("Loading energy and meta data...")
-    energy_meta_data_dict = load_saved_dict(joinpath(folder, "meta_data_and_E.jld2"))
-    all_full_eig_vecs = energy_meta_data_dict["all_full_eig_vecs"]
-    indexer = energy_meta_data_dict["indexer"]
-    meta_data = energy_meta_data_dict["meta_data"]
-    U_values = meta_data["U_values"]
-
-    # Handle dimensionality setup
-    N = meta_data["electron count"]
-    spin_conserved = !isa(N, Number)
-
-    # Find lowest energy sector
-    min_E = Inf
-    k_min = 1
-    for (k, E_vec) in enumerate(energy_meta_data_dict["E"])
-        if !isempty(E_vec)
-            if E_vec[1] < min_E
-                min_E = E_vec[1]
-                k_min = k
-            end
-        end
-    end
-
-    println("Selected lowest energy symmetry sector: $k_min with Energy $(min_E)")
-    target_vecs = all_full_eig_vecs[k_min]
-    if indexer isa Vector
-        indexer = indexer[k_min]
-    end
+    U_values, target_vecs, indexer, _, N, _, _, sign_convention = load_ED_data(folder)
 
     dim = length(indexer.inv_comb_dict)
 
     # Load shared data
     shared_data = load_saved_dict(joinpath(folder, "unitary_map_energy_symmetry=false_N=$(N)_shared.jld2"))
+
     coefficient_labels = shared_data["coefficient_labels"]
     param_mapping = shared_data["param_mapping"]
     parities = shared_data["parities"]
@@ -79,11 +51,9 @@ function run_pruning_analysis(folder, data_label)
         if isnothing(coefficient_labels[o_idx]) || isempty(coefficient_labels[o_idx])
             continue
         end
-        # Create a dummy c_vals array with zeros just to build the structure
-        dummy_c_vals = zeros(Float64, length(coefficient_labels[o_idx]))
-        t_dict = Dict(zip(coefficient_labels[o_idx], dummy_c_vals))
 
-        rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
+        sorted_labels = sort(coefficient_labels[o_idx], order=sign_convention==:spin_first ? ColSnake() : RowSnake())
+        rows, cols, signs, ops_list = build_n_body_structure_from_keys(sorted_labels, indexer, Float64; sign_convention=sign_convention)
         param_index_map = build_param_index_map(ops_list, coefficient_labels[o_idx])
 
         cached_structures[o_idx] = (rows, cols, signs, param_index_map)
@@ -91,7 +61,7 @@ function run_pruning_analysis(folder, data_label)
 
     total_params = 0
 
-    for k in 1:num_maps
+    Threads.@threads for k in 1:num_maps
         iter_data = load_saved_dict(iter_files[k])
         ending_U_index = iter_data["u_idx"]
         ending_U_level = get(instructions, "ending level", 1) # target level 
@@ -165,6 +135,7 @@ function run_pruning_analysis(folder, data_label)
     # Optionally save results out
     JLD2.jldsave(joinpath(folder, "pruning_analysis.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
 
+    display(error_data)
     println("\n=== SUMMARY STATISTICS ===")
     println("Largest threshold applied: ", thresholds[end])
     println("Total optimizable parameters per mapped unitary sequence: ", total_params)
@@ -172,8 +143,10 @@ function run_pruning_analysis(folder, data_label)
 
     # Evaluate a generic baseline error for reference
     ref_overlap = abs2(target_vecs[1, :]' * target_vecs[33, :])
-    println("Unmapped (Baseline) Error between State U=1 and State U=33: ", 1 - ref_overlap)
-    println("Mapped Error at max threshold (U=33): ", error_data[end, 33])
+    println("Unmapped (Baseline) Error between State U=$(round(U_values[1], digits=2)) and State U=$(round(U_values[33], digits=2)): ", 1 - ref_overlap)
+    println("Mapped Error at max threshold (U=$(round(U_values[33], digits=2))): ", error_data[end, 33])
+    println("Mapped Error at zero threshold (U=$(round(U_values[33], digits=2))): ", error_data[1, 33])
+    println("Mapped Error at zero threshold (U=$(round(U_values[15], digits=2))): ", error_data[1, 15])
     println("==========================\n")
 
     # Simple plots

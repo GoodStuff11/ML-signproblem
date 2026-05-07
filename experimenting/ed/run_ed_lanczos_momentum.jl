@@ -24,12 +24,14 @@ function (@main)(ARGS)
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    lattice_dimension = (4, 4)
+    sign_convention = :coordinate_first
+
+    lattice_dimension = (3, 3)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 5
-        N_down = 5
+        N_up = 3
+        N_down = 3
         N = (N_up, N_down)
     else
         N = 6
@@ -72,19 +74,19 @@ function (@main)(ARGS)
             continue
         end
 
-        new_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, momentum_basis=true)
-        new_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=true)
+        new_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, momentum_basis=true, sign_convention=sign_convention)
+        new_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=true, sign_convention=sign_convention)
 
         ops = []
         eig_values = []
         if !spin_polarized
             particle_n = subspace.N
-            push!(ops, Hermitian(create_operator(subspace, :Sx; momentum_basis=true)))
+            push!(ops, Hermitian(create_operator(subspace, :Sx; momentum_basis=true, sign_convention=sign_convention)))
             push!(eig_values, -particle_n÷2:1:particle_n÷2)
-            push!(ops, Hermitian(create_operator(subspace, :S2; momentum_basis=true)))
+            push!(ops, Hermitian(create_operator(subspace, :S2; momentum_basis=true, sign_convention=sign_convention)))
             push!(eig_values, [s * (s + 1) for s in (particle_n%2)/2:1:particle_n/2])
         else
-            push!(ops, Hermitian(create_operator(subspace, :S2; momentum_basis=true)))
+            push!(ops, Hermitian(create_operator(subspace, :S2; momentum_basis=true, sign_convention=sign_convention)))
             particle_n = subspace.N_up + subspace.N_down
             push!(eig_values, [s * (s + 1) for s in (particle_n%2)/2:1:particle_n/2])
         end
@@ -171,23 +173,22 @@ function (@main)(ARGS)
         all_full_eig_vecs[k] = all_eig_vecs
         all_E[k]             = E_values
         all_indexers[k]      = indexer
+        # println("k: $k, indexer: $(indexer.inv_comb_dict[1])")
+        # println("k: $k, all_indexers: $(all_indexers[max(k-1, 1)].inv_comb_dict[1])")
     end
-
-    selected_index = 1
-    minimum_energy = Inf
-    for i in eachindex(all_E)
-        if !isempty(all_E[i]) && all_E[i][30] < minimum_energy
-            minimum_energy = all_E[i][30]
-            selected_index = i
+    for k in eachindex(all_indexers)
+        if all_indexers[k] !== nothing
+            println("k: $k, indexer: $(all_indexers[k].inv_comb_dict[1])")
         end
     end
-
+    selected_index = find_best_energy_sector(all_E, U_values)
+    
     # --- Precompute operator structures for optimization ---
     println("Precomputing n_body_structure for optimization...")
     main_indexer = all_indexers[selected_index]
     precomputed_structures = Dict()
     if main_indexer !== nothing
-        precomputed_structures = precompute_n_body_structures(main_indexer, 2; spin_conserved=!isa(N, Number), momentum_basis=true)
+        precomputed_structures = precompute_n_body_structures(main_indexer, 2; spin_conserved=!isa(N, Number), momentum_basis=true, sign_convention=sign_convention)
     end
 
     meta_data = Dict(
@@ -201,16 +202,25 @@ function (@main)(ARGS)
         "optimizer" => "BFGS"
     )
 
+    # dict = Dict(
+    #     "meta_data" => meta_data,
+    #     "E" => [all_E[selected_index]],
+    #     "all_full_eig_vecs" => [all_full_eig_vecs[selected_index]],
+    #     "indexer" => [all_indexers[selected_index]],
+    #     "all_eig_indices" => [all_eig_indices[selected_index]],
+    #     "precomputed_structures" => precomputed_structures
+    # )
     dict = Dict(
         "meta_data" => meta_data,
-        "E" => [all_E[selected_index]],
-        "all_full_eig_vecs" => [all_full_eig_vecs[selected_index]],
-        "indexer" => [all_indexers[selected_index]],
-        "all_eig_indices" => [all_eig_indices[selected_index]],
+        "E" => all_E,
+        "all_full_eig_vecs" => all_full_eig_vecs,
+        "indexer" => all_indexers,
+        "all_eig_indices" => all_eig_indices,
         "precomputed_structures" => precomputed_structures
     )
 
     save_energy_with_metadata(file_name, dict)
+    println("saved to: $file_name")
 
     return 0
 end

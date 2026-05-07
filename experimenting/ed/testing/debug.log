@@ -1,0 +1,80 @@
+ERROR: LoadError: TaskFailedException
+
+    nested task error: BoundsError: attempt to access 4-element Vector{Vector{Int64}} at index [5]
+    Stacktrace:
+     [1] throw_boundserror(A::Vector{Vector{Int64}}, I::Tuple{Int64})
+       @ Base ./essentials.jl:15
+     [2] getindex
+       @ ./essentials.jl:919 [inlined]
+     [3] macro expansion
+       @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:213 [inlined]
+     [4] (::var"#242#243"{var"#244#245"{Bool, Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}, CombinationIndexer{Coordinate{2, Int64}}, Vector{Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}}, Vector{Vector{ComplexF64}}, Vector{Vector{Int64}}, Vector{Vector{Int64}}, Vector{Coordinate{2, Int64}}, UnitRange{Int64}}})(tid::Int64; onethread::Bool)
+       @ Main ./threadingconstructs.jl:276
+     [5] #242
+       @ ./threadingconstructs.jl:243 [inlined]
+     [6] (::Base.Threads.var"#threading_run##0#threading_run##1"{var"#242#243"{var"#244#245"{Bool, Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}, CombinationIndexer{Coordinate{2, Int64}}, Vector{Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}}, Vector{Vector{ComplexF64}}, Vector{Vector{Int64}}, Vector{Vector{Int64}}, Vector{Coordinate{2, Int64}}, UnitRange{Int64}}}, Int64})()
+       @ Base.Threads ./threadingconstructs.jl:177
+Stacktrace:
+  [1] threading_run(fun::var"#242#243"{var"#244#245"{Bool, Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}, CombinationIndexer{Coordinate{2, Int64}}, Vector{Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}}, Vector{Vector{ComplexF64}}, Vector{Vector{Int64}}, Vector{Vector{Int64}}, Vector{Coordinate{2, Int64}}, UnitRange{Int64}}}, static::Bool)
+    @ Base.Threads ./threadingconstructs.jl:196
+  [2] macro expansion
+    @ ./threadingconstructs.jl:213 [inlined]
+  [3] build_n_body_structure_from_keys_threaded(t_keys::Vector{Vector{Tuple{Coordinate{2, Int64}, Int64, Symbol}}}, indexer::CombinationIndexer{Coordinate{2, Int64}}, ::Type{ComplexF64}; skip_lower_triangular::Bool)
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:183
+  [4] build_n_body_structure_from_keys_threaded
+    @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:167 [inlined]
+  [5] #build_n_body_structure_threaded#227
+    @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:164 [inlined]
+  [6] build_n_body_structure_threaded
+    @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:158 [inlined]
+  [7] macro expansion
+    @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:460 [inlined]
+  [8] macro expansion
+    @ ./timing.jl:461 [inlined]
+  [9] run_benchmarks()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:459
+ [10] top-level scope
+    @ ~/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:562
+ [11] include(mapexpr::Function, mod::Module, _path::String)
+    @ Base ./Base.jl:307
+ [12] top-level scope
+    @ ~/research/ML-signproblem/experimenting/ed/test_thread.jl:1
+ [13] include(mod::Module, _path::String)
+    @ Base ./Base.jl:306
+ [14] exec_options(opts::Base.JLOptions)
+    @ Base ./client.jl:317
+ [15] _start()
+    @ Base ./client.jl:550
+in expression starting at /home/jek354/research/ML-signproblem/experimenting/ed/testing/benchmark_operator_construction.jl:562
+in expression starting at /home/jek354/research/ML-signproblem/experimenting/ed/test_thread.jl:1
+======================================================================
+Operator Construction Benchmark
+Julia threads: 4
+======================================================================
+
+──────────────────────────────────────────────────────────────────────
+System: N=(3,3)_3x2  (3×2, N↑=3, N↓=3)
+──────────────────────────────────────────────────────────────────────
+  0.582093 seconds (347.07 k allocations: 16.536 MiB, 99.90% compilation time)
+  System : N=(3,3)_3x2
+  Sites  : 6
+  Dim    : 400
+
+  ── order = 1 ─────────────────────────────
+
+  [1] create_randomized_nth_order_operator (baseline)
+      keys=72   time=0.0001 s
+
+  [2] create_randomized_nth_order_operator_fast
+      keys=72   time=0.0001 s  speedup=0.85x
+      ✓ key sets match
+
+  [3] build_n_body_structure (baseline)
+      dim=400  n_keys=72  nnz=9600  time=0.2237 s
+
+  [4] build_n_body_structure_prefiltered
+      nnz=7200  time=0.0462 s  speedup=4.84x
+  ✗  prefiltered MISMATCH vs reference!
+     nnz ref=9600  cmp=7200
+
+  [5] build_n_body_structure_threaded (4 threads)

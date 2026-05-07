@@ -1,0 +1,16 @@
+ERROR: LoadError: UndefVarError: `SparseMatrixCSC` not defined in `Main`
+Suggestion: check for spelling errors or missing imports.
+Stacktrace:
+ [1] top-level scope
+   @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:1
+ [2] include(mapexpr::Function, mod::Module, _path::String)
+   @ Base ./Base.jl:307
+ [3] top-level scope
+   @ none:1
+ [4] eval(m::Module, e::Any)
+   @ Core ./boot.jl:489
+ [5] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:283
+ [6] _start()
+   @ Base ./client.jl:550
+in expression starting at /home/jek354/research/ML-signproblem/experimenting/ed/ed_functions.jl:1

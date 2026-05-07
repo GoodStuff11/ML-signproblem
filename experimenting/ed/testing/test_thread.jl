@@ -1,0 +1,5 @@
+include("testing/benchmark_operator_construction.jl")
+indexer = make_indexer(3, 2, 3, 3)
+t_ref = create_randomized_nth_order_operator(2, indexer; conserve_spin=true)
+build_n_body_structure_threaded(t_ref, indexer)
+println("Success!")

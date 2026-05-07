@@ -43,6 +43,200 @@ function permutation_parity(a::Vector)
     return parity % 2
 end
 
+function find_best_energy_sector(all_E::Vector, U_values::Vector; labels=nothing)
+    if length(all_E) == 1
+        if labels === nothing
+            return 1
+        else
+            return labels[1]
+        end
+    end
+    # todo verify which states I'm looking at 887
+    println("Finding best energy sector")
+    counts = Dict()
+    for u_idx in eachindex(all_E[1])
+        energies = [real.(all_E[k])[u_idx] for k in eachindex(all_E)]
+        indices = sortperm(energies)
+        print_indices = min(2, length(energies))
+        println("U=$(U_values[u_idx]) k=$(indices[1:print_indices]) $(energies[1:print_indices])")
+        counts[indices[1]] = get(counts, indices[1], 0) + 1
+    end
+
+    # pick the k value which is most frequently the ground state
+    k_min = argmax(counts)
+    println("Selected ground state symmetry sector: $k_min")
+    # error("")
+    if labels === nothing
+        return k_min
+    else
+        return labels[k_min]
+    end
+end
+
+"""
+Expects open hdf5 file and a number from 0 to the number of momentum sectors - 1. 
+
+Returns the index corresponding to a ground state of the tight-binding model for the given 
+momentum sector.
+"""
+function get_slater_ground_state(data, sector::Int)
+    println("Computing slater ground state for sector $sector")
+
+    # expects data to be an h5 open file object
+    # get momentum sector, a vector of two elements [kx, ky] (starting at zero)
+    mom_sector = read(data, "metadata/kvecs")[:, sector+1]
+    L = read(data, "metadata/Lvec")
+    Ne = read(data, "metadata/nup"), read(data, "metadata/ndown")
+
+    separate_spins_stored = (read(data, "metadata/slater_labels/$sector") isa Dict)
+    if !separate_spins_stored
+        # slater labels contain indices which can be obtained from coordinates via ind2sub
+        slater_labels = read(data, "metadata/slater_labels/$sector") # dim (Ne_up,H_dim,2)
+        H_dim = size(slater_labels, 2)
+    else
+        slater_labels_up = read(data, "metadata/slater_labels/$sector/up") # dim (Ne_up,H_dim)
+        slater_labels_down = read(data, "metadata/slater_labels/$sector/dn") # dim (Ne_down,H_dim)
+        H_dim = size(slater_labels_up, 2)
+    end
+
+    # find occupation of the tight-binding model ground state in momentum coordinates
+    L = read(data, "metadata/Lvec")
+    single_spin_energies = zeros(Float64, L[1]*L[2])
+    momenta = [[i,j] for j in 0:L[2]-1 for i in 0:L[1]-1 ]
+    for (k_idx, k) in enumerate(momenta)
+        i = k[1]
+        j = k[2]
+        single_spin_energies[k_idx] = -2*(cos(2*pi*i/L[1]) + cos(2*pi*j/L[2]))
+    end
+
+    best_idx = -1
+    min_E = Inf
+    
+    # computes the energy of each slater determinant state, keeping track of the first occurrings lowest energy one
+    for idx in 1:H_dim
+        if !separate_spins_stored
+            # println(slater_labels[:, idx, 1])
+            # println(slater_labels[:, idx, 2])
+            if slater_labels[1] isa UInt
+                # convert slater_labels[spin, idx] to binary
+                E_up = sum(Float64.(digits(slater_labels[1, idx], base=2, pad=prod(L))).*single_spin_energies)
+                E_dn = sum(Float64.(digits(slater_labels[2, idx], base=2, pad=prod(L))).*single_spin_energies)
+                # println(digits(slater_labels[2, idx], base=2, pad=prod(L)))
+                # println(E_dn)
+                # error("")
+            else
+                E_up = sum(single_spin_energies[k+1] for k in slater_labels[:, idx, 1])
+                E_dn = sum(single_spin_energies[k+1] for k in slater_labels[:, idx, 2])
+            end
+        else
+            E_up = sum(single_spin_energies[k+1] for k in slater_labels_up[:, idx])
+            E_dn = sum(single_spin_energies[k+1] for k in slater_labels_down[:, idx])
+        end
+        E = E_up + E_dn
+        if E < min_E
+            min_E = E
+            best_idx = idx
+        end
+    end
+
+    return best_idx
+end
+
+function load_h5_ED_data(folder)
+    valid_files = [f for f in readdir(folder) if occursin("HubbardED", f) && occursin("(0)", f)] # remove (0) requirement
+
+    file_path = joinpath(folder, valid_files[1])
+    sign_convention = :spin_first
+    println("Loading hdf5 data: $file_path")
+
+    h5open(file_path, "r") do data
+        N = (read(data, "metadata/nup"),read(data, "metadata/ndown"))
+        spin_conserved = true
+        use_symmetry = false
+
+        Lvec = read(data, "metadata/Lvec")
+        U_values = read(data, "data/uvec")
+        kvecs = read(data, "metadata/kvecs")
+
+        key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
+        all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels] # Needed for energy selection
+        k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
+        println(all_E)
+        target_vecs = read(data, "data/evecs/$(k_min)")[:, 1, :] # shape (length(U_values), dim)
+
+        # using the highest overlap slater determinant state as reference. 
+        slater_index = get_slater_ground_state(data, k_min)
+        reference_state = zeros(ComplexF64, size(target_vecs,1))
+        reference_state[slater_index] = 1.0
+        target_vecs = transpose(hcat(reference_state, target_vecs))
+
+        lattice = Square(tuple(Lvec...), Periodic())
+        subspace = HubbardSubspace(N..., lattice; k=tuple((kvecs[:,k_min+1] .+ 1)...))
+        println("Computing indexer")
+        indexer = CombinationIndexer(subspace; order=ColSnake())
+
+        precomputed_structures = Dict()
+
+        return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention
+    end
+
+end
+
+function load_jld2_ED_data(file_path::String)
+    dic = load_saved_dict(file_path)
+
+    sign_convention = :coordinate_first
+
+    meta_data = dic["meta_data"]
+    U_values = meta_data["U_values"]
+    all_full_eig_vecs = dic["all_full_eig_vecs"]
+    all_E = dic["E"] # Needed for energy selection
+
+    indexer = dic["indexer"]
+    precomputed_structures = get(dic, "precomputed_structures", Dict())
+
+    println("Meta data:")
+    display(meta_data)
+
+    # Extract N for saving
+    N = meta_data["electron count"]
+    spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
+    use_symmetry = false
+
+    # Find lowest energy sector 
+    k_min = find_best_energy_sector(all_E, U_values)
+
+    # Select the eigenvectors for this sector
+    # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
+    target_vecs = all_full_eig_vecs[k_min]
+    if indexer isa Vector
+        indexer = indexer[k_min]
+    end
+
+    return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention
+end
+
+"""
+Load ED data from folder
+
+Args:
+    folder: Path to folder containing ED data
+
+Returns:
+    Tuple of (U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry)
+
+"""
+function load_ED_data(folder)
+    alternate_sign_convention = false
+    jld2_path = joinpath(folder, "meta_data_and_E.jld2")
+    if !isfile(jld2_path)
+        args = load_h5_ED_data(folder)
+    else
+        args = load_jld2_ED_data(jld2_path)
+    end
+    return args
+end
+
 function reordered_electron_parity(conf1::Vector, conf2::Vector, mapping)
     # given configurations of spin up and spin down electrons,
     # first map them to their new locations and find the number of 
@@ -86,212 +280,21 @@ function degenerate_subspaces(E)
 
     return subspaces
 end
-function degeneracy_count(E)
-    Ediff = diff(E)
-    Ediff[abs.(Ediff).<1e-10] .= 0
-    degen_tally = Dict()
-    count = 0
-    for d ∈ Ediff
-        if d == 0
-            count += 1
-        elseif count > 0
-            if haskey(degen_tally, count + 1)
-                degen_tally[count+1] += 1
-            else
-                degen_tally[count+1] = 1
-            end
-            count = 0
-        end
-    end
-    if count > 0
-        if haskey(degen_tally, count + 1)
-            degen_tally[count+1] += 1
-        else
-            degen_tally[count+1] = 1
-        end
-    end
-    return degen_tally
-end
-function eigenvalue_of_qn(vec::Vector; atol::Real=1e-8)
-    unique_vals = []
-    for x in vec
-        if all(y -> abs(x - y) > atol, unique_vals)
-            push!(unique_vals, x)
-        end
-    end
-    return unique_vals
-end
-function eigenvalue_mask(v::AbstractVector, qn::Int; atol=1e-8)
-    target = eigenvalue_of_qn(v)[qn]
-    idx = findall(x -> isapprox(x, target; atol=atol), v)
-
-    return idx, target
-end
-
-# block diagonalization 
-function build_block_graph(A; tol=1e-12)
-    n = size(A, 1)
-    G = Graphs.SimpleGraph(n)
-    for i in 1:n, j in 1:n
-        if abs(A[i, j]) > tol && i != j
-            Graphs.add_edge!(G, i, j)
-        end
-    end
-    return G
-end
-
-# Find connected components (blocks)
-function find_nonadjacent_blocks(A; tol=1e-12)
-    G = build_block_graph(A; tol=tol)
-    comps = Graphs.connected_components(G)
-    a = filter(x -> length(x) != 1, comps)
-    b = filter(x -> length(x) == 1, comps)
-    if length(b) > 0
-        return a, reduce(vcat, b)
-    else
-        return a, []
-    end
-end
-# end of block diagonalization
-
-function filter_subspace(op_list::Vector, qn_list::Vector{Int}; atol=1e-8)
-    # Ensure inputs are complex
-    op_list_tmp = [ComplexF64.(copy(op)) for op in op_list]
-    n = size(op_list[1], 1)
-
-    # Initialize total basis transform as identity
-    V_total = Matrix{ComplexF64}(LinearAlgebra.I, n, n)
-    indices = collect(1:n)
-    eigenvalues = []
-
-    for (i, op) in enumerate(op_list_tmp)
-        # Restrict operator and Hamiltonian to current subspace
-        V_total = V_total[:, indices]
-        op_sub = V_total' * op * V_total
-        # restrict total basis transform too
-
-        blocks, others = find_nonadjacent_blocks(op_sub)
-        all_eigenvalues = zeros(ComplexF64, length(indices))
-        if length(others) > 0
-            all_eigenvalues[others] = diag(op_sub)[others]
-        end
-        indices = []
-        for block in blocks
-            # Diagonalize current operator
-            # println(sum(abs.(op_sub' - op_sub)))
-            _, V, E = schur(op_sub[block, block]) # diagonalizes normal matrices
-            # println(sum(abs.(V'*V - I)))
-            # println()
-            all_eigenvalues[block] = E
-            V_total[:, block] += V_total[:, block] * (V - LinearAlgebra.I)
-        end
-        sort!(indices)
-        idx_mask, selected_eigs = eigenvalue_mask(all_eigenvalues, qn_list[i]; atol=atol)
-        push!(eigenvalues, selected_eigs)
-        append!(indices, idx_mask)
-        # Apply current transform
-    end
-    # this matrix is composed of a unitary and a projector. It's unitary property is ensured
-    V_total = V_total[:, indices]
-    # println(sum(abs.(V_total'*V_total - I)))
-
-    return V_total, eigenvalues
-end
-function filter_degenerate_subspace(H_unpert, H_pert, unperturbed_eigenstates)
-    unpert_E = real.(diag(unperturbed_eigenstates' * H_unpert * unperturbed_eigenstates))
-    subspaces = degenerate_subspaces(unpert_E)
-    H_pert_eff = unperturbed_eigenstates' * H_pert * unperturbed_eigenstates
-    for subspace in subspaces
-        println(H_pert_eff[subspace, subspace])
-    end
-end
-function count_degeneracies_per_subspace(H, ops)
-    # returns a dictionary where the input is the quantum number, which maps to
-    # a tuple containing the a dict containing the number of degeneracies and 
-    # the dimension of the subspace
-    degen = Dict()
-    n = length(ops)
-    indices = ones(Int64, n)
-    while true
-        try
-            V, _ = filter_subspace(ops, indices)
-            H_sub = V' * H * V
-            degen[copy(indices)] = [degeneracy_count(real.(eigvals(H_sub))), size(H_sub)[1]]
-            indices[end] += 1
-        catch e
-            if !(e isa BoundsError)
-                rethrow(e)
-            end
-            if all(indices[2:end] .== 1)
-                break
-            end
-            for j in n:-1:2
-                if indices[j] > 1
-                    indices[j] = 1
-                    indices[j-1] += 1
-                    break
-                end
-            end
-        end
-    end
-    return degen
-end
-# function compute_sign(conf, sorted_sites::Vector{T}, creation_operators::Vector{Tuple{T,Int}}, annihilation_operators::Vector{Tuple{T,Int}}) where T
-#     # c_{up,j} = F_{1} F_{2} ... F_{j-1} a_{up,j}
-#     # c_{down,j} = F_{1} F_{2} ... F_{j} a_{down,j}
-#     # F_i = (-1)^{n_i}, n_i = n_{up,i} + n_{down,i}
-#     # where c^dagger_{i2,σ2} c_{i1,σ1} and assuming i2 >= i1 (if not, add negative sign)
-
-#     # we assume that the sites in creation_operators/annihilation_operators are in sorted order (normal order)
-#     creation_upper_site_bounds = Int[]
-#     annihilation_upper_site_bounds = Int[]
-#     for (op,list) in zip([creation_operators,annihilation_operators],[creation_upper_site_bounds,annihilation_upper_site_bounds])
-#         for (s,σ) in op
-#             i = findfirst(==(s),sorted_sites)
-#             push!(list, i - (σ==1))
-#         end
-#     end
-#     # find list of sites to count the electrons at
-#     electron_count_sites = nothing
-#     for (i, j) in zip(creation_upper_site_bounds, annihilation_upper_site_bounds)
-#         (i,j) = sort([i,j])
-#         if isnothing(electron_count_sites)
-#             electron_count_sites = i:j
-#         else
-#             electron_count_sites = symdiff(electron_count_sites, i:j)
-#         end
-#     end
-
-#     # count the number of electrons at the sites
-#     swap_count = 0
-#     for s in electron_count_sites
-#         for c in conf
-#             for occupation in c
-#                 if sorted_sites[s] == occupation
-#                     swap_count += 1
-#                     break
-#                 end
-#             end
-#         end
-#     end
-
-#     # adjust swap count to account for the creation and annihilation operators
 
 
-#     return (-1)^swap_count
-# end
 function compute_jw_sign(
     conf::Tuple{Set{T},Set{T}},
     sorted_sites::Vector{T},
-    ops::Vector{Tuple{T,Int,Symbol}}
+    ops::Vector{Tuple{T,Int,Symbol}};
+    sign_convention::Symbol=:spin_first
 ) where T
     # computes the sign for the term given by ops (in second quantized), associated with the 
     # configuration conf.
-
-    # Full JW order over sites and spins: spin-major (all ↑ first, then all ↓)
-    # This matches the external dataset's fermionic sign convention.
-    jw_order = [(s, σ) for σ in (1, 2) for s in sorted_sites]
-
+    if sign_convention == :spin_first
+        jw_order = [(s, σ) for σ in (1, 2) for s in sorted_sites] # tamras sign convention
+    else
+        jw_order = [(s, σ)  for s in sorted_sites for σ in (1, 2)] # my sign convention
+    end
     # Map each mode to its index in JW order
     jw_index = Dict{Tuple{T,Int},Int}((sσ, i) for (i, sσ) in enumerate(jw_order))
 
@@ -354,17 +357,17 @@ function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bo
     return count
 end
 
-function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     # create_Sx! in momentum basis is exactly the same as position space,
     # since S^x = \frac{1}{2} \sum_k (c^\dagger_{k\uparrow} c_{k\downarrow} + c^\dagger_{k\downarrow} c_{k\uparrow})
-    sorted_sites = sort(indexer.a)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
                 # Flip σ to 3-σ
                 # Annihilate σ, Create 3-σ
                 ops = [(site_index, σ, :annihilate), (site_index, 3 - σ, :create)]
-                sign = compute_jw_sign(conf, sorted_sites, ops)
+                sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
 
                 if σ == 1
                     i2 = index(indexer, setdiff(conf[1], [site_index]), union(conf[2], [site_index]))
@@ -409,7 +412,7 @@ function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
         push!(vals, total / 4 * magnitude)
     end
 end
-function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false)
+function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     if momentum_basis
         @warn "SiSj in momentum basis not fully implemented yet"
         return
@@ -417,7 +420,7 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
     # This is for i!=j
     # We want 0.5 * (S_i^+ S_j^- + S_i^- S_j^+)
     # This swaps spins: i_up j_down -> i_down j_up   OR   i_down j_up -> i_up j_down
-    sorted_sites = sort(indexer.a)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2] # σ is the spin starting at site_index1
             for site_index1 ∈ setdiff(conf[σ], conf[3-σ])
@@ -433,7 +436,7 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
                         (site_index1, σ, :annihilate)
                     ]
 
-                    sign = compute_jw_sign(conf, sorted_sites, ops)
+                    sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
 
                     if σ == 1
                         i2 = index(indexer, replace(conf[1], site_index1 => site_index2), replace(conf[2], site_index2 => site_index1))
@@ -449,11 +452,11 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
     end
     create_SziSzj!(rows, cols, vals, magnitude, indexer; iequalsj=false, NN=NN, momentum_basis=momentum_basis)
 end
-function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
+function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     # The algebraic form of total S^2 is invariant under any unitary single-particle basis transformation 
     # (such as Fourier transform to momentum space) because it is a global SU(2) Casimir invariant. 
     # Thus, the exact same configuration loop works perfectly for both position and momentum bases!
-    sorted_sites = sort(indexer.a)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
             sz = (length(conf[1]) - length(conf[2])) / 2.0
             diagonal_val = sz * (sz + 1.0)
@@ -488,7 +491,7 @@ function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
                             (k_up_create, 1, :create),
                             (k_down_annihilate, 2, :annihilate)
                         ]
-                        sign = compute_jw_sign(conf, sorted_sites, ops)
+                        sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
                         push!(rows, i1)
                         push!(cols, i2)
                         push!(vals, magnitude * sign)
@@ -508,9 +511,10 @@ function general_single_body!(
     cols::Vector{Int},
     vals::Vector{Float64},
     t::Dict,
-    indexer::CombinationIndexer
+    indexer::CombinationIndexer; 
+    sign_convention::Symbol=:spin_firstS
 )
-    sorted_sites = sort(indexer.a)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for (σ1, σ2) ∈ Iterators.product(1:2, 1:2) # 1=up 2=down
             for site_index1 ∈ conf[σ1]
@@ -534,7 +538,7 @@ function general_single_body!(
                     end
                     i2 = index(indexer, new_conf[1], new_conf[2])
 
-                    sign = compute_jw_sign(conf, sorted_sites, [(site_index2, σ2, :create), (site_index1, σ1, :annihilate)])
+                    sign = compute_jw_sign(conf, sorted_sites, [(site_index2, σ2, :create), (site_index1, σ1, :annihilate)]; sign_convention=sign_convention)
                     push!(rows, i1)
                     push!(cols, i2)
                     push!(vals, t[Set([(site_index1, σ1), (site_index2, σ2)])] * sign)
@@ -544,66 +548,83 @@ function general_single_body!(
     end
 end
 
-function build_n_body_structure(
-    t::Dict{Vector{Tuple{T,Int,Symbol}},U},
-    indexer::CombinationIndexer;
-    skip_lower_triangular::Bool=false
-) where {T,U<:Number}
-    build_n_body_structure_from_keys(sort!(collect(keys(t))), indexer, U; skip_lower_triangular)
-end
 
 function build_n_body_structure_from_keys(
     t_keys::AbstractVector,
     indexer::CombinationIndexer{T},
     ::Type{U}=Float64;
-    skip_lower_triangular::Bool=false
+    skip_lower_triangular::Bool=false,
+    sign_convention::Symbol=:spin_first
 ) where {T,U<:Number}
-    sorted_sites = sort(indexer.a)
-    rows = Int[]
-    cols = Int[]
-    signs = U[]
-    ops_list = Vector{Vector{Tuple{T,Int,Symbol}}}()
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
+    println(sorted_sites)
+    inv_comb_dict = indexer.inv_comb_dict
+    n_states = length(inv_comb_dict)
+    num_chunks = Threads.nthreads()
+    chunk_size = cld(n_states, num_chunks)
+    
+    results = Vector{Tuple{Vector{Int}, Vector{Int}, Vector{U}, Vector{Vector{Tuple{T,Int,Symbol}}}}}(undef, num_chunks)
+    
+    Threads.@threads for chunk in 1:num_chunks
+        start_idx = (chunk - 1) * chunk_size + 1
+        end_idx = min(chunk * chunk_size, n_states)
+        
+        local_rows = Int[]
+        local_cols = Int[]
+        local_signs = U[]
+        local_ops_list = Vector{Vector{Tuple{T,Int,Symbol}}}()
+        
+        for i1 in start_idx:end_idx
+            if chunk == 1 && i1 % 500 == 0
+                println("complete: $(round((i1/(end_idx - start_idx))*100, digits=2))%")
+            end
+            conf = inv_comb_dict[i1]
+            for ops in t_keys
+                # Clone the config
+                conf_new = [copy(conf[1]), copy(conf[2])]
+                valid = true
 
-    for (i1, conf) in enumerate(indexer.inv_comb_dict)
-        for ops in t_keys
-            # Clone the config
-            conf_new = [copy(conf[1]), copy(conf[2])]
-            valid = true
-
-            # Apply operators
-            for (site, spin, op) in reverse(ops)
-                if op == :annihilate
-                    if site ∉ conf_new[spin]
-                        valid = false
-                        break
+                # Apply operators
+                for (site, spin, op) in reverse(ops)
+                    if op == :annihilate
+                        if site ∉ conf_new[spin]
+                            valid = false
+                            break
+                        end
+                        delete!(conf_new[spin], site)
+                    elseif op == :create
+                        if site ∈ conf_new[spin]
+                            valid = false
+                            break
+                        end
+                        push!(conf_new[spin], site)
+                    else
+                        error("Invalid operator symbol: $op")
                     end
-                    delete!(conf_new[spin], site)
-                elseif op == :create
-                    if site ∈ conf_new[spin]
-                        valid = false
-                        break
-                    end
-                    push!(conf_new[spin], site)
-                else
-                    error("Invalid operator symbol: $op")
                 end
-            end
 
-            if !valid
-                continue
-            end
+                if !valid
+                    continue
+                end
 
-            i2 = index(indexer, conf_new[1], conf_new[2])
-            if skip_lower_triangular && i1 > i2 #only considering upper diagonal so ensure hermiticity
-                continue
+                i2 = index(indexer, conf_new[1], conf_new[2])
+                if skip_lower_triangular && i1 > i2 #only considering upper diagonal so ensure hermiticity
+                    continue
+                end
+                s = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
+                push!(local_rows, i1)
+                push!(local_cols, i2)
+                push!(local_signs, s)
+                push!(local_ops_list, ops)
             end
-            s = compute_jw_sign(conf, sorted_sites, ops)
-            push!(rows, i1)
-            push!(cols, i2)
-            push!(signs, s)
-            push!(ops_list, ops)
         end
+        results[chunk] = (local_rows, local_cols, local_signs, local_ops_list)
     end
+    
+    rows = vcat([r[1] for r in results]...)
+    cols = vcat([r[2] for r in results]...)
+    signs = vcat([r[3] for r in results]...)
+    ops_list = vcat([r[4] for r in results]...)
 
     return rows, cols, signs, ops_list
 end
@@ -620,18 +641,17 @@ function build_param_index_map(
 end
 
 """
-    precompute_n_body_structures(indexer, max_order=2; spin_conserved=false, momentum_basis=false)
+    precompute_n_body_structures(indexer, max_order=2; spin_conserved::Bool=false, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
 
 Precompute and cache `n_body_structure` for optimization, avoiding expensive generation at runtime.
 Computes for both `use_symmetry` branches (true/false).
 """
-function precompute_n_body_structures(indexer::CombinationIndexer, max_order::Int=2; spin_conserved::Bool=false, momentum_basis::Bool=false)
+function precompute_n_body_structures(indexer::CombinationIndexer, max_order::Int=2; spin_conserved::Bool=false, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     precomputed_structures = Dict()
     for order in 1:max_order
         for use_sym in [true, false]
-            t_dict = create_randomized_nth_order_operator(order, indexer; magnitude=1.0+0im, omit_H_conj=!use_sym, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
-            rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer)
-            t_keys = sort!(collect(keys(t_dict)))
+            t_dict, t_keys = create_randomized_nth_order_operator(order, indexer, true; magnitude=1.0+0im, omit_H_conj=!use_sym, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis, sign_convention=sign_convention)
+            rows, cols, signs, ops_list = build_n_body_structure_from_keys(t_keys, indexer, typeof(t_dict[t_keys[1]]); sign_convention=sign_convention)
             param_index_map = build_param_index_map(ops_list, t_keys)
             precomputed_structures[(order, use_sym)] = Dict(
                 :rows => rows, :cols => cols, :signs => signs, 
@@ -663,11 +683,12 @@ function general_n_body!(
     cols::Vector{Int},
     vals::Vector{U},
     t::Dict{Vector{Tuple{T,Int,Symbol}},U},
-    indexer::CombinationIndexer
+    indexer::CombinationIndexer;
+    sign_convention::Symbol=:spin_first
 ) where {T,U<:Number}
     # requires applying Hermitian to the resulting sparse matrix
-    _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false)
-    t_keys = sort!(collect(keys(t)))
+    _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false, sign_convention=sign_convention)
+    t_keys = sort!(collect(keys(t)), order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     _vals = update_values(signs, ops_list, t_keys, [t[k] for k in t_keys])
     append!(rows, _rows)
     append!(cols, _cols)
@@ -689,11 +710,11 @@ function compute_correlation(state::Vector, order::Int, indexer::CombinationInde
     end
     return correlation
 end
-function correlation_matrix(order::Int, indexer::CombinationIndexer)
+function correlation_matrix(order::Int, indexer::CombinationIndexer; sign_convention::Symbol=:spin_first)
     # computes the matrix of operators c†_i c_j
-    t_dict = create_randomized_nth_order_operator(order, indexer)
+    t_dict, t_keys = create_randomized_nth_order_operator(order, indexer, true; sign_convention=sign_convention)
     dim = length(indexer.inv_comb_dict)
-    rows, cols, signs, ops_list = build_n_body_structure(t_dict, indexer; skip_lower_triangular=false)
+    rows, cols, signs, ops_list = build_n_body_structure_from_keys(t_keys, indexer, typeof(t_dict[t_keys[1]]); skip_lower_triangular=false, sign_convention=sign_convention)
     unique_sites = unique([[o[1:2] for o in op][1:length(op)÷2] for op in ops_list])
     unique_ops = unique(ops_list)
     site_to_index = Dict(s => i for (i, s) in enumerate(unique_sites))
@@ -733,44 +754,70 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     end
     return val < 1e-10
 end
-function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer;
-    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false, conserve_momentum::Bool=false) where T
+function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer, return_keys::Bool=false;
+    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false, conserve_momentum::Bool=false, sign_convention::Symbol=:spin_first) where T
     # function creates a dictionary of free parameters in the form of a dictionary. 
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
 
     t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}},T}()
-    site_list = sort(indexer.a) #ensuring normal ordering
+    site_list = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake()) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ, label) for s in site_list for σ in 1:2], n)
     equal_spin(create, annihilate) = sum((σ * 2 - 3) for (s, σ, _) in create) == sum((σ * 2 - 3) for (s, σ, _) in annihilate)
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] <= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
     
-    for (ops_create, ops_annihilate) in Iterators.product(all_ops(:create), all_ops(:annihilate))
-        key = [ops_create; ops_annihilate]
-
-        # We must conserve momentum if the user specified conserve_momentum=true
-        # OR if the indexer is explicitly restricted to a momentum sector (which means non-conserving ops will jump out of the Hilbert space)
-        must_conserve_momentum = conserve_momentum || (!isnothing(indexer.k) && !isnothing(indexer.lattice_dims))
+    all_pairs = collect(Iterators.product(all_ops(:create), all_ops(:annihilate)))
+    
+    num_chunks = Threads.nthreads()
+    chunk_size = cld(length(all_pairs), num_chunks)
+    
+    results = Vector{Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}},T}}(undef, num_chunks)
+    
+    Threads.@threads for chunk in 1:num_chunks
+        local_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}},T}()
+        start_idx = (chunk - 1) * chunk_size + 1
+        end_idx = min(chunk * chunk_size, length(all_pairs))
         
-        if must_conserve_momentum
-            tot_k = zeros(Int, length(indexer.lattice_dims))
-            for (s, σ, _) in ops_create
-                tot_k .+= (s.coordinates .- 1)
-            end
-            for (s, σ, _) in ops_annihilate
-                tot_k .-= (s.coordinates .- 1)
-            end
-            tot_k = tot_k .% indexer.lattice_dims
-            is_momentum_conserved = all(tot_k .== 0)
-        else
-            is_momentum_conserved = true
-        end
+        for i in start_idx:end_idx
+            (ops_create, ops_annihilate) = all_pairs[i]
+            key = [ops_create; ops_annihilate]
 
-        if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved
-            if key ∉ keys(t_dict)
-                t_dict[key] = (2 * rand() - 1) / 2 * magnitude
+            # We must conserve momentum if the user specified conserve_momentum=true
+            # OR if the indexer is explicitly restricted to a momentum sector (which means non-conserving ops will jump out of the Hilbert space)
+            must_conserve_momentum = conserve_momentum || (!isnothing(indexer.k) && !isnothing(indexer.lattice_dims))
+            
+            if must_conserve_momentum
+                tot_k = zeros(Int, length(indexer.lattice_dims))
+                for (s, σ, _) in ops_create
+                    tot_k .+= (s.coordinates .- 1)
+                end
+                for (s, σ, _) in ops_annihilate
+                    tot_k .-= (s.coordinates .- 1)
+                end
+                tot_k = tot_k .% indexer.lattice_dims
+                is_momentum_conserved = all(tot_k .== 0)
             else
-                t_dict[key] += (2 * rand() - 1) / 2 * magnitude
+                is_momentum_conserved = true
+            end
+
+            if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved
+                if key ∉ keys(local_dict)
+                    local_dict[key] = (2 * rand() - 1) / 2 * magnitude
+                else
+                    local_dict[key] += (2 * rand() - 1) / 2 * magnitude
+                end
+            end
+        end
+        results[chunk] = local_dict
+    end
+    
+    # Merge dictionaries
+    for res in results
+        for (k, v) in res
+            if k ∉ keys(t_dict)
+                t_dict[k] = v
+            else
+                t_dict[k] += v
             end
         end
     end
@@ -779,6 +826,10 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
         for key in keys(t_dict)
             t_dict[key] /= normalization_coefficient
         end
+    end
+    if return_keys
+        sorted_keys = sort!(collect(keys(t_dict)), order=sign_convention==:spin_first ? ColSnake() : RowSnake())
+        return t_dict, sorted_keys
     end
     return t_dict
 end
@@ -1141,7 +1192,7 @@ function reflect_y(config, Lx)
 end
 
 
-function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer; momentum_basis::Bool=false)
+function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     if isa(t, Number)
         t = [t]
     end
@@ -1198,13 +1249,15 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
                             else
                                 i2 = index(indexer, conf[1], new_conf)
                             end
-                            sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) +
-                                         count_in_range(if (σ == 2)
-                                                 new_conf
-                                             else
-                                                 conf[2]
-                                             end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
-                                         (site_index1 > site_index2))
+                            # sign = (-1)^(count_in_range(conf[1], site_index1, site_index2; lower_eq=true, upper_eq=false) +
+                            #              count_in_range(if (σ == 2)
+                            #                      new_conf
+                            #                  else
+                            #                      conf[2]
+                            #                  end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
+                            #              (site_index1 > site_index2))
+                            sign = compute_jw_sign(conf, sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake()), 
+                                    [(site_index2, σ, :create), (site_index1, σ, :annihilate)]; sign_convention=sign_convention)
                             push!(rows, i1)
                             push!(cols, i2)
                             push!(vals, -0.5 * t[order] * sign)# 0.5 due to double counting from neighbors for some reason
@@ -1216,13 +1269,13 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
     end
 end
 
-function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer; momentum_basis::Bool=false)
+function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     if momentum_basis
         # H_U = (U/N) \sum_{k,k',q} c^\dagger_{k-q,\uparrow} c_{k,\uparrow} c^\dagger_{k'+q,\downarrow} c_{k',\downarrow}
         # N is the number of sites.
         N = isnothing(indexer.lattice_dims) ? length(indexer.a) : prod(indexer.lattice_dims)
         V = U / N
-        sorted_sites = sort(indexer.a)
+        sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
         
         for (i1, conf) in enumerate(indexer.inv_comb_dict)
             for k_up_annihilate ∈ conf[1]
@@ -1253,7 +1306,7 @@ function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals:
                                 (k_down_create, 2, :create),
                                 (k_down_annihilate, 2, :annihilate)
                             ]
-                            sign = compute_jw_sign(conf, sorted_sites, ops)
+                            sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
                             push!(rows, i1)
                             push!(cols, i2)
                             push!(vals, V * sign)
@@ -1290,8 +1343,8 @@ function create_chemical_potential!(rows::Vector{Int}, cols::Vector{Int}, vals::
         push!(vals, μ * (length(conf[1]) + length(conf[2]))) #+ 1e-7*sum(conf[1]) + 43e-7*sum(conf[2]) 
     end
 end
-function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false)
-    sorted_sites = sort(indexer.a)
+function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         i2 = index(indexer, conf[2], conf[1])
 
@@ -1315,7 +1368,7 @@ function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
             end
         end
 
-        sign = compute_jw_sign(conf, sorted_sites, ops)
+        sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
         push!(rows, i1)
         push!(cols, i2)
         push!(vals, magnitude * sign)
@@ -1328,15 +1381,15 @@ function create_Sz!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
         push!(vals, magnitude * (length(conf[1]) - length(conf[2])))
     end
 end
-function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer)
-    sorted_sites = sort(indexer.a)
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; sign_convention::Symbol=:spin_first)
+    sorted_sites = sort(indexer.a, order=sign_convention==:spin_first ? ColSnake() : RowSnake())
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
                 # Flip σ to 3-σ
                 # Annihilate σ, Create 3-σ
                 ops = [(site_index, σ, :annihilate), (site_index, 3 - σ, :create)]
-                sign = compute_jw_sign(conf, sorted_sites, ops)
+                sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
 
                 if σ == 1
                     i2 = index(indexer, setdiff(conf[1], [site_index]), union(conf[2], [site_index]))
@@ -1367,20 +1420,20 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
     end
 end
 
-function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false)
+function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(Hs)
+    indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
     rows = Int[]
     cols = Int[]
     vals = Float64[]
 
     #insert stuff here
     if op == :Sx
-        create_Sx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
+        create_Sx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
     elseif op == :∏σx
-        create_∏σx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
+        create_∏σx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
     elseif op == :S2
-        create_S2!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis)
+        create_S2!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
     elseif op == :T
         if momentum_basis
             # Translation operator is exactly diagonal in momentum basis.
@@ -1411,11 +1464,11 @@ function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=f
     return H
 end
 
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing, momentum_basis::Bool=false)
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
     if isnothing(indexer)
-        indexer = CombinationIndexer(Hs)
+        indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
     end
     rows = Int[]
     cols = Int[]
@@ -1427,10 +1480,10 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool
 
     #Constructs the sparse hopping Hamiltonian matrix \sum_{<i,j>} c^\dagger_i c_j.
     if Hm.t > 0 || (Hm.t isa AbstractArray)
-        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer; momentum_basis=momentum_basis)
+        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer; momentum_basis=momentum_basis,sign_convention=sign_convention)
     end
     if Hm.U > 0
-        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer; momentum_basis=momentum_basis)
+        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer; momentum_basis=momentum_basis,sign_convention=sign_convention)
     end
     if Hm.μ > 0
         create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
@@ -1448,10 +1501,10 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool
 end
 
 
-function create_Heisenberg(t, J, Hs::HubbardSubspace)
+function create_Heisenberg(t, J, Hs::HubbardSubspace; sign_convention::Symbol=:spin_first)
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(Hs)
+    indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
 
     rows = Int[]
     cols = Int[]
@@ -1500,269 +1553,6 @@ function collect_all_conf_differences(indexer::CombinationIndexer)
         end
     end
     return difference_dict
-end
-function find_N_body_interactions(U::AbstractArray, indexer::CombinationIndexer)
-    H = -1im * log(U)
-    difference_dict = collect_all_conf_differences(indexer)
-
-    n_electrons = sum([length(indexer.inv_comb_dict[1][j]) for j = 1:2])
-    second_quantized_order_labels = Dict()
-    n_electrons = sum([length(indexer.inv_comb_dict[1][j]) for j = 1:2])
-    # defining range of indices in the second quantized representation
-    d = length(indexer.a) * 2
-    m = 1
-    for order ∈ 1:n_electrons
-        if order == 1
-            second_quantized_order_labels[order] = 1:d^(2*order)
-            m = (length(indexer.a) * 2)^(2 * order)
-        else
-            second_quantized_order_labels[order] = (m+1):(m+d^(2*order))
-            m += d^(2 * order)
-        end
-    end
-    second_quantized_dimension = sum(length(s) for s in values(second_quantized_order_labels))
-    second_quantized_solution = spzeros(ComplexF64, second_quantized_dimension)
-    second_quantized_nullspace = []
-    site_indexer = merge(Dict((s, :up) => k for (k, s) in enumerate(indexer.a)),
-        Dict((s, :down) => k + length(indexer.a) for (k, s) in enumerate(indexer.a)))
-    # inv_site_indexer = [[(s,:up) for s in indexer.a]; [(s,:down) for s in indexer.a]]
-
-    # difference_dict = collect_all_conf_differences(indexer)
-    for (swaps, N_diff_dict) in difference_dict
-        # println(swaps)
-        for (site_diff, index_pairs) in N_diff_dict
-            creation, annihilation = site_diff
-
-            params = binomial(2 * length(indexer.a) - 2 * swaps, n_electrons - swaps)
-            variables = cumsum([binomial(2 * length(indexer.a) - 2 * swaps, k) for k in 0:n_electrons-swaps])
-            min_order = argmax(variables .- params .>= 0)
-
-            # this maps an index to a combination of sites (not including the hopping ones) which
-            # have n_i applied on them
-            variable_mapping = []
-            inverse_variable_mapping = Dict()
-
-            # defining variable_mapping and inverse_variable_mapping
-            var_index = 1
-            sites_available = [setdiff(setdiff(indexer.a, creation[σ]), annihilation[σ]) for σ in 1:2]
-            for n_operators in 0:min_order-1
-                for n_up in 0:n_operators
-                    n_down = n_operators - n_up
-                    up_site_combs = [Set(s) for s in combinations(sites_available[1], n_up)]
-                    down_site_combs = [Set(s) for s in combinations(sites_available[2], n_down)]
-                    for filled_sites in Iterators.product(up_site_combs, down_site_combs)
-                        push!(variable_mapping, filled_sites)
-                        inverse_variable_mapping[filled_sites] = var_index
-                        var_index += 1
-                    end
-                end
-            end
-
-
-            matrix = zeros(ComplexF64, (params, variables[min_order]))
-            vector = zeros(ComplexF64, params)
-            # break
-            row_index = 1
-            for (i, j) in index_pairs
-                common_sites = [intersect(indexer.inv_comb_dict[i][k], indexer.inv_comb_dict[j][k]) for k = 1:2]
-                for (col_index, s) in enumerate(variable_mapping)
-                    # col_index = inverse_variable_mapping[Tuple(common_sites)]
-                    if issubset(s[1], common_sites[1]) && issubset(s[2], common_sites[2])
-                        matrix[row_index, col_index] = 1
-                    end
-                end
-                vector[row_index] = H[i, j]
-                row_index += 1
-            end
-
-            nullspace_solution = nullspace(matrix)
-            particular_solution = matrix \ vector
-            if length(nullspace_solution) > 0
-                push!(second_quantized_nullspace, spzeros(ComplexF64, second_quantized_dimension))
-            end
-
-            # put solution into a sparse matrix form in second quantized
-            #figure out the indices for the sites, map it to an index and assign it to the sparse vector
-            creation_index_list = []
-            annihilation_index_list = []
-            for (σ_i, σ) ∈ enumerate([:up, :down])
-                for create_site in creation[σ_i]
-                    push!(creation_index_list, site_indexer[(create_site, σ)])
-                end
-                for annihilate_site in annihilation[σ_i]
-                    push!(annihilation_index_list, site_indexer[(annihilate_site, σ)])
-                end
-            end
-            indices = [sort(creation_index_list) sort(annihilation_index_list)]'[:]
-
-            for (k, s) in enumerate(variable_mapping)
-                _indices = copy(indices)
-                for (σ_i, σ) in enumerate([:up, :down])
-                    for site in s[σ_i]
-                        push!(_indices, site_indexer[(site, σ)])
-                        push!(_indices, site_indexer[(site, σ)])
-                    end
-                end
-                order = swaps + length(s[1]) + length(s[2])
-                # println("order: $order swaps: $swaps indices: $_indices k: $k")
-                starting_index = minimum(second_quantized_order_labels[order])
-                i = sum((_indices[n] - 1) * d^(n - 1) for n in eachindex(_indices))
-                second_quantized_solution[starting_index+i] = particular_solution[k]
-                if length(nullspace_solution) > 0
-                    second_quantized_nullspace[end][starting_index+i] = nullspace_solution[k]
-                end
-            end
-        end
-    end
-    return second_quantized_solution, second_quantized_nullspace, second_quantized_order_labels
-
-end
-function full_unitary_analysis(degen_rm_U::Vector, difference_dict::Dict, U_values::Vector)
-    # data = Dict(order=>Dict() for order in 1:max(keys(difference_dict)))
-    norders = maximum(collect(keys(difference_dict)))
-    data = Dict(order => Dict() for order in 1:norders)
-    for (u_index, u) in enumerate(U_values)
-        hopping = log(degen_rm_U[1]' * degen_rm_U[u_index])
-        for (order, creation_annihiation) in difference_dict
-            if length(data[order]) == 0
-                data[order] = Dict(u => [])
-            elseif u ∉ keys(data[order])
-                data[order][u] = []
-            end
-
-            for index_list in values(creation_annihiation)
-                for (i, j) in index_list
-                    push!(data[order][u], hopping[i, j])
-                end
-            end
-        end
-    end
-
-    labels = ["norm1", "norm2", "total_count", "count_nonzero"]
-    summarized_data = Dict{String,Any}(label => Dict("orders" => Vector{Vector{Any}}(undef, norders)) for label ∈ labels)
-    for order in 1:norders
-        for key in keys(summarized_data)
-            summarized_data[key]["orders"][order] = []
-        end
-        for u in U_values
-            push!(summarized_data["norm1"]["orders"][order], norm(data[order][u], 1))
-            push!(summarized_data["norm2"]["orders"][order], norm(data[order][u], 2))
-            push!(summarized_data["count_nonzero"]["orders"][order], sum(abs.(data[order][u]) .> 0))
-            push!(summarized_data["total_count"]["orders"][order], length(data[order][u]))
-        end
-    end
-    return summarized_data
-end
-
-function greedy_col_permutation_for_diag(A::AbstractMatrix)
-    @assert size(A, 1) == size(A, 2) "Matrix must be square"
-
-    n = size(A, 1)
-    assigned_cols = falses(n)
-    permutation = zeros(Int, n)
-
-    for row in 1:n
-        best_col = 0
-        best_val = -Inf
-
-        for col in 1:n
-            if !assigned_cols[col] && abs(A[row, col]) > best_val
-                best_val = abs(A[row, col])
-                best_col = col
-            end
-        end
-
-        if best_col == 0
-            error("Failed to assign col for row $row — no unassigned cols left.")
-        end
-
-        permutation[row] = best_col
-        assigned_cols[best_col] = true
-    end
-
-    A_permuted = A[:, permutation]
-    return permutation, A_permuted
-end
-function create_consistent_basis(H::Vector, ops::Vector; reference_index::Int64=1)
-    degen = count_degeneracies_per_subspace(H[reference_index], ops)
-    return create_consistent_basis(H, ops, degen)
-end
-function create_consistent_basis(H::Vector, ops::Vector, degen::Dict)
-    """
-    H is a list of hamiltonians (matrices) where adjacent elements are
-    sufficiently close to each other so that energy eigenstates with adjacent
-    Hamiltonians should have high overlap.
-
-    degen comes from the output of count_degeneracies_per_subspace()
-
-    Returns a vector of unitary operators which diagonalize the Hamiltonian,
-    with the property that V[i]'*V[i+1] approx diagonal.
-
-    """
-    degen_rm_U = []
-    transforms = Dict()
-    for indices in keys(degen)
-        prev_perm = nothing
-        prev_phases = nothing
-        for (h_i, h) in enumerate(H) # assumes these hamiltonians are sorted
-            # println(indices)
-            if indices in keys(transforms)
-                basis_transform = transforms[indices]
-            else
-                basis_transform, _ = filter_subspace(ops, indices)
-                transforms[indices] = basis_transform
-            end
-            # algorithm for uncrossing eigenstates
-            _, V1, _ = schur(basis_transform' * h * basis_transform)
-            if isnothing(prev_perm)
-                prev_perm = 1:size(V1, 2)
-                prev_phases = ones(size(V1, 2))
-            end
-            if h_i == 1
-                perm = 1:size(V1, 2)
-                phases = LinearAlgebra.I
-            else
-                _, V0, _ = schur(basis_transform' * H[h_i-1] * basis_transform)
-                perm, mat = greedy_col_permutation_for_diag((V0[:, prev_perm] * prev_phases)' * V1)
-                phases = diagm(abs.(diag(mat)) ./ diag(mat))
-                # println(diag(phases*mat))
-            end
-
-
-            if length(degen_rm_U) < h_i
-                push!(degen_rm_U, basis_transform * V1[:, perm] * phases)
-            else
-                degen_rm_U[h_i] = hcat(degen_rm_U[h_i], basis_transform * V1[:, perm] * phases)
-            end
-            prev_perm = perm
-            prev_phases = phases
-        end
-    end
-
-
-    return degen_rm_U
-end
-
-"""
-Using only information saved to files, reconstruct sparse matrix for unitary. This can reconstruct
-the matrices stored in all_matrices
-
-ex.
-data_dict_tmp = load_saved_dict(joinpath(folder,"unitary_map_energy_N=4_200.jld2"))
-energy_dict = load_saved_dict(joinpath(folder,"meta_data_and_E.jld2"))
-
-mat = construct_sparse(energy_dict["indexer"], 
-    identity.(data_dict_tmp["coefficient_labels"][1]),
-    data_dict_tmp["coefficients"][1][1])
-"""
-function construct_sparse(
-    indexer::CombinationIndexer, coefficient_labels::Vector{Vector{Tuple{T,Int64,Symbol}}},
-    coefficients; parameter_mapping=nothing, parities=nothing) where {T}
-    dim = length(indexer.inv_comb_dict)
-    rows, cols, signs, ops_list = build_n_body_structure(coefficient_labels, indexer)
-    param_index_map = build_param_index_map(ops_list, collect(keys(coefficient_labels)))
-    vals = update_values(signs, param_index_map, coefficients, parameter_mapping, parities)
-    return make_hermitian(sparse(rows, cols, vals, dim, dim))
 end
 
 truncate(x, threshold) = ifelse(abs(x) < threshold, 0.0, x)
@@ -2171,11 +1961,9 @@ function map_symmetry_groups(t_vals_small, subspace_small, subspace_large;
         indexer_large = CombinationIndexer(subspace_large)
 
         # Generate t_keys (operators)
-        t_dict_small = create_randomized_nth_order_operator(order, indexer_small; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
-        t_keys_small = sort!(collect(keys(t_dict_small)))
+        t_dict_small,t_keys_small = create_randomized_nth_order_operator(order, indexer_small, true; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
 
-        t_dict_large = create_randomized_nth_order_operator(order, indexer_large; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
-        t_keys_large = sort!(collect(keys(t_dict_large)))
+        t_dict_large, t_keys_large = create_randomized_nth_order_operator(order, indexer_large, true; omit_H_conj=omit_H_conj, conserve_spin=conserve_spin)
 
         # Find symmetry groups
         sym_small = find_symmetry_groups(t_keys_small, Lx_small, Ly_small;

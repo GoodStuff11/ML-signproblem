@@ -24,16 +24,49 @@ function translation_mapping(lattice::AbstractLattice, dims)
     end
     return d
 end
-# defining comparing of coordinates
-for (k, op) in enumerate([:>, :isless, :<, :>=, :<=])
-    @eval function Base.$op(x::Coordinate{N}, y::Coordinate{N}) where N
-        for (a, b) ∈ reverse(collect(zip(x.coordinates, y.coordinates)))
-            if a != b
-                return $op(a, b)
-            end
+import Base.Order: Ordering, lt
+
+struct RowSnake <: Ordering end
+struct ColSnake <: Ordering end
+
+function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
+    for i in eachindex(x.coordinates)
+        if x.coordinates[i] != y.coordinates[i]
+            return x.coordinates[i] < y.coordinates[i]
         end
-        return $(k > 3) # true if >= or <= otherwise not
     end
+    return false
+end
+
+function Base.Order.lt(::ColSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
+    for i in reverse(eachindex(x.coordinates))
+        if x.coordinates[i] != y.coordinates[i]
+            return x.coordinates[i] < y.coordinates[i]
+        end
+    end
+    return false
+end
+
+function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::Tuple, y::Tuple)
+    for i in 1:min(length(x), length(y))
+        if x[i] != y[i]
+            return Base.Order.lt(o, x[i], y[i])
+        end
+    end
+    return length(x) < length(y)
+end
+
+function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::AbstractVector, y::AbstractVector)
+    for i in 1:min(length(x), length(y))
+        if x[i] != y[i]
+            return Base.Order.lt(o, x[i], y[i])
+        end
+    end
+    return length(x) < length(y)
+end
+
+function Base.Order.lt(::Union{RowSnake, ColSnake}, x, y)
+    return isless(x, y)
 end
 struct HubbardSubspace
     N_up
@@ -170,8 +203,8 @@ struct CombinationIndexer{T}
         comb_dict, inv_comb_dict = _build_indexer(a, Iterators.product(b, c))
         new{T}(a, comb_dict, inv_comb_dict, nothing, nothing)
     end
-    function CombinationIndexer(Hs::HubbardSubspace)
-        a = sort(reduce(vcat, collect(sites(Hs.lattice)))) # sort to standardize the order of sites
+    function CombinationIndexer(Hs::HubbardSubspace; order::Ordering=RowSnake())
+        a = sort(reduce(vcat, collect(sites(Hs.lattice))), order=order) # sort to standardize the order of sites
         lattice_dims = size(Hs.lattice)
         k = Hs.k
         iter = Hs.N == -1 ? Iterators.product((Hs.N_up isa Number ? (Hs.N_up:Hs.N_up) : Hs.N_up),
