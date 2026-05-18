@@ -13,6 +13,7 @@ using Zygote
 using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
 using ExponentialUtilities
+using CUDA
 
 include("ed_objects.jl")
 include("ed_functions.jl")
@@ -20,9 +21,7 @@ include("ed_optimization.jl")
 include("utility_functions.jl")
 
 
-function run_pruning_analysis(folder, data_label)
-    # folder = "/media/jonathon/Jonathon HDD/datasets/HubbardED/N=3"
-    folder = joinpath(folder, data_label)
+function run_pruning_analysis(folder)
     U_values, target_vecs, indexer, _, N, _, _, sign_convention = load_ED_data(folder)
 
     dim = length(indexer.inv_comb_dict)
@@ -52,7 +51,7 @@ function run_pruning_analysis(folder, data_label)
             continue
         end
 
-        sorted_labels = sort(coefficient_labels[o_idx], order=sign_convention==:spin_first ? ColSnake() : RowSnake())
+        sorted_labels = sort(coefficient_labels[o_idx], order=sign_convention == :spin_first ? ColSnake() : RowSnake())
         rows, cols, signs, ops_list = build_n_body_structure_from_keys(sorted_labels, indexer, Float64; sign_convention=sign_convention)
         param_index_map = build_param_index_map(ops_list, coefficient_labels[o_idx])
 
@@ -157,8 +156,8 @@ end
 # Check if script is run directly
 function @main(ARGS)
     if length(ARGS) == 1
-        run_pruning_analysis("./data", "$(ARGS[1])")
+        run_pruning_analysis("$(ARGS[1])")
     else
-        run_pruning_analysis("./data", "N=(4, 4)_3x3_2")
+        run_pruning_analysis("data/N=(4, 4)_3x3_2")
     end
 end

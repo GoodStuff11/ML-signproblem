@@ -13,12 +13,12 @@ end
 
 function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state1, state2, use_symmetry, antihermitian; p=nothing)
     # Type assertions for globals to ensure performance (though arguments are not globals here, keeping structure)
-    local M_typed::Vector{SparseMatrixCSC{Float64,Int}} = ops
+    local ops_data_typed = ops
     local v1_typed::Vector{Complex{Float64}} = state1
     local v2_typed::Vector{Complex{Float64}} = state2
     local N_typed::Int = 100 # determines the accuracy of the method
     local Hs_dim_typed::Int = dim
-    local DIM_typed::Int = length(ops)
+    local DIM_typed::Int = length(t_vals)
 
     # Reconstruct X = Σ a_i M_i (dense)
     vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
@@ -86,21 +86,9 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
         for j in 1:DIM_typed
             # Compute scalar: l' * M[j] * r_current
             # Efficiently using sparse structure of M[j]
-            m = M_typed[j]
-            _rows = rowvals(m)
-            _vals = nonzeros(m)
-            val = 0.0
-
-            # Iterate columns of sparse matrix
-            for c in 1:size(m, 2)
-                rc = r_current[c]
-                # If rc is 0, we can skip? No, dense vector usually not 0.
-                for idx in nzrange(m, c)
-                    # M[row, c] * r[c] * l[row]
-                    val += l[_rows[idx]] * _vals[idx] * rc
-                end
-            end
-            grads[j] += val
+            I, J, V = ops_data_typed[j]
+            m = sparse(I, J, V, Hs_dim_typed, Hs_dim_typed)
+            grads[j] += dot(l, m * r_current)
         end
 
         # Update l for next step (next i is smaller, so N-i is larger by 1 -> multiply by A')
@@ -189,6 +177,34 @@ function zygote_loss(t_vals, rows, cols, signs, param_index_map, parameter_mappi
     return loss
 end
 
+function format_bytes_custom(bytes)
+    gb = bytes / 1024^3
+    if gb >= 1.0
+        return string(round(gb, digits=3), " GB")
+    else
+        mb = bytes / 1024^2
+        return string(round(mb, digits=3), " MB")
+    end
+end
+
+function print_mem_usage(msg::String="")
+    gc_live = try
+        Base.gc_live_bytes()
+    catch
+        0
+    end
+    rss = Sys.maxrss()
+    mem_str = "GC Live: " * format_bytes_custom(gc_live) * " | MaxRSS: " * format_bytes_custom(rss)
+    try
+        if isdefined(Main, :CUDA) && CUDA.has_cuda_gpu()
+            gpu_mem = CUDA.alloc_bytes()
+            mem_str *= " | GPU: " * format_bytes_custom(gpu_mem)
+        end
+    catch
+    end
+    println("  [Memory] $msg -> $mem_str")
+end
+
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
     maxiters=10, ϵ=1e-5, optimization_scheme::Vector=[2], spin_conserved::Bool=false, use_symmetry::Bool=false,
     gradient=:adjoint_gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(),
@@ -198,8 +214,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     momentum_basis::Bool=false, multi_start_samples::Int=5, multi_start_iters::Int=30,
     precomputed_structures::Dict=Dict(),
     sign_convention::Symbol=:spin_first,
-    time_tracker::Dict{Symbol, Vector{Float64}}=Dict{Symbol, Vector{Float64}}(),
-    max_time_ratio::Union{Float64, Nothing}=nothing
+    time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
+    max_time_ratio::Union{Float64,Nothing}=nothing
 )
 
     if momentum_basis
@@ -253,8 +269,11 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             rows, cols, signs, ops_list = struct_cache[:rows], struct_cache[:cols], struct_cache[:signs], struct_cache[:ops_list]
             t_keys, param_index_map = struct_cache[:t_keys], struct_cache[:param_index_map]
         else
+            print_mem_usage("Before create_randomized_nth_order_operator")
             @time t_dict, t_keys = create_randomized_nth_order_operator(order, indexer, true; magnitude=loss * 100, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
+            print_mem_usage("After create_randomized_nth_order_operator")
             @time rows, cols, signs, ops_list = build_n_body_structure_from_keys(t_keys, indexer, typeof(t_dict[t_keys[1]]); sign_convention=sign_convention)
+            print_mem_usage("After build_n_body_structure_from_keys")
             param_index_map = build_param_index_map(ops_list, t_keys)
             # no need to update precomuted_structure since the information will be saved in operator_cache
         end
@@ -262,7 +281,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         # create matrix operators to make gradient computation faster
         ops = []
         sym_data = nothing
-        
+
         # Pre-group indices using param_index_map to avoid calling build_n_body_structure O(N) times
         indices_by_param = [Int[] for _ in 1:length(t_keys)]
         for k in eachindex(param_index_map)
@@ -273,35 +292,37 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             inv_param_map, parameter_mapping, parity = find_symmetry_groups(t_keys, maximum(indexer.a).coordinates...,
                 hermitian=!antihermitian, antihermitian=antihermitian, trans_x=true, trans_y=true, spin_symmetry=true) # have caution with this being true for N↑≠N↓
 
-            for key_idcs in inv_param_map
+            for (param_idx, key_idcs) in enumerate(inv_param_map)
                 idx = Int[]
                 for key_idx in key_idcs
                     append!(idx, indices_by_param[key_idx])
                 end
-                
-                _vals = zeros(Float64, length(idx))
-                for (k, j) in enumerate(idx)
-                    _vals[k] = signs[j] * parity[param_index_map[j]]
-                end
-                
-                _rows = rows[idx]
-                _cols = cols[idx]
-                
-                push!(ops, sparse(_rows, _cols, _vals, dim, dim))
+
+                rows_sub = [rows[j] for j in idx]
+                cols_sub = [cols[j] for j in idx]
+                vals_sub = [signs[idx[k]] * parity[param_index_map[idx[k]]] for k in eachindex(idx)]
+                push!(ops, (rows_sub, cols_sub, vals_sub))
             end
             sym_data = (inv_param_map, parameter_mapping, parity)
         else
             for i in 1:length(t_keys)
                 idx = indices_by_param[i]
-                _rows = rows[idx]
-                _cols = cols[idx]
-                _signs = signs[idx]
-                
-                if antihermitian
-                    push!(ops, make_antihermitian(sparse(_rows, _cols, _signs, dim, dim)))
-                else
-                    push!(ops, make_hermitian(sparse(_rows, _cols, _signs, dim, dim)))
+                rows_sub = Int[]
+                cols_sub = Int[]
+                vals_sub = ComplexF64[]
+                for j in idx
+                    r = rows[j]
+                    c = cols[j]
+                    s = signs[j]
+
+                    push!(rows_sub, r)
+                    push!(cols_sub, c)
+                    push!(vals_sub, s)
+                    push!(rows_sub, c)
+                    push!(cols_sub, r)
+                    push!(vals_sub, antihermitian ? -conj(s) : conj(s))
                 end
+                push!(ops, (rows_sub, cols_sub, vals_sub))
             end
             parameter_mapping = nothing
             parity = nothing
@@ -320,6 +341,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             :parity => parity
         )
         operator_cache[order] = cache_entry
+        print_mem_usage("After ensure_operator_structure! complete")
         return cache_entry
     end
 
@@ -388,12 +410,14 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         function f_adjoint(t_vals, p=nothing)
             return adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state2, state1, p, !use_symmetry, antihermitian)
         end
-        
+
         if CUDA.has_cuda_gpu()
             println("Using GPU")
-            ops_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC.(ops)
+            ops_gpu = ops
             state1_gpu = CuArray(state1)
             state2_gpu = CuArray(state2)
+        else
+            println("Not using GPU")
         end
 
         function f_adjoint_gpu(t_vals, p=nothing)
@@ -414,6 +438,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             end
 
             println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
+            print_mem_usage("Callback iteration")
 
             push!(tmp_losses, loss_val)
             if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
@@ -469,30 +494,54 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 # 2. Execution Phase: Single Solve Call
                 empty!(tmp_losses)
                 println("Solving with $optimizer_sym...")
-                
+
+                # Async peak memory monitor
+                monitor_done = Threads.Atomic{Bool}(false)
+                monitor_task = Threads.@spawn begin
+                    last_rss = Sys.maxrss()
+                    while !monitor_done[]
+                        current_rss = Sys.maxrss()
+                        if current_rss > last_rss + 50 * 1024^2 # Warn if RSS grows by > 50MB
+                            println("  [Async Memory Warning] MaxRSS increased to: ", format_bytes_custom(current_rss))
+                            last_rss = current_rss
+                        end
+                        sleep(0.01)
+                    end
+                end
+
                 last_time = time()
                 function timed_callback(state, loss_val)
                     current_time = time()
                     dt = current_time - last_time
                     last_time = current_time
-                    
+
                     if !haskey(time_tracker, optimizer_sym)
                         time_tracker[optimizer_sym] = Float64[]
                     end
-                    
+
                     if !isnothing(max_time_ratio) && length(time_tracker[optimizer_sym]) > 5
                         avg_time = mean(time_tracker[optimizer_sym])
                         if dt > max_time_ratio * avg_time
                             println("Stopping optimization: Step took $(dt)s, which is > $(max_time_ratio)x the average $(avg_time)s")
                             return true
+                        else
+                            println("\tTimely. dt=$(dt)s average=$(avg_time)s")
                         end
                     end
-                    
+
                     push!(time_tracker[optimizer_sym], dt)
                     return callback(state, loss_val)
                 end
 
+                print_mem_usage("Before Optimization.solve with $optimizer_sym")
                 @time local_sol = Optimization.solve(prob, opt_algo, maxiters=current_maxiters, callback=timed_callback)
+                print_mem_usage("After Optimization.solve with $optimizer_sym")
+
+                monitor_done[] = true
+                try
+                    wait(monitor_task)
+                catch
+                end
 
                 # 3. Post-Process Phase
                 local_t_vals = local_sol.u
@@ -526,9 +575,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 else
                     t_sample = (2 * rand(length(t_keys)) .- 1) * mag
                 end
-                
+
                 grad_func = (gradient == :adjoint_gradient && CUDA.has_cuda_gpu()) ? f_adjoint_gpu : f_adjoint
-                
+
                 println("computing gradient")
                 @time res = Zygote.withgradient(t -> grad_func(t, p_args), t_sample)
                 println("Finished gradient")
@@ -595,6 +644,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         # push!(metrics["other"], metric)
 
         # Construct and Store Matrix
+        print_mem_usage("Before final sparse matrix construction for order $order")
         if !use_symmetry
             if antihermitian
                 computed_matrices[order] = make_antihermitian(sparse(rows, cols, vals, dim, dim))
@@ -604,6 +654,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         else
             computed_matrices[order] = sparse(rows, cols, vals, dim, dim)
         end
+        print_mem_usage("After final sparse matrix construction for order $order")
 
         println("Finished order $order")
         push!(metrics["loss"], loss)
@@ -631,8 +682,8 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
     spin_conserved::Bool=false;
     maxiters=100, gradient::Symbol=:gradient, metric_functions::Dict{String,Function}=Dict{String,Function}(), optimizer::Union{Symbol,Vector{Symbol}}=:LBFGS,
     initial_coefficients::Vector{Any}=Any[], perturb_optimization::Float64=0.2, precomputed_structures::Dict=Dict(),
-    time_tracker::Dict{Symbol, Vector{Float64}}=Dict{Symbol, Vector{Float64}}(),
-    max_time_ratio::Union{Float64, Nothing}=nothing
+    time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
+    max_time_ratio::Union{Float64,Nothing}=nothing
 )
     # spin_conserved is only true when using (N↑, N↓) and not N.
 
@@ -702,8 +753,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     perturb_optimization::Float64=0.1,
     save_folder::Union{String,Nothing}=nothing, save_name::String="scan_data",
     initial_coefficients::Vector{Any}=Any[], precomputed_structures::Dict=Dict(),
-    time_tracker::Dict{Symbol, Vector{Float64}}=Dict{Symbol, Vector{Float64}}(),
-    max_time_ratio::Union{Float64, Nothing}=nothing
+    time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
+    max_time_ratio::Union{Float64,Nothing}=nothing
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -740,14 +791,14 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         state2 = degen_rm_U[u_idx, :]
 
         args = optimize_unitary(state1, state2, indexer;
-                spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
-                maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
-                metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
-                initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization,
-                initialization_samples=get!(instructions, "initialization_samples", 50),
-                multi_start_iters=get!(instructions, "multi_start_iters", 30), multi_start_samples=get!(instructions, "multi_start_samples", 5),
-                precomputed_structures=precomputed_structures, sign_convention=get!(instructions, "sign_convention", :spin_first),
-                time_tracker=time_tracker, max_time_ratio=max_time_ratio)
+            spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
+            maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
+            metric_functions=metric_functions, antihermitian=get!(instructions, "antihermitian", false), optimizer=optimizer,
+            initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization,
+            initialization_samples=get!(instructions, "initialization_samples", 50),
+            multi_start_iters=get!(instructions, "multi_start_iters", 30), multi_start_samples=get!(instructions, "multi_start_samples", 5),
+            precomputed_structures=precomputed_structures, sign_convention=get!(instructions, "sign_convention", :spin_first),
+            time_tracker=time_tracker, max_time_ratio=max_time_ratio)
         computed_matrices, coefficient_labels, current_coeffs, param_mapping, parities, metrics, shared_cache = args
 
         # Store results for this U
@@ -941,15 +992,16 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
 
         # Accumulate gradients parallelized over parameters
         Threads.@threads for i in eachindex(grad_t)
-            M = ops[i]
+            I, J, V = ops[i]
+            M = sparse(I, J, V, dim, dim)
             val = 0.0 + 0.0im
             for k in 1:(N_steps+1)
-                term = dot(chis[k], M, phis[k])
+                term = dot(chis[k], M * phis[k])
                 val += term * weights[k]
             end
 
             # dO/dt = i * integral
-            # dO/dt = int
+            # dO/dt = int(chi * d(H)/dt * phi)
             if antihermitian
                 dO_dt = val
             else
@@ -967,6 +1019,23 @@ end
 # -----------------------------------------------------------------------------
 # Optional GPU Logic
 # -----------------------------------------------------------------------------
+
+# Custom kernel for fast, matrix-free gradient accumulation
+function accumulate_grad_kernel!(dO_dt_real, dO_dt_imag, chi, phi, flat_rows, flat_cols, flat_vals, flat_params, weight)
+    idx = (CUDA.blockIdx().x - 1) * CUDA.blockDim().x + CUDA.threadIdx().x
+    if idx <= length(flat_rows)
+        @inbounds r = flat_rows[idx]
+        @inbounds c = flat_cols[idx]
+        @inbounds v = flat_vals[idx]
+        @inbounds p = flat_params[idx]
+
+        term = conj(chi[r]) * v * phi[c] * weight
+
+        CUDA.@atomic dO_dt_real[p] += real(term)
+        CUDA.@atomic dO_dt_imag[p] += imag(term)
+    end
+    return nothing
+end
 
 # To avoid errors for CPU-only environments without CUDA loaded, we can assume
 # that CUDA is available when these functions are called. 
@@ -1044,9 +1113,9 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
             A = make_hermitian(A)
         end
     end
-    
+
     A_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(A)
-    
+
     if !isnothing(p_gpu) && !(p_gpu isa SciMLBase.NullParameters)
         A_gpu = A_gpu + p_gpu
     end
@@ -1069,7 +1138,7 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
 
         # Forward Checkpoints
         phis = Vector{typeof(v2_gpu)}(undef, N_steps + 1)
-        phis[1] = v2_gpu
+        phis[1] = copy(v2_gpu)  # defensive copy so v2_gpu is never mutated
 
         for k in 1:N_steps
             if antihermitian
@@ -1077,11 +1146,17 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
             else
                 phis[k+1], _ = KrylovKit.exponentiate(A_gpu, dt * 1.0im, phis[k]; ishermitian=true, tol=1e-12)
             end
+            # Synchronize after each GPU exponentiate to prevent async memory races
+            CUDA.synchronize()
         end
+
+        # Reclaim any pooled GPU memory before allocating the backward checkpoints
+        GC.gc(true)
+        CUDA.reclaim()
 
         # Backward Checkpoints
         chis = Vector{typeof(v1_gpu)}(undef, N_steps + 1)
-        chis[N_steps+1] = v1_gpu
+        chis[N_steps+1] = copy(v1_gpu)  # defensive copy
 
         for k in N_steps:-1:1
             if antihermitian
@@ -1089,6 +1164,8 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
             else
                 chis[k], _ = KrylovKit.exponentiate(A_gpu, -dt * 1.0im, chis[k+1]; ishermitian=true, tol=1e-12)
             end
+            # Synchronize after each GPU exponentiate
+            CUDA.synchronize()
         end
 
         # Simpson's Rule Weights
@@ -1101,18 +1178,36 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
 
         conj_overlap_factor = conj(overlap) * ȳ
 
-        # Preallocate buffer for matrix-vector multiplication
+        # Preallocate reusable GPU buffer for M*phi products
         tmp = similar(v1_gpu)
-        
-        # Accumulate gradients (single-threaded loop since GPU calls are async and hide CPU overhead)
+
+        # Accumulate gradients over parameters.
+        # We free phi/chi checkpoint arrays eagerly as we consume them so that
+        # not all (N_steps+1)*2 CuArrays are live simultaneously.
         for i in eachindex(grad_t)
-            M_gpu = ops_gpu[i]
+            I, J, V = ops_gpu[i]
+            M_cpu = sparse(I, J, V, dim, dim)
+
+            # Build M_gpu with its own colptr allocation (avoids aliasing bugs
+            # that arose from the previously shared colptr_gpu buffer).
+            colptr_gpu_i = CuArray{Cint}(M_cpu.colptr)
+            rowval_gpu_i = CuArray(M_cpu.rowval)
+            nzval_gpu_i = CuArray(M_cpu.nzval)
+            M_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(colptr_gpu_i, rowval_gpu_i, nzval_gpu_i, (dim, dim))
+
             val = 0.0 + 0.0im
             for k in 1:(N_steps+1)
                 mul!(tmp, M_gpu, phis[k])
+                CUDA.synchronize()
                 term = dot(chis[k], tmp)
+                CUDA.synchronize()
                 val += term * weights[k]
             end
+
+            # Free per-parameter GPU temporaries immediately
+            CUDA.unsafe_free!(colptr_gpu_i)
+            CUDA.unsafe_free!(rowval_gpu_i)
+            CUDA.unsafe_free!(nzval_gpu_i)
 
             if antihermitian
                 dO_dt = val
@@ -1121,6 +1216,17 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
             end
             grad_t[i] = -2 * real(conj_overlap_factor * dO_dt) + 1e-3 * t_vals[i] # regularization
         end
+
+        # Free all checkpoint arrays before returning
+        for k in 1:(N_steps+1)
+            if isassigned(phis, k)
+                CUDA.unsafe_free!(phis[k])
+            end
+            if isassigned(chis, k)
+                CUDA.unsafe_free!(chis[k])
+            end
+        end
+        CUDA.unsafe_free!(tmp)
 
         return NoTangent(), grad_t, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
     end

@@ -13,8 +13,9 @@ using JSON
 using OptimizationOptimJL
 using JLD2
 using HDF5
-using CUDA
 using KrylovKit
+
+using CUDA
 CUDA.set_runtime_version!(v"12.8")
 
 
@@ -33,11 +34,11 @@ function (@main)(ARGS)
         folder = "data/N=(2, 2)_3x2"
     end
     U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention = load_ED_data(folder)
-    
+
     scan_instructions = Dict(
         "starting level" => 1,
         "ending level" => 1, # level index for targets
-        "optimization_scheme" => [2,1],
+        "optimization_scheme" => [2],
         "use symmetry" => use_symmetry,
         "multi_start_iters" => 50, # 30
         "multi_start_samples" => 2, #5
@@ -51,7 +52,8 @@ function (@main)(ARGS)
             if ARGS[1] == "forward"
                 println("Forward")
                 scan_instructions["u_range"] = 26:length(U_values)
-            else ARGS[1] == "backward"
+            else
+                ARGS[1] == "backward"
                 println("backward")
                 scan_instructions["u_range"] = 18:-1:1
             end
@@ -61,7 +63,7 @@ function (@main)(ARGS)
             println("doing: $v1")
             scan_instructions["u_range"] = v1:v1
             # scan_instructions["load_file"] = joinpath(folder, "unitary_map_energy_symmetry=$(use_symmetry)_N=$(N)_u_$(v1).jld2")
-        end 
+        end
     elseif length(ARGS) == 2
         v1 = tryparse(Int, ARGS[1])
         v2 = tryparse(Int, ARGS[2])
@@ -84,12 +86,12 @@ function (@main)(ARGS)
 
     interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
         spin_conserved;
-        maxiters=50, gradient=:adjoint_gradient,
+        maxiters=200, gradient=:adjoint_gradient,
         perturb_optimization=0.01,
-        optimizer=[:GradientDescent, :LBFGS],
+        optimizer=[:GradientDescent, :LBFGs],
         save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
         precomputed_structures=precomputed_structures,
-        max_time_ratio=3.0)
+        max_time_ratio=5.0)
 
     return 0
 end
