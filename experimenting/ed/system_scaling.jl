@@ -14,20 +14,24 @@ using JSON
 using OptimizationOptimJL
 using JLD2
 using ExponentialUtilities
+ENV["JULIA_CUDA_USE_COMPAT"] = "false"
 using CUDA
 using Printf
+using Flux
 
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
+include("nn_strategy.jl")
 
 """
-    load_data(electrons::Tuple{Int, Int}, system_size::Vector{Int})
+    load_data_coefficients(electrons::Tuple{Int, Int}, system_size::Vector{Int})
 
-Loads the specified quantum many-body system data from JLD2 files based on the given 
-`electrons` count and `system_size` dimensions. Returns an array of coefficient values,
-a vector of corresponding state labels, and the grid dimensions of the system.
+Loads the specified quantum many-body system data from JLD2 files based on the given
+`electrons` count and `system_size` dimensions. Returns a Dict mapping each available
+`u_idx` to its coefficient vector, a vector of corresponding state labels, the grid
+dimensions of the system, and the full vector of U values.
 """
 function load_data_coefficients(electrons, system_size)
     folder = "data/N=$(electrons)_$(system_size[1])x$(system_size[2])"
@@ -35,13 +39,29 @@ function load_data_coefficients(electrons, system_size)
 
     e_metadata = load_saved_dict(joinpath(folder, "meta_data_and_E.jld2"))
     dim = [parse(Int, x) for x in split(e_metadata["meta_data"]["sites"], "x")]
+    U_values = e_metadata["meta_data"]["U_values"]
     shared_data = load_saved_dict(joinpath(folder, "unitary_map_energy_symmetry=false_N=$(electrons)_shared.jld2"))
     labels = shared_data["coefficient_labels"][2]
+    println(size(labels))
 
-    dic = load_saved_dict(joinpath(folder, "unitary_map_energy_symmetry=false_N=$(electrons)_u_28.jld2"))
-    coefficients = dic["coefficients"][2]
+    # Load coefficients for every available u_idx
+    coefficients_by_u = Dict{Int,Any}()
+    for u_idx in eachindex(U_values)
+        u_file = joinpath(folder, "unitary_map_energy_symmetry=false_N=$(electrons)_u_$(u_idx).jld2")
+        if isfile(u_file)
+            dic = load_saved_dict(u_file)
+            val = dic["coefficients"][2]
+            if isnothing(val)
+                @warn "u_idx=$(u_idx): coefficients[2] is nothing, skipping"
+            else
+                coefficients_by_u[u_idx] = val
+            end
+        else
+            @warn "Missing u_idx=$(u_idx) file: $u_file"
+        end
+    end
 
-    return coefficients, labels, dim
+    return coefficients_by_u, labels, dim, U_values
 end
 
 # 5-point Gauss-Legendre quadrature nodes and weights for interval [-1, 1]
@@ -324,11 +344,6 @@ function generate_basis_degrees(N::Int, dim::Vector{Int}; labels=nothing)
     return degrees
 end
 
-struct CoefficientInterpolator{T}
-    interpolated_c::Vector{T}
-    basis_degrees::Vector{Vector{Int}}
-    d::Int
-end
 
 """
     get_interpolator(coefficients::AbstractVector{T}, labels::Vector, 
@@ -381,7 +396,10 @@ function interpolate_coefficients(new_labels, target_dim::Vector{Int}, interp::C
     return new_coefficients
 end
 function old_process()
-    coeffs, labels, dim = load_data_coefficients((3, 3), (3, 2))
+    coefficients_by_u, labels, dim, U_values = load_data_coefficients((3, 3), (3, 2))
+    # Use the first available u_idx for the legacy test
+    u_idx = first(sort(collect(keys(coefficients_by_u))))
+    coeffs = coefficients_by_u[u_idx]
     # Mathematically restrict data to only symmetric unique elements (First Spin == 1)
     # 1111, 1212, 1221 etc. The flipped states 2222, 2121, 2112 are structurally redundant.
     valid_idxs = [label_to_k(lbl, dim)[5][1] == 1 for lbl in labels]
@@ -430,29 +448,56 @@ function (@main)(ARGS)
     # -------------------------------------------------------------------------
     # Configuration: small system (source of coefficients) and large system (target)
     # -------------------------------------------------------------------------
-    small_folder = "data/N=(3, 3)_3x2"
-    large_folder = "data/N=(3, 3)_4x3"
     small_electrons = (3, 3)
+    small_size = [3, 2]
     large_electrons = (3, 3)
+    large_folder = "data/N=$(large_electrons)_4x3"
     order = 2
 
-    # -------------------------------------------------------------------------
-    # Step 1: Build interpolator from the small system's saved coefficients
-    # -------------------------------------------------------------------------
-    println("\n=== Loading small system coefficients ===")
-    coeffs_small, labels_small, dim_small = load_data_coefficients(small_electrons, [3, 2])
-
-    valid_idxs = [label_to_k(lbl, dim_small)[5][1] == 1 for lbl in labels_small]
-    coeffs_small = coeffs_small[valid_idxs]
-    labels_small = labels_small[valid_idxs]
-    N_small = length(labels_small)
-    println("Small system: dim=$(dim_small), N_small=$(N_small)")
-
-    @time bd = generate_basis_degrees(N_small, dim_small; labels=labels_small)
-    @time interp = get_interpolator(coeffs_small, labels_small, bd, dim_small)
+    # Parse --strategy=legendre (default) or --strategy=neural from ARGS
+    strategy_flag = "legendre"
+    for arg in ARGS
+        if startswith(arg, "--strategy=")
+            strategy_flag = split(arg, "=")[2]
+        end
+    end
+    println("\n=== Using interpolation strategy: $strategy_flag ===")
 
     # -------------------------------------------------------------------------
-    # Step 2: Load ED data for the large system (same pattern as run_lanczos_scan_optimization)
+    # Step 1: Build interpolation strategy
+    # -------------------------------------------------------------------------
+    strategy = if strategy_flag == "neural"
+        # Neural-network strategy: train across multiple datasets.
+        # Edit folder_specs / hyperparameters to match your training data.
+        nn_folder_specs = [
+            ((3, 3), [3, 2], 2:60, ""),
+            # ((2, 2), [3, 2], 30:40, ""),
+            # ((3, 3), [3, 3], 30:40, ""),
+            # ((4, 4), [3, 3], 30:40, "_2"),
+            # ((4, 4), [4, 2], 30:40, ""),
+        ]
+        println("Training neural network across $(sum(length(s[3]) for s in nn_folder_specs)) samples...")
+        @time NeuralNetStrategy(nn_folder_specs;
+            U_max=10.0,
+            include_dim=true,
+            include_electrons=true,
+            dim_max=max(large_electrons...),
+            n_epochs=200,
+            batch_size=256,
+            lr=1e-3,
+            use_gpu=CUDA.functional(),
+            use_scale_head=false,
+        )
+    else
+        # Legendre polynomial strategy: fit one interpolator per U value from the small system.
+        println("\n=== Loading small system coefficients (all U values) ===")
+        coeffs_by_u_small, labels_small, dim_small, U_values_small = load_data_coefficients(small_electrons, small_size)
+        println("Small system: dim=$(dim_small), N=$(length(labels_small)), U_values=$(length(U_values_small))")
+        @time LegendreStrategy(coeffs_by_u_small, labels_small, dim_small, U_values_small)
+    end
+
+    # -------------------------------------------------------------------------
+    # Step 2: Load ED data for the large system
     # -------------------------------------------------------------------------
     println("\n=== Loading large system ED data ===")
     U_values_large, target_vecs_large, indexer_large, precomputed_structures_large,
@@ -466,7 +511,7 @@ function (@main)(ARGS)
     # -------------------------------------------------------------------------
     println("\n=== Building operator structure for large system (order=$order) ===")
     momentum_basis = false
-    initial_loss = 1.0  # placeholder magnitude; same pattern as optimize_unitary
+    initial_loss = 1.0
 
     @time t_dict_large, t_keys_large = create_randomized_nth_order_operator(
         order, indexer_large, true;
@@ -482,58 +527,42 @@ function (@main)(ARGS)
     )
     param_index_map_large = build_param_index_map(ops_list_large, t_keys_large)
 
-    # Build per-parameter (row, col, val) triplets for adjoint_loss (no symmetry)
     indices_by_param = [Int[] for _ in 1:length(t_keys_large)]
     for k in eachindex(param_index_map_large)
         push!(indices_by_param[param_index_map_large[k]], k)
     end
-    ops_large = []
-    for i in 1:length(t_keys_large)
-        idx = indices_by_param[i]
-        rows_sub = Int[]
-        cols_sub = Int[]
-        vals_sub = ComplexF64[]
-        for j in idx
-            r = rows_large[j]
-            c = cols_large[j]
-            s = signs_large[j]
-            push!(rows_sub, r)
-            push!(cols_sub, c)
-            push!(vals_sub, s)
-            push!(rows_sub, c)
-            push!(cols_sub, r)
-            push!(vals_sub, conj(s))
-        end
-        push!(ops_large, (rows_sub, cols_sub, vals_sub))
-    end
+    ops_large = [] # this parameter is actually unused by adjoint_loss (without gradient)
 
     # -------------------------------------------------------------------------
-    # Step 4: Interpolate small-system coefficients → large-system labels
+    # Step 4: Prepare for coefficient prediction
     # -------------------------------------------------------------------------
-    println("\n=== Interpolating coefficients to large system labels ===")
-    dim_large_vec = [parse(Int, x) for x in split(load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))["meta_data"]["sites"], "x")]
-
-    @time new_coeffs = interpolate_coefficients(t_keys_large, dim_large_vec, interp)
-    println("Interpolated $(length(new_coeffs)) coefficients for large system.")
+    dim_large_vec = [parse(Int, x) for x in split(
+        load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))["meta_data"]["sites"], "x")]
 
     # -------------------------------------------------------------------------
     # Step 5: Evaluate adjoint_loss for each U in the large system
-    # and compare with the stored optimized losses
     # -------------------------------------------------------------------------
     println("\n=== Evaluating adjoint_loss per U-index ===")
-    println(@sprintf("%-8s  %-20s  %-20s  %-12s", "U-idx", "Stored opt. loss", "Interpolated loss", "Ratio"))
+    println(@sprintf("%-8s  %-20s  %-20s  %-12s", "U-idx", "Stored opt. loss", "Predicted loss", "Ratio"))
     println("-"^68)
 
     save_name = "unitary_map_energy_symmetry=$(use_symmetry_large)_N=$(large_electrons)"
-
     ref_u_idx = 1
     state1 = target_vecs_large[ref_u_idx, :]
 
     for u_idx in 2:size(target_vecs_large, 1)
-        state2 = target_vecs_large[u_idx, :]
+        # Re-predict coefficients for this U value — both strategies now take a U context.
+        new_coeffs = if isa(strategy, NeuralNetStrategy)
+            ctx = NeuralNetContext(U_values_large[u_idx], large_electrons, strategy.U_max)
+            interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+        else
+            ctx = LegendreContext(U_values_large[u_idx])
+            interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+        end
 
-        # Compute loss with interpolated coefficients
-        interp_loss = adjoint_loss(
+        state2 = target_vecs_large[u_idx, :]
+        println("coef magnitude: $(sum(abs.(new_coeffs))/length(new_coeffs))")
+        pred_loss = adjoint_loss(
             real.(new_coeffs), ops_large,
             rows_large, cols_large, signs_large,
             param_index_map_large, nothing, nothing,
@@ -541,7 +570,6 @@ function (@main)(ARGS)
             !use_symmetry_large, false
         )
 
-        # Load stored optimized loss for this U-index (if file exists)
         u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
         stored_loss = if isfile(u_file)
             d = load_saved_dict(u_file)
@@ -550,10 +578,9 @@ function (@main)(ARGS)
             NaN
         end
 
-        ratio = isnan(stored_loss) || stored_loss == 0.0 ? NaN : interp_loss / stored_loss
-        println(@sprintf("%-8d  %-20.6g  %-20.6g  %-12.4g", u_idx, stored_loss, interp_loss, ratio))
+        ratio = isnan(stored_loss) || stored_loss == 0.0 ? NaN : pred_loss / stored_loss
+        println(@sprintf("%-8d  %-20.6g  %-20.6g  %-12.4g", u_idx, stored_loss, pred_loss, ratio))
     end
 
     println("\nDone.")
-
 end

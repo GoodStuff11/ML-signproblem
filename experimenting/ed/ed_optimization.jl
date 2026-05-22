@@ -128,6 +128,17 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
     return loss
 end
 
+function trotter(ops, dim, v1, v2, trotter_order)
+    ## todo: wait for tamra to give better trotter implementation
+    for (i, t) in enumerate(ops)
+        I, J, V = ops[i]
+        M = sparse(I, J, V, dim, dim)
+        
+    end
+
+
+end
+
 function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state1, state2, use_symmetry, antihermitian; p=nothing)
     t = @elapsed begin
         vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)

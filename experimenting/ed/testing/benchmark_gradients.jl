@@ -17,7 +17,6 @@ using CUDA
 using KrylovKit
 # Ensure CUDA is available if possible
 try
-    using CUDA
     CUDA.set_runtime_version!(v"12.8")
     println("CUDA version: $(CUDA.versioninfo())")
 catch
