@@ -43,7 +43,7 @@ function permutation_parity(a::Vector)
     return parity % 2
 end
 
-function find_best_energy_sector(all_E::Vector, U_values::Vector; labels=nothing)
+function find_best_energy_sector(all_E::Vector, U_values::Vector; labels=nothing, verbose=false)
     if length(all_E) == 1
         if labels === nothing
             return 1
@@ -52,19 +52,25 @@ function find_best_energy_sector(all_E::Vector, U_values::Vector; labels=nothing
         end
     end
     # todo verify which states I'm looking at 887
-    println("Finding best energy sector")
+    if verbose
+        println("Finding best energy sector")
+    end
     counts = Dict()
     for u_idx in eachindex(all_E[1])
         energies = [real.(all_E[k])[u_idx] for k in eachindex(all_E)]
         indices = sortperm(energies)
         print_indices = min(2, length(energies))
-        println("U=$(U_values[u_idx]) k=$(indices[1:print_indices]) $(energies[1:print_indices])")
+        if verbose
+            println("U=$(U_values[u_idx]) k=$(indices[1:print_indices]) $(energies[1:print_indices])")
+        end
         counts[indices[1]] = get(counts, indices[1], 0) + 1
     end
 
     # pick the k value which is most frequently the ground state
     k_min = argmax(counts)
-    println("Selected ground state symmetry sector: $k_min")
+    if verbose
+        println("Selected ground state symmetry sector: $k_min")
+    end
     # error("")
     if labels === nothing
         return k_min
@@ -145,12 +151,14 @@ function get_slater_ground_state(data, sector::Int)
     return best_idx
 end
 
-function load_h5_ED_data(folder)
+function load_h5_ED_data(folder; verbose=false)
     valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]# && occursin("(0)", f)] # remove (0) requirement
 
     file_path = joinpath(folder, valid_files[1])
     sign_convention = :spin_first
-    println("Loading hdf5 data: $file_path")
+    if verbose
+        println("Loading hdf5 data: $file_path")
+    end
 
     h5open(file_path, "r") do data
         N = (read(data, "metadata/nup"), read(data, "metadata/ndown"))
@@ -164,7 +172,9 @@ function load_h5_ED_data(folder)
         key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
         all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels] # Needed for energy selection
         k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-        println(all_E)
+        if verbose
+            println(all_E)
+        end
         target_vecs = read(data, "data/evecs/$(k_min)")[:, 1, :] # shape (length(U_values), dim)
 
         # using the highest overlap slater determinant state as reference. 
@@ -175,7 +185,9 @@ function load_h5_ED_data(folder)
 
         lattice = Square(tuple(Lvec...), Periodic())
         subspace = HubbardSubspace(N..., lattice; k=tuple((kvecs[:, k_min+1] .+ 1)...))
-        println("Computing indexer")
+        if verbose
+            println("Computing indexer")
+        end
         indexer = CombinationIndexer(subspace; order=ColSnake())
 
         precomputed_structures = Dict()
@@ -185,7 +197,7 @@ function load_h5_ED_data(folder)
 
 end
 
-function load_jld2_ED_data(file_path::String)
+function load_jld2_ED_data(file_path::String; verbose=fales)
     dic = load_saved_dict(file_path)
 
     sign_convention = :coordinate_first
@@ -198,8 +210,10 @@ function load_jld2_ED_data(file_path::String)
     indexer = dic["indexer"]
     precomputed_structures = get(dic, "precomputed_structures", Dict())
 
-    println("Meta data:")
-    display(meta_data)
+    if verbose
+        println("Meta data:")
+        display(meta_data)
+    end
 
     # Extract N for saving
     N = meta_data["electron count"]
@@ -207,7 +221,7 @@ function load_jld2_ED_data(file_path::String)
     use_symmetry = false
 
     # Find lowest energy sector 
-    k_min = find_best_energy_sector(all_E, U_values)
+    k_min = find_best_energy_sector(all_E, U_values; verbose=verbose)
 
     # Select the eigenvectors for this sector
     # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
@@ -229,13 +243,13 @@ Returns:
     Tuple of (U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry)
 
 """
-function load_ED_data(folder)
+function load_ED_data(folder; verbose=false)
     alternate_sign_convention = false
     jld2_path = joinpath(folder, "meta_data_and_E.jld2")
     if !isfile(jld2_path)
-        args = load_h5_ED_data(folder)
+        args = load_h5_ED_data(folder; verbose=verbose)
     else
-        args = load_jld2_ED_data(jld2_path)
+        args = load_jld2_ED_data(jld2_path; verbose=verbose)
     end
     return args
 end

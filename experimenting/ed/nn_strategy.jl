@@ -1,4 +1,5 @@
 using Flux
+using JLD2
 
 # ─────────────────────────────────────────────────────────────
 #  Abstract strategy interface
@@ -193,17 +194,22 @@ function featurize_entry(coefficients, labels, dim, U_value, electrons;
 end
 
 """
-    featurize_all(raw_data; U_max, include_dim, dim_max, include_electrons)
+    featurize_all(raw_data; U_max, include_dim, dim_max, include_electrons, use_scale_head)
 
 Parallel featurization of pre-loaded raw data into normalized Float32 matrices.
-Y values are normalized per-entry (per U-value) to unit RMS.  The log₁₀ of each
-entry's RMS is stored in `Y_log_scale` so the scale head can be supervised directly.
-Returns `(X1, X2, X3, X4, Ctx, Y, Y_log_scale)`.
+
+When `use_scale_head=false` (original mode): Y contains raw Float32 coefficients.
+When `use_scale_head=true`  (scaled mode):   Y is per-entry RMS-normalized; Y_log_scale
+  holds log10(RMS) per sample for scale-head supervision.
+
+Always returns `(X1, X2, X3, X4, Ctx, Y, Y_log_scale)` — in original mode Y_log_scale
+is a zero vector (unused by the training loop).
 """
 function featurize_all(raw_data;
     U_max,
     include_dim=false, dim_max=nothing,
-    include_electrons=false)
+    include_electrons=false,
+    use_scale_head::Bool=true)
     n_feat = length(raw_data[1][3]) + 1   # d + 1 (k components + spin)
     n_ctx = 1 + (include_dim ? 2 : 0) + (include_electrons ? 2 : 0)
     n_per = [length(d[1]) for d in raw_data]
@@ -215,8 +221,8 @@ function featurize_all(raw_data;
     X3 = Matrix{Float32}(undef, n_feat, N)
     X4 = Matrix{Float32}(undef, n_feat, N)
     Ctx = Matrix{Float32}(undef, n_ctx, N)
-    Y = Vector{Float32}(undef, N)   # per-entry normalized coefficients
-    Y_log_scale = Vector{Float32}(undef, N)   # log10(RMS) target for the scale head
+    Y = Vector{Float32}(undef, N)
+    Y_log_scale = zeros(Float32, N)   # only filled when use_scale_head=true
 
     Threads.@threads for ti in eachindex(raw_data)
         (coefficients, labels, dim, U_value, electrons) = raw_data[ti]
@@ -224,11 +230,12 @@ function featurize_all(raw_data;
         include_dim && append!(ctx_base, normalize_dim(dim, dim_max))
         include_electrons && append!(ctx_base, normalize_electrons(electrons, prod(dim) ÷ 2))
 
-        # Per-entry (per-U) RMS normalization.
         c32 = Float32.(coefficients)
+
+        # Per-entry scale (used only in scaled mode).
         entry_rms = sqrt(sum(c32 .^ 2) / length(c32))
-        entry_log_scale = log10(entry_rms)
-        println(entry_rms)
+        entry_log_scale = (use_scale_head && entry_rms > 0) ? log10(entry_rms) : 0.0f0
+        inv_rms = (use_scale_head && entry_rms > 0) ? 1.0f0 / entry_rms : 1.0f0
 
         col_start = offsets[ti] + 1
         for j in eachindex(coefficients)
@@ -239,11 +246,13 @@ function featurize_all(raw_data;
             X3[:, col] = nn_feature(k3, spins[3])
             X4[:, col] = nn_feature(k4, spins[4])
             Ctx[:, col] = ctx_base
-            Y[col] = c32[j] / entry_rms
+            Y[col] = c32[j] * inv_rms   # raw when inv_rms=1, normalized otherwise
             Y_log_scale[col] = entry_log_scale
         end
     end
-    println("Y_log_scale range: [$(minimum(Y_log_scale)), $(maximum(Y_log_scale))]")
+    if use_scale_head
+        println("Y_log_scale range: [$(minimum(Y_log_scale)), $(maximum(Y_log_scale))]")
+    end
     return X1, X2, X3, X4, Ctx, Y, Y_log_scale
 end
 
@@ -293,9 +302,9 @@ function load_all_data_nn(folder_specs)
 end
 
 function prepare_dataset_nn(folder_specs; U_max, include_dim=false,
-    dim_max=nothing, include_electrons=false)
+    dim_max=nothing, include_electrons=false, use_scale_head=true)
     return featurize_all(load_all_data_nn(folder_specs);
-        U_max, include_dim, dim_max, include_electrons)
+        U_max, include_dim, dim_max, include_electrons, use_scale_head)
 end
 
 
@@ -307,18 +316,18 @@ end
     build_two_stage_mlp(; feat_dim, base_hidden, embed_dim, context_hidden,
                           scale_hidden, n_context, use_scale_head)
 
-Two-mode architecture controlled by `use_scale_head`:
+Two-mode architecture:
 
-**Scaled mode** (`use_scale_head=true`, default):
-- Stage 1 — base MLP:   ℝᶠ⁴  → ℝᵉ   (scattering embedding)
-- Stage 2 — shape MLP:  ℝᵉ⁺ⁿᶜ → ℝ¹  (embedding + context → unit-normalized shape)
-- Stage 3 — scale MLP:  ℝⁿᶜ   → ℝ¹  (context only → log₁₀-scale)
-Returns `(base=..., context=..., scale=...)`.
-
-**Unscaled mode** (`use_scale_head=false`):
-- Stage 1 — base MLP:   ℝᶠ⁴  → ℝᵉ
-- Stage 2 — context MLP: ℝᵉ⁺ⁿᶜ → ℝ¹  (single combined output; original architecture)
+**Original / unscaled mode** (`use_scale_head=false`):
+- base MLP:    feat_dim*4 -> embed_dim
+- context MLP: embed_dim + n_context -> 1
 Returns `(base=..., context=...)`.
+
+**Scaled mode** (`use_scale_head=true`):
+- base MLP:    feat_dim*4 -> embed_dim
+- shape MLP:   embed_dim + n_context -> 1  (antisymmetric shape)
+- scale MLP:   n_context -> 1             (log10-scale, context only)
+Returns `(base=..., context=..., scale=...)`.
 """
 function build_two_stage_mlp(;
     feat_dim=3,
@@ -351,18 +360,17 @@ function build_two_stage_mlp(;
 end
 
 """
-    compute_F_batch(model, X1, X2, X3, X4, Ctx; use_scale_head) -> (output, log_scale_or_nothing)
+    compute_F_batch(model, X1, X2, X3, X4, Ctx; use_scale_head) -> (output, nothing_or_log_scale)
 
 Symmetrized forward pass over a batch.
 
-**Scaled mode** (`use_scale_head=true`):
-- `output`    : antisymmetrized unit-normalized shape prediction.
-- `log_scale` : permutation-invariant log₁₀-scale from the context-only scale MLP.
-Full prediction = 10^(log_scale) .* output.
+**Original mode** (`use_scale_head=false`):
+  Returns `(output, nothing)`.
 
-**Unscaled mode** (`use_scale_head=false`):
-- `output`    : single antisymmetrized combined prediction (global-normalized).
-- second return is `nothing`.
+**Scaled mode** (`use_scale_head=true`):
+  shape = antisymmetrize(context_head)
+  log_scale = scale_head(Ctx)
+  Returns `(shape, log_scale)`.
 """
 function compute_F_batch(model, X1, X2, X3, X4, Ctx; use_scale_head::Bool=true)
     B = size(X1, 2)
@@ -381,7 +389,7 @@ function compute_F_batch(model, X1, X2, X3, X4, Ctx; use_scale_head::Bool=true)
 
     # Antisymmetric combination (no /8 — keeps initial output magnitude O(0.5)).
     antisym = (raw_w[:, 1] .- raw_w[:, 2] .- raw_w[:, 3] .+ raw_w[:, 4] .+
-               raw_w[:, 5] .- raw_w[:, 6] .- raw_w[:, 7] .+ raw_w[:, 8])
+               raw_w[:, 5] .- raw_w[:, 6] .- raw_w[:, 7] .+ raw_w[:, 8]) ./ 8
 
     if use_scale_head
         log_scale = vec(model.scale(Ctx))   # (B,) — context-only scale head
@@ -394,26 +402,25 @@ end
 function to_device(x; use_gpu=true)
     if use_gpu && CUDA.functional()
         try
-            return Flux.gpu(x)
+            return Flux.fmap(CUDA.cu, x)
         catch e
             @warn "GPU transfer failed ($(e)), falling back to CPU."
         end
     end
-    return Flux.cpu(x)
+    return Flux.fmap(Flux.cpu, x)
 end
 
 """
     train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale; use_scale_head, ...)
 
-**Scaled mode** (`use_scale_head=true`):
-  joint_loss = MSE( 10^(clamp(log_scale − Y_log_scale, −3,3)) ⋅ unscaled,  Y_normalized )
-  aux_loss   = MSE( log_scale,  Y_log_scale )
-  total      = (joint_loss + scale_loss_weight ⋅ aux_loss) / (1 + scale_loss_weight)
+**Original mode** (`use_scale_head=false`):
+  loss = MSE(compute_F_batch(m,...), Y)
+  Identical to the architecture that previously achieved ~1e-5 loss.
 
-**Unscaled mode** (`use_scale_head=false`):
-  total = MSE( antisym_output,  Y_global_normalized )
-  (identical to the original training loss; Y and Y_log_scale are ignored for the
-   scale head, only Y is used)
+**Scaled mode** (`use_scale_head=true`):
+  joint_loss = MSE(10^clamp(log_scale - Y_log_scale,-3,3) * shape, Y_normalized)
+  aux_loss   = MSE(log_scale, Y_log_scale)
+  loss       = (joint_loss + scale_loss_weight * aux_loss) / (1 + scale_loss_weight)
 
 Returns per-epoch mean losses.
 """
@@ -439,8 +446,7 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale;
             bY_ls = Y_log_scale[idx]
 
             loss, grads = Flux.withgradient(model) do m
-                output, log_scale = compute_F_batch(m, bX1, bX2, bX3, bX4, bCtx;
-                    use_scale_head)
+                output, log_scale = compute_F_batch(m, bX1, bX2, bX3, bX4, bCtx; use_scale_head)
                 if use_scale_head
                     log_ratio = clamp.(log_scale .- bY_ls, -3f0, 3f0)
                     pred = (10f0 .^ log_ratio) .* output
@@ -448,7 +454,7 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale;
                     aux_loss = Flux.mse(log_scale, bY_ls)
                     (joint_loss + scale_loss_weight * aux_loss) / (1f0 + scale_loss_weight)
                 else
-                    Flux.mse(output, bY)   # plain MSE on global-normalized targets
+                    Flux.mse(output, bY)   # original plain MSE
                 end
             end
             Flux.update!(opt_state, model, grads[1])
@@ -473,13 +479,9 @@ end
 """
     NeuralNetStrategy <: CoefficientStrategy
 
-A trained MLP that predicts coefficients for any scattering label.
-Supports two modes, selected at construction time via `use_scale_head`:
-
-- **Scaled** (`use_scale_head=true`): 3-head model (base, shape, scale).  The scale
-  head predicts `log₁₀(Y_scale)` from context alone; prediction = 10^(log_scale) × shape.
-- **Unscaled** (`use_scale_head=false`): 2-head model (base, context).  Single combined
-  output trained on Y
+Supports two modes via `use_scale_head`:
+- `false` (original): sigmoid-scaled 2-head network, plain MSE on raw Y.
+- `true`  (scaled):   3-head network with context-only log-scale prediction.
 """
 struct NeuralNetStrategy <: CoefficientStrategy
     model               # Flux NamedTuple — stored on CPU
@@ -491,19 +493,14 @@ struct NeuralNetStrategy <: CoefficientStrategy
 end
 
 """
-    NeuralNetStrategy(folder_specs; use_scale_head=true, U_max=10.0, kwargs...)
+    NeuralNetStrategy(folder_specs; use_scale_head=false, U_max=10.0, kwargs...)
 
-Train a `NeuralNetStrategy` on the datasets described by `folder_specs`.
-Each entry in `folder_specs` is `(electrons, system_size, u_indices, file_label)`.
+Train a `NeuralNetStrategy`.  Default `use_scale_head=false` restores the original
+architecture that achieved ~1e-5 loss.  Set `use_scale_head=true` for the experimental
+scaled architecture.
 
-Set `use_scale_head=false` to use the original simpler 2-head (base + context) architecture
-trained on globally-normalized Y with plain MSE loss.  Set `use_scale_head=true` (default)
-for the 3-head scaled architecture.
-
-Keyword arguments forwarded to `build_two_stage_mlp` and `train_mlp!`:
-  - `include_dim`, `dim_max`, `include_electrons`
-  - `n_epochs`, `batch_size`, `lr`, `use_gpu`
-  - `base_hidden`, `embed_dim`, `context_hidden`, `scale_hidden`
+Keyword arguments: `include_dim`, `dim_max`, `include_electrons`, `n_epochs`, `batch_size`,
+`lr`, `use_gpu`, `base_hidden`, `embed_dim`, `context_hidden`, `scale_hidden`.
 """
 function NeuralNetStrategy(folder_specs;
     U_max=10.0,
@@ -518,10 +515,10 @@ function NeuralNetStrategy(folder_specs;
     embed_dim=64,
     context_hidden=[64, 32],
     scale_hidden=[32, 16],
-    use_scale_head::Bool=true)
+    use_scale_head::Bool=false)
 
     X1, X2, X3, X4, Ctx, Y, Y_log_scale = prepare_dataset_nn(folder_specs;
-        U_max, include_dim, dim_max, include_electrons)
+        U_max, include_dim, dim_max, include_electrons, use_scale_head)
 
     n_ctx = size(Ctx, 1)
     f_dim = size(X1, 1)   # d + 1
@@ -533,8 +530,8 @@ function NeuralNetStrategy(folder_specs;
 
     _dev(x) = to_device(x; use_gpu)
     model_d = _dev(model)
-    X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls = _dev(X1), _dev(X2), _dev(X3), _dev(X4),
-    _dev(Ctx), _dev(Y), _dev(Y_log_scale)
+    X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls = (
+        _dev(X1), _dev(X2), _dev(X3), _dev(X4), _dev(Ctx), _dev(Y), _dev(Y_log_scale))
 
     train_mlp!(model_d, X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls;
         n_epochs, batch_size, lr, use_scale_head)
@@ -548,10 +545,10 @@ end
 """
     interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext, labels, dim)
 
-Predict coefficients for each entry in `labels` on lattice `dim` using the trained MLP.
+Predict coefficients using the trained MLP.
 
-- **Scaled mode**: returns `10^(log_scale) × shape_output`.
-- **Unscaled mode**: returns `antisym_output`.
+- Original mode (`use_scale_head=false`): returns the sigmoid-scaled network output directly.
+- Scaled mode  (`use_scale_head=true`):  returns 10^(log_scale) * shape_output.
 """
 function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
     labels, dim::Vector{Int})
@@ -572,7 +569,88 @@ function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
         if s.use_scale_head
             (10.0f0^only(log_scale)) * only(output)
         else
-            only(output)
+            only(output)   # original: sigmoid scaling is already inside compute_F_batch
         end
     end
 end
+
+"""
+    save_neural_network(filepath::AbstractString, strategy::NeuralNetStrategy)
+
+Save the trained `NeuralNetStrategy` to the specified file using JLD2.
+"""
+function save_neural_network(filepath::AbstractString, strategy::NeuralNetStrategy)
+    dir = dirname(filepath)
+    if !isempty(dir) && !isdir(dir)
+        mkpath(dir)
+    end
+    jldsave(filepath; strategy=strategy)
+    println("Saved neural network strategy to: $filepath")
+end
+
+"""
+    load_neural_network(filepath::AbstractString) -> NeuralNetStrategy
+
+Load a `NeuralNetStrategy` from the specified JLD2 file.
+"""
+function load_neural_network(filepath::AbstractString)
+    if !isfile(filepath)
+        error("Neural network strategy file not found at: $filepath")
+    end
+    data = load(filepath)
+    if !haskey(data, "strategy")
+        error("JLD2 file at $filepath does not contain a saved 'strategy'.")
+    end
+    strategy = data["strategy"]
+    println("Loaded neural network strategy from: $filepath")
+    return strategy
+end
+
+"""
+    get_or_train_neural_strategy(nn_filepath::AbstractString, folder_specs; kwargs...) -> NeuralNetStrategy
+
+Check if `nn_filepath` exists. If it does, load and return the saved `NeuralNetStrategy`.
+Otherwise, train a new `NeuralNetStrategy` using `folder_specs` and `kwargs`, save it to
+`nn_filepath`, and return it.
+"""
+function get_or_train_neural_strategy(nn_filepath::AbstractString, folder_specs;
+    U_max=10.0,
+    include_dim=false,
+    include_electrons=false,
+    dim_max=nothing,
+    n_epochs=200,
+    batch_size=512,
+    lr=1e-3,
+    use_gpu=true,
+    base_hidden=[128, 128],
+    embed_dim=64,
+    context_hidden=[64, 32],
+    scale_hidden=[32, 16],
+    use_scale_head::Bool=false)
+
+    if isfile(nn_filepath)
+        println("Found existing neural network at $nn_filepath. Loading...")
+        return load_neural_network(nn_filepath)
+    else
+        println("No existing neural network found at $nn_filepath. Training a new model...")
+        strategy = NeuralNetStrategy(folder_specs;
+            U_max=U_max,
+            include_dim=include_dim,
+            include_electrons=include_electrons,
+            dim_max=dim_max,
+            n_epochs=n_epochs,
+            batch_size=batch_size,
+            lr=lr,
+            use_gpu=use_gpu,
+            base_hidden=base_hidden,
+            embed_dim=embed_dim,
+            context_hidden=context_hidden,
+            scale_hidden=scale_hidden,
+            use_scale_head=use_scale_head
+        )
+        save_neural_network(nn_filepath, strategy)
+        return strategy
+    end
+end
+
+

@@ -12,7 +12,7 @@ using JLD2
 using KrylovKit
 using Zygote
 using ExponentialUtilities
-
+using CUDA
 
 include("ed_objects.jl")
 include("ed_functions.jl")
@@ -26,12 +26,12 @@ function (@main)(ARGS)
 
     sign_convention = :coordinate_first
 
-    lattice_dimension = (3, 3)
+    lattice_dimension = (2, 2)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 3
-        N_down = 3
+        N_up = 2
+        N_down = 2
         N = (N_up, N_down)
     else
         N = 6
@@ -53,8 +53,8 @@ function (@main)(ARGS)
 
     # Pre-allocate result arrays so parallel writes go to distinct indices (thread-safe)
     all_full_eig_vecs = Vector{Any}(undef, n_sectors)
-    all_E             = Vector{Any}(undef, n_sectors)
-    all_indexers      = Vector{Any}(undef, n_sectors)
+    all_E = Vector{Any}(undef, n_sectors)
+    all_indexers = Vector{Any}(undef, n_sectors)
 
     Threads.@threads for k in 1:n_sectors
         eig_indices = collect(all_eig_indices[k])
@@ -69,8 +69,8 @@ function (@main)(ARGS)
         dim = get_subspace_dimension(subspace)
         if dim == 0
             all_full_eig_vecs[k] = []
-            all_E[k]             = []
-            all_indexers[k]      = nothing
+            all_E[k] = []
+            all_indexers[k] = nothing
             continue
         end
 
@@ -93,7 +93,7 @@ function (@main)(ARGS)
         println("k=$k")
 
         all_eig_vecs = zeros(ComplexF64, length(U_values), dim)
-        E_values     = Vector{Float64}(undef, length(U_values))
+        E_values = Vector{Float64}(undef, length(U_values))
 
         targets = Float64[]
         should_project = false
@@ -152,8 +152,8 @@ function (@main)(ARGS)
                 end
             end
 
-            E_values[i]          = E[vec_idx]
-            all_eig_vecs[i, :]  .= H_vecs[vec_idx]
+            E_values[i] = E[vec_idx]
+            all_eig_vecs[i, :] .= H_vecs[vec_idx]
 
             if i >= 2
                 overlap = abs(all_eig_vecs[i, :]' * all_eig_vecs[i-1, :])
@@ -171,8 +171,8 @@ function (@main)(ARGS)
 
         # Write results to pre-allocated slots — each k writes to a distinct index
         all_full_eig_vecs[k] = all_eig_vecs
-        all_E[k]             = E_values
-        all_indexers[k]      = indexer
+        all_E[k] = E_values
+        all_indexers[k] = indexer
         # println("k: $k, indexer: $(indexer.inv_comb_dict[1])")
         # println("k: $k, all_indexers: $(all_indexers[max(k-1, 1)].inv_comb_dict[1])")
     end
@@ -182,7 +182,7 @@ function (@main)(ARGS)
         end
     end
     selected_index = find_best_energy_sector(all_E, U_values)
-    
+
     # --- Precompute operator structures for optimization ---
     println("Precomputing n_body_structure for optimization...")
     main_indexer = all_indexers[selected_index]

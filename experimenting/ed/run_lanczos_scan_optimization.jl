@@ -31,7 +31,7 @@ function (@main)(ARGS)
         folder = ARGS[1]
         ARGS = ARGS[2:end]
     else
-        folder = "data/N=(2, 2)_3x2"
+        error("Please input a folder. Ex data/N=(2, 2)_2x2")
     end
     U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention = load_ED_data(folder)
 
