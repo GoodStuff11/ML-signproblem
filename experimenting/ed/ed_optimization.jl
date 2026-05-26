@@ -226,7 +226,11 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     precomputed_structures::Dict=Dict(),
     sign_convention::Symbol=:spin_first,
     time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
-    max_time_ratio::Union{Float64,Nothing}=nothing
+    max_time_ratio::Union{Float64,Nothing}=nothing,
+    nn_strategy_file::Union{AbstractString,Nothing}=nothing,
+    nn_ctx_u::Union{Float64,Nothing}=nothing,
+    nn_electrons::Union{Tuple{Int,Int},Nothing}=nothing,
+    nn_dim::Union{Vector{Int},Nothing}=nothing
 )
 
     if momentum_basis
@@ -568,6 +572,24 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         # find values for t_vals
         if length(initial_coefficients) >= order && !isnothing(initial_coefficients[order])
             t_vals = initial_coefficients[order]
+        elseif !isnothing(nn_strategy_file) && isfile(nn_strategy_file)
+            println("Using neural network from $nn_strategy_file to initialize coefficients...")
+            strategy = load_neural_network(nn_strategy_file)
+            u_val = isnothing(nn_ctx_u) ? 0.001 : nn_ctx_u
+            el_count = isnothing(nn_electrons) ? (2, 2) : nn_electrons
+            target_dim = isnothing(nn_dim) ? [2, 2] : nn_dim
+            
+            ctx = NeuralNetContext(u_val, el_count, strategy.U_max)
+            t_vals = interpolate_coefficients(strategy, ctx, t_keys, target_dim)
+            
+            if use_symmetry
+                t_vals_sym = zeros(Float64, length(sym_data[1]))
+                for (param_idx, key_idcs) in enumerate(sym_data[1])
+                    vals_in_group = [t_vals[k] * parity[param_index_map[k]] for k in key_idcs]
+                    t_vals_sym[param_idx] = mean(vals_in_group)
+                end
+                t_vals = t_vals_sym
+            end
         elseif initialization_samples > 0
             println("Sampling $initialization_samples initial configurations over a range of magnitudes...")
             p_args = get_p_args(order)
@@ -765,7 +787,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     save_folder::Union{String,Nothing}=nothing, save_name::String="scan_data",
     initial_coefficients::Vector{Any}=Any[], precomputed_structures::Dict=Dict(),
     time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
-    max_time_ratio::Union{Float64,Nothing}=nothing
+    max_time_ratio::Union{Float64,Nothing}=nothing,
+    nn_strategy_file::Union{AbstractString,Nothing}=nothing,
+    nn_electrons::Union{Tuple{Int,Int},Nothing}=nothing,
+    nn_dim::Union{Vector{Int},Nothing}=nothing,
+    nn_U_values::Union{Vector{Float64},Nothing}=nothing
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -801,6 +827,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         state1 = degen_rm_U[ref_u_idx, :]
         state2 = degen_rm_U[u_idx, :]
 
+        target_u = isnothing(nn_U_values) ? nothing : nn_U_values[u_idx]
+
         args = optimize_unitary(state1, state2, indexer;
             spin_conserved=spin_conserved, use_symmetry=get!(instructions, "use symmetry", false),
             maxiters=maxiters, optimization_scheme=get!(instructions, "optimization_scheme", [2, 1]), gradient=gradient,
@@ -809,7 +837,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             initialization_samples=get!(instructions, "initialization_samples", 50),
             multi_start_iters=get!(instructions, "multi_start_iters", 30), multi_start_samples=get!(instructions, "multi_start_samples", 5),
             precomputed_structures=precomputed_structures, sign_convention=get!(instructions, "sign_convention", :spin_first),
-            time_tracker=time_tracker, max_time_ratio=max_time_ratio)
+            time_tracker=time_tracker, max_time_ratio=max_time_ratio,
+            nn_strategy_file=nn_strategy_file,
+            nn_ctx_u=target_u,
+            nn_electrons=nn_electrons,
+            nn_dim=nn_dim)
         computed_matrices, coefficient_labels, current_coeffs, param_mapping, parities, metrics, shared_cache = args
 
         # Store results for this U

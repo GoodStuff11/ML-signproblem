@@ -23,8 +23,7 @@ include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
-
-
+include("nn_strategy.jl")
 
 function (@main)(ARGS)
     if length(ARGS) >= 1 && startswith(ARGS[1], "data")
@@ -33,6 +32,35 @@ function (@main)(ARGS)
     else
         error("Please input a folder. Ex data/N=(2, 2)_2x2")
     end
+
+    # Parse --nn argument if provided
+    nn_strategy_file = nothing
+    filtered_args = String[]
+    for arg in ARGS
+        if startswith(arg, "--nn=")
+            nn_strategy_file = split(arg, "=")[2]
+        else
+            push!(filtered_args, arg)
+        end
+    end
+    ARGS = filtered_args
+
+    # Parse electrons and dimension from the folder name
+    electrons_parsed = (2, 2)
+    dim_parsed = [2, 2]
+    try
+        m_elec = match(r"N=\((?<N>\d+),\s*(?<M>\d+)\)", folder)
+        if !isnothing(m_elec)
+            electrons_parsed = (parse(Int, m_elec[:N]), parse(Int, m_elec[:M]))
+        end
+        m_dim = match(r"_(?<W>\d+)x(?<H>\d+)", folder)
+        if !isnothing(m_dim)
+            dim_parsed = [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
+        end
+    catch e
+        @warn "Could not parse electrons or dimensions from folder path, using defaults: (2, 2) and [2, 2]"
+    end
+
     U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention = load_ED_data(folder)
 
     scan_instructions = Dict(
@@ -91,7 +119,11 @@ function (@main)(ARGS)
         optimizer=[:GradientDescent, :LBFGs],
         save_folder=folder, save_name="unitary_map_energy_symmetry=$(use_symmetry)_N=$N",
         precomputed_structures=precomputed_structures,
-        max_time_ratio=5.0)
+        max_time_ratio=5.0,
+        nn_strategy_file=nn_strategy_file,
+        nn_electrons=electrons_parsed,
+        nn_dim=dim_parsed,
+        nn_U_values=U_values)
 
     return 0
 end

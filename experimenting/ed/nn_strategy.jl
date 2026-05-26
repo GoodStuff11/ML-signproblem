@@ -133,6 +133,23 @@ function interpolate_coefficients(s::LegendreStrategy, ctx::LegendreContext,
     return interpolate_coefficients(labels, dim, interp)   # existing low-level method
 end
 
+"""
+    label_to_k(label, dim::Vector{Int})
+
+Converts a discrete lattice scattering label containing coordinates and spins into
+multi-dimensional continuous wavevectors. It scales the discrete site index `(n - 1)`
+to an exact momentum mapping `k = (n - 1) * 2π / dim`.
+Returns the 4 wavevectors (`k1`, `k2`, `k3`, `k4`) and their integer `spins`.
+"""
+function label_to_k(label, dim::Vector{Int})
+    k1 = 2 * pi ./ dim .* (collect(label[1][1].coordinates) .- 1)
+    k2 = 2 * pi ./ dim .* (collect(label[2][1].coordinates) .- 1)
+    k3 = 2 * pi ./ dim .* (collect(label[3][1].coordinates) .- 1)
+    k4 = 2 * pi ./ dim .* (collect(label[4][1].coordinates) .- 1)
+    spins = [label[1][2], label[2][2], label[3][2], label[4][2]]
+    return k1, k2, k3, k4, spins
+end
+
 
 # ─────────────────────────────────────────────────────────────
 #  NN helpers — featurization (uses shared label_to_k)
@@ -226,7 +243,14 @@ function featurize_all(raw_data;
 
     Threads.@threads for ti in eachindex(raw_data)
         (coefficients, labels, dim, U_value, electrons) = raw_data[ti]
-        ctx_base = Float32[normalize_U(U_value, U_max)]
+        ctx_base = if use_scale_head
+            val = Float32(log10(max(U_value, 1e-4)))
+            log_min = -4.0f0
+            log_max = Float32(log10(U_max))
+            Float32[2f0 * (val - log_min) / (log_max - log_min) - 1f0]
+        else
+            Float32[normalize_U(U_value, U_max)]
+        end
         include_dim && append!(ctx_base, normalize_dim(dim, dim_max))
         include_electrons && append!(ctx_base, normalize_electrons(electrons, prod(dim) ÷ 2))
 
@@ -448,10 +472,27 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale;
             loss, grads = Flux.withgradient(model) do m
                 output, log_scale = compute_F_batch(m, bX1, bX2, bX3, bX4, bCtx; use_scale_head)
                 if use_scale_head
+                    # 1. Low-U Importance Weighting:
+                    #    - Reconstruct log10(U) from log-normalized context input: log10(U) = 2.5 * (x_U + 1) - 4
+                    #    - Weight samples exponentially: w = exp(-0.5 * log10(U)) to prioritize small U
+                    #    - Normalize weights over batch such that mean(w) = 1.0
+                    log_norm_U = bCtx[1, :]
+                    log10_U = (log_norm_U .+ 1.0f0) .* 2.5f0 .- 4.0f0
+                    w = exp.( -0.5f0 .* log10_U )
+                    w_mean = sum(w) / length(w)
+                    w = w ./ w_mean
+                    
+                    # 2. Joint and Auxiliary Loss Formulation:
+                    #    - log_ratio = log10(scale_pred / scale_true)
+                    #    - pred = (scale_pred / scale_true) * y_norm_pred, matching y_norm_true
+                    #    - joint_loss = weighted_MSE( pred, y_norm_true )
+                    #    - aux_loss   = weighted_MSE( log_scale_pred, log_scale_true )
                     log_ratio = clamp.(log_scale .- bY_ls, -3f0, 3f0)
                     pred = (10f0 .^ log_ratio) .* output
-                    joint_loss = Flux.mse(pred, bY)
-                    aux_loss = Flux.mse(log_scale, bY_ls)
+                    joint_loss = sum(w .* (pred .- bY) .^ 2) / length(bY)
+                    aux_loss = sum(w .* (log_scale .- bY_ls) .^ 2) / length(bY_ls)
+                    
+                    # Combined objective scaled by scale_loss_weight
                     (joint_loss + scale_loss_weight * aux_loss) / (1f0 + scale_loss_weight)
                 else
                     Flux.mse(output, bY)   # original plain MSE
@@ -559,7 +600,14 @@ function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
         x3 = reshape(nn_feature(k3, spins[3]), :, 1)
         x4 = reshape(nn_feature(k4, spins[4]), :, 1)
 
-        feature_ctx = Float32[normalize_U(ctx.U_value, ctx.U_max)]
+        feature_ctx = if s.use_scale_head
+            val = Float32(log10(max(ctx.U_value, 1e-4)))
+            log_min = -4.0f0
+            log_max = Float32(log10(ctx.U_max))
+            Float32[2f0 * (val - log_min) / (log_max - log_min) - 1f0]
+        else
+            Float32[normalize_U(ctx.U_value, ctx.U_max)]
+        end
         s.include_dim && append!(feature_ctx, normalize_dim(dim, s.dim_max))
         s.include_electrons && append!(feature_ctx, normalize_electrons(ctx.electrons, prod(dim) ÷ 2))
         ctx_m = reshape(feature_ctx, :, 1)

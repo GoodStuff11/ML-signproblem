@@ -181,24 +181,7 @@ function evaluate_basis(r::Vector{Vector{Float64}}, sigma::Vector{Int}, idxs::Ve
     end
 end
 
-
-"""
-    label_to_k(label::Tuple, dim::Vector{Int})
-
-Converts a discrete lattice scattering label containing coordinates and spins into
-multi-dimensional continuous wavevectors. It scales the discrete site index `(n - 1)`
-to an exact momentum mapping `k = (n - 1) * 2π / dim`.
-Returns the 4 wavevectors (`k1`, `k2`, `k3`, `k4`) and their integer `spins`.
-"""
-function label_to_k(label, dim::Vector{Int})
-    # println((collect(label[1][1].coordinates) .- 1))
-    k1 = 2 * pi ./ dim .* (collect(label[1][1].coordinates) .- 1)
-    k2 = 2 * pi ./ dim .* (collect(label[2][1].coordinates) .- 1)
-    k3 = 2 * pi ./ dim .* (collect(label[3][1].coordinates) .- 1)
-    k4 = 2 * pi ./ dim .* (collect(label[4][1].coordinates) .- 1)
-    spins = [label[1][2], label[2][2], label[3][2], label[4][2]]
-    return k1, k2, k3, k4, spins
-end
+# label_to_k is now defined in nn_strategy.jl
 
 """
     integrate_dimension_all_n!(dim_idx::Int, r::Vector{Vector{Float64}}, Ki::Vector{Vector{Float64}}, 
@@ -456,14 +439,14 @@ function (@main)(ARGS)
         "data/N=(4, 4)_3x3_2",
         "data/N=(2, 2)_3x2",
         "data/N=(4, 4)_4x2",
-        # "data/N=(2, 2)_2x2",
+        "data/N=(2, 2)_2x2",
     ]
     nn_folder_specs = [
-        # ((3, 3), [3, 2], 2:52, ""),
-        # ((2, 2), [3, 2], 2:52, ""),
-        # ((3, 3), [3, 3], 2:52, ""),
+        ((3, 3), [3, 2], 2:52, ""),
+        ((2, 2), [3, 2], 2:52, ""),
+        ((3, 3), [3, 3], 2:52, ""),
         # ((4, 4), [3, 3], 2:52, "_2"),
-        # ((4, 4), [4, 2], 2:52, ""),
+        ((4, 4), [4, 2], 2:52, ""),
         ((2, 2), [2, 2], 2:52, ""),
     ]
 
@@ -508,7 +491,7 @@ function (@main)(ARGS)
             batch_size=256,
             lr=1e-3,
             use_gpu=CUDA.functional(),
-            use_scale_head=false,
+            use_scale_head=true,
         )
     else
         # Legendre polynomial strategy: fit one interpolator per U value from the small system.
@@ -573,8 +556,8 @@ function (@main)(ARGS)
         # Step 5: Evaluate adjoint_loss for each U in the large system
         # -------------------------------------------------------------------------
         println("\n=== Evaluating adjoint_loss per U-index ===")
-        println(@sprintf("%-8s %-8.4s  %-20s  %-20s  %-12s", "U-idx", "U-value", "Stored opt. loss", "Predicted loss", "Ratio"))
-        println("-"^68)
+        println(@sprintf("%-8.4s  %-12s  %-12s  %-8s  %-15s  %-15s  %-15s  %-15s", "U-value", "Stored loss", "Pred loss", "Ratio", "MeanAbs Stored", "MeanAbs Pred", "RMS Stored", "RMS Pred"))
+        println("-"^125)
 
         save_name = "unitary_map_energy_symmetry=false_N=$(large_electrons)"
         ref_u_idx = 1
@@ -601,16 +584,31 @@ function (@main)(ARGS)
             )
 
             u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
-            stored_loss = if isfile(u_file)
+            stored_loss = NaN
+            stored_coeffs = nothing
+            if isfile(u_file)
                 d = load_saved_dict(u_file)
-                d["metrics"]["loss"][1]
+                stored_loss = d["metrics"]["loss"][1]
+                stored_coeffs = d["coefficients"][2]
             else
                 error("File not found: $(u_file)")
-                NaN
             end
 
-            ratio = isnan(stored_loss) || stored_loss == 0.0 ? NaN : pred_loss / stored_loss
-            println(@sprintf("%-8d %-8.4g  %-20.6g  %-20.6g  %-12.4g", u_idx, U_values_large[u_idx], stored_loss, pred_loss, ratio))
+            stored_loss_recalc = isnothing(stored_coeffs) ? NaN : adjoint_loss(
+                real.(stored_coeffs), ops_large,
+                rows_large, cols_large, signs_large,
+                param_index_map_large, nothing, nothing,
+                dim_large, state1, state2, nothing,
+                !use_symmetry_large, false
+            )
+
+            mean_abs_pred = mean(abs.(new_coeffs))
+            mean_abs_stored = isnothing(stored_coeffs) ? NaN : mean(abs.(stored_coeffs))
+            rms_pred = sqrt(mean(new_coeffs .^ 2))
+            rms_stored = isnothing(stored_coeffs) ? NaN : sqrt(mean(stored_coeffs .^ 2))
+
+            ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / stored_loss_recalc
+            println(@sprintf("%-8.4g  %-12.6g  %-12.6g  %-8.4g  %-15.6g  %-15.6g  %-15.6g  %-15.6g", U_values_large[u_idx], stored_loss_recalc, pred_loss, ratio, mean_abs_stored, mean_abs_pred, rms_stored, rms_pred))
         end
 
         println("\nDone.")
