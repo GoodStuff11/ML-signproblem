@@ -133,7 +133,7 @@ function trotter(ops, dim, v1, v2, trotter_order)
     for (i, t) in enumerate(ops)
         I, J, V = ops[i]
         M = sparse(I, J, V, dim, dim)
-        
+
     end
 
 
@@ -429,8 +429,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         if CUDA.has_cuda_gpu()
             println("Using GPU")
             ops_gpu = ops
-            state1_gpu = CuArray(state1)
-            state2_gpu = CuArray(state2)
+            state1_gpu = CUDA.CuArray(state1)
+            state2_gpu = CUDA.CuArray(state2)
         else
             println("Not using GPU")
         end
@@ -453,7 +453,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             end
 
             println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
-            print_mem_usage("Callback iteration")
+            # print_mem_usage("Callback iteration")
 
             push!(tmp_losses, loss_val)
             if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
@@ -578,10 +578,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
             u_val = isnothing(nn_ctx_u) ? 0.001 : nn_ctx_u
             el_count = isnothing(nn_electrons) ? (2, 2) : nn_electrons
             target_dim = isnothing(nn_dim) ? [2, 2] : nn_dim
-            
+
             ctx = NeuralNetContext(u_val, el_count, strategy.U_max)
             t_vals = interpolate_coefficients(strategy, ctx, t_keys, target_dim)
-            
+
             if use_symmetry
                 t_vals_sym = zeros(Float64, length(sym_data[1]))
                 for (param_idx, key_idcs) in enumerate(sym_data[1])
@@ -1233,9 +1233,9 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
 
             # Build M_gpu with its own colptr allocation (avoids aliasing bugs
             # that arose from the previously shared colptr_gpu buffer).
-            colptr_gpu_i = CuArray{Cint}(M_cpu.colptr)
-            rowval_gpu_i = CuArray(M_cpu.rowval)
-            nzval_gpu_i = CuArray(M_cpu.nzval)
+            colptr_gpu_i = CUDA.CuArray{Cint}(M_cpu.colptr)
+            rowval_gpu_i = CUDA.CuArray(M_cpu.rowval)
+            nzval_gpu_i = CUDA.CuArray(M_cpu.nzval)
             M_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(colptr_gpu_i, rowval_gpu_i, nzval_gpu_i, (dim, dim))
 
             val = 0.0 + 0.0im

@@ -16,7 +16,17 @@ using HDF5
 using KrylovKit
 
 using CUDA
-CUDA.set_runtime_version!(v"12.8")
+try
+    if !CUDA.functional()
+        @info "CUDA not functional yet — trying local_toolkit mode"
+        CUDA.set_runtime_version!(local_toolkit=true)
+    end
+    if CUDA.functional()
+        @info "GPU available: $(CUDA.name(CUDA.CuDevice(0)))"
+    end
+catch e
+    @warn "CUDA setup warning: $e"
+end
 
 
 include("ed_objects.jl")
@@ -39,6 +49,7 @@ function (@main)(ARGS)
     for arg in ARGS
         if startswith(arg, "--nn=")
             nn_strategy_file = split(arg, "=")[2]
+            println("Using neural network found in $(nn_strategy_file)")
         else
             push!(filtered_args, arg)
         end
