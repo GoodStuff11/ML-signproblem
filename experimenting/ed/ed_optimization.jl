@@ -1278,3 +1278,246 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
 end
 
 
+
+# -----------------------------------------------------------------------------
+# Energy Minimization Loss Functions & Gradients (Barren Plateaus Testing)
+# -----------------------------------------------------------------------------
+
+function adjoint_energy_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, ref, H, p, do_hermitian, antihermitian=false)
+    vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+    A = sparse(rows, cols, vals, dim, dim)
+    if do_hermitian
+        if antihermitian
+            A = make_antihermitian(A)
+        else
+            A = make_hermitian(A)
+        end
+    end
+
+    if !isnothing(p) && !(p isa SciMLBase.NullParameters)
+        B = A + p
+    else
+        B = A
+    end
+
+    if antihermitian
+        psi = expv(1.0, B, ref)
+    else
+        psi = expv(1.0im, B, ref)
+    end
+
+    loss = real(dot(psi, H * psi))
+    return loss
+end
+
+function ChainRulesCore.rrule(::typeof(adjoint_energy_loss), t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, ref, H, p, do_hermitian, antihermitian)
+    vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+    A = sparse(rows, cols, vals, dim, dim)
+    if do_hermitian
+        if antihermitian
+            A = make_antihermitian(A)
+        else
+            A = make_hermitian(A)
+        end
+    end
+    if !isnothing(p) && !(p isa SciMLBase.NullParameters)
+        A = A + p
+    end
+
+    if antihermitian
+        psi = expv(1.0, A, ref)
+    else
+        psi = expv(1.0im, A, ref)
+    end
+    y = real(dot(psi, H * psi))
+
+    function adjoint_energy_loss_pullback(ȳ)
+        grad_t = Vector{Float64}(undef, length(t_vals))
+        N_steps = 50
+        dt = 1.0 / N_steps
+
+        phis = Vector{Vector{ComplexF64}}(undef, N_steps + 1)
+        phis[1] = ref
+        for k in 1:N_steps
+            if antihermitian
+                phis[k+1] = expv(dt, A, phis[k])
+            else
+                phis[k+1] = expv(dt * 1.0im, A, phis[k])
+            end
+        end
+
+        chis = Vector{Vector{ComplexF64}}(undef, N_steps + 1)
+        chis[N_steps+1] = H * psi
+        for k in N_steps:-1:1
+            if antihermitian
+                chis[k] = expv(-dt, A, chis[k+1])
+            else
+                chis[k] = expv(-dt * 1.0im, A, chis[k+1])
+            end
+        end
+
+        weights = ones(N_steps + 1)
+        weights[2:2:end-1] .= 4.0
+        weights[3:2:end-2] .= 2.0
+        weights[1] = 1.0
+        weights[end] = 1.0
+        weights .*= (dt / 3.0)
+
+        Threads.@threads for i in eachindex(grad_t)
+            I, J, V = ops[i]
+            M = sparse(I, J, V, dim, dim)
+            val = 0.0 + 0.0im
+            for k in 1:(N_steps+1)
+                term = dot(chis[k], M * phis[k])
+                val += term * weights[k]
+            end
+
+            if antihermitian
+                dO_dt = val
+            else
+                dO_dt = val * 1.0im
+            end
+            grad_t[i] = 2 * real(ȳ * dO_dt) + 1e-3 * t_vals[i] # regularization
+        end
+
+        return NoTangent(), grad_t, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
+    end
+
+    return y, adjoint_energy_loss_pullback
+end
+
+function gpu_adjoint_energy_loss(t_vals, ops_gpu, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, ref_gpu, H_gpu, p_gpu, do_hermitian, antihermitian=false)
+    vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+    A = sparse(rows, cols, vals, dim, dim)
+    if do_hermitian
+        if antihermitian
+            A = make_antihermitian(A)
+        else
+            A = make_hermitian(A)
+        end
+    end
+
+    A_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(A)
+    if !isnothing(p_gpu) && !(p_gpu isa SciMLBase.NullParameters)
+        B_gpu = A_gpu + p_gpu
+    else
+        B_gpu = A_gpu
+    end
+
+    if antihermitian
+        psi_gpu, _ = KrylovKit.exponentiate(B_gpu, 1.0, ref_gpu; ishermitian=false, tol=1e-12)
+    else
+        psi_gpu, _ = KrylovKit.exponentiate(B_gpu, 1.0im, ref_gpu; ishermitian=true, tol=1e-12)
+    end
+
+    loss = real(dot(psi_gpu, H_gpu * psi_gpu))
+    return loss
+end
+
+function ChainRulesCore.rrule(::typeof(gpu_adjoint_energy_loss), t_vals, ops_gpu, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, ref_gpu, H_gpu, p_gpu, do_hermitian, antihermitian)
+    vals = update_values(signs, param_index_map, t_vals, parameter_mapping, parity)
+    A = sparse(rows, cols, vals, dim, dim)
+    if do_hermitian
+        if antihermitian
+            A = make_antihermitian(A)
+        else
+            A = make_hermitian(A)
+        end
+    end
+
+    A_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(A)
+    if !isnothing(p_gpu) && !(p_gpu isa SciMLBase.NullParameters)
+        A_gpu = A_gpu + p_gpu
+    end
+
+    if antihermitian
+        psi_gpu, _ = KrylovKit.exponentiate(A_gpu, 1.0, ref_gpu; ishermitian=false, tol=1e-12)
+    else
+        psi_gpu, _ = KrylovKit.exponentiate(A_gpu, 1.0im, ref_gpu; ishermitian=true, tol=1e-12)
+    end
+    y = real(dot(psi_gpu, H_gpu * psi_gpu))
+
+    function gpu_adjoint_energy_loss_pullback(ȳ)
+        grad_t = Vector{Float64}(undef, length(t_vals))
+        N_steps = 50
+        dt = 1.0 / N_steps
+
+        phis = Vector{typeof(ref_gpu)}(undef, N_steps + 1)
+        phis[1] = copy(ref_gpu)
+        for k in 1:N_steps
+            if antihermitian
+                phis[k+1], _ = KrylovKit.exponentiate(A_gpu, dt, phis[k]; ishermitian=false, tol=1e-12)
+            else
+                phis[k+1], _ = KrylovKit.exponentiate(A_gpu, dt * 1.0im, phis[k]; ishermitian=true, tol=1e-12)
+            end
+            CUDA.synchronize()
+        end
+
+        GC.gc(true)
+        CUDA.reclaim()
+
+        chis = Vector{typeof(ref_gpu)}(undef, N_steps + 1)
+        chis[N_steps+1] = H_gpu * psi_gpu
+        for k in N_steps:-1:1
+            if antihermitian
+                chis[k], _ = KrylovKit.exponentiate(A_gpu, -dt, chis[k+1]; ishermitian=false, tol=1e-12)
+            else
+                chis[k], _ = KrylovKit.exponentiate(A_gpu, -dt * 1.0im, chis[k+1]; ishermitian=true, tol=1e-12)
+            end
+            CUDA.synchronize()
+        end
+
+        weights = ones(N_steps + 1)
+        weights[2:2:end-1] .= 4.0
+        weights[3:2:end-2] .= 2.0
+        weights[1] = 1.0
+        weights[end] = 1.0
+        weights .*= (dt / 3.0)
+
+        tmp = similar(ref_gpu)
+
+        for i in eachindex(grad_t)
+            I, J, V = ops_gpu[i]
+            M_cpu = sparse(I, J, V, dim, dim)
+
+            colptr_gpu_i = CUDA.CuArray{Cint}(M_cpu.colptr)
+            rowval_gpu_i = CUDA.CuArray(M_cpu.rowval)
+            nzval_gpu_i = CUDA.CuArray(M_cpu.nzval)
+            M_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(colptr_gpu_i, rowval_gpu_i, nzval_gpu_i, (dim, dim))
+
+            val = 0.0 + 0.0im
+            for k in 1:(N_steps+1)
+                mul!(tmp, M_gpu, phis[k])
+                CUDA.synchronize()
+                term = dot(chis[k], tmp)
+                CUDA.synchronize()
+                val += term * weights[k]
+            end
+
+            CUDA.unsafe_free!(colptr_gpu_i)
+            CUDA.unsafe_free!(rowval_gpu_i)
+            CUDA.unsafe_free!(nzval_gpu_i)
+
+            if antihermitian
+                dO_dt = val
+            else
+                dO_dt = val * 1.0im
+            end
+            grad_t[i] = 2 * real(ȳ * dO_dt) + 1e-3 * t_vals[i]
+        end
+
+        for k in 1:(N_steps+1)
+            if isassigned(phis, k)
+                CUDA.unsafe_free!(phis[k])
+            end
+            if isassigned(chis, k)
+                CUDA.unsafe_free!(chis[k])
+            end
+        end
+        CUDA.unsafe_free!(tmp)
+
+        return NoTangent(), grad_t, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
+    end
+
+    return y, gpu_adjoint_energy_loss_pullback
+end

@@ -19,7 +19,9 @@ using CUDA
 # using cuDNN   # Commented out to avoid CUDNNError on activation pullbacks on HPC; CUDA.jl handles MLPs natively and stably
 using Printf
 using Flux
+using Dates
 
+include("logging.jl")
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
@@ -427,190 +429,304 @@ function old_process()
         println("WARNING: Interpolation identity showed deviations above 1e-10. This is expected if the P matrix is heavily rank-deficient.")
     end
 end
+"""
+    sample_coefficients_from_histogram(source_coeffs::Vector{Float64}, n::Int; n_bins::Int=50)
+
+Draws `n` independent samples whose distribution matches `source_coeffs`.
+
+The empirical density of `source_coeffs` is estimated via a histogram with `n_bins` bins.
+Bin counts are used to build a piecewise-linear (trapezoidal) approximation of the PDF,
+from which an unnormalised CDF is computed over the bin-edge grid. Each sample is then
+drawn via inverse-CDF transform: a uniform [0,1) variate is mapped to the value axis by
+linear interpolation on the normalised CDF grid. This handles bimodal (and any
+multi-modal) distributions correctly, unlike Gaussian approximations or MCMC.
+"""
+function sample_coefficients_from_histogram(source_coeffs::Vector{Float64}, n::Int; n_bins::Int=50, reps::Int=1)
+    lo, hi = minimum(source_coeffs), maximum(source_coeffs)
+    # Edge case: all values identical
+    if lo ≈ hi
+        return fill(lo, n)
+    end
+
+    # Build histogram: counts per bin
+    edges = range(lo, hi; length=n_bins + 1)
+    counts = zeros(Float64, n_bins)
+    bin_width = step(edges)
+    for v in source_coeffs
+        idx = clamp(floor(Int, (v - lo) / bin_width) + 1, 1, n_bins)
+        counts[idx] += 1.0
+    end
+
+    # Piecewise-linear PDF on bin-edge grid: linearly interpolate between bin-centre
+    # densities. Represent the density at each edge as the average of adjacent bins.
+    pdf_edges = zeros(Float64, n_bins + 1)
+    pdf_edges[1] = counts[1]
+    pdf_edges[end] = counts[end]
+    for i in 2:n_bins
+        pdf_edges[i] = (counts[i-1] + counts[i]) / 2.0
+    end
+
+    # Trapezoidal CDF at each edge
+    cdf_edges = zeros(Float64, n_bins + 1)
+    for i in 2:(n_bins+1)
+        cdf_edges[i] = cdf_edges[i-1] + (pdf_edges[i-1] + pdf_edges[i]) / 2.0 * bin_width
+    end
+    cdf_edges ./= cdf_edges[end]  # normalise to [0, 1]
+
+    edge_vals = collect(edges)
+
+    # Inverse-CDF sampling: for each uniform draw, find position in cdf_edges via
+    # linear interpolation (binary search for the bracketing interval).
+    all_samples = []
+    for r in 1:reps
+        samples = Vector{Float64}(undef, n)
+        for i in 1:n
+            u = rand()
+            # Find j such that cdf_edges[j] <= u < cdf_edges[j+1]
+            j = searchsortedlast(cdf_edges, u)
+            j = clamp(j, 1, n_bins)
+            # Linear interpolation within the interval
+            Δcdf = cdf_edges[j+1] - cdf_edges[j]
+            t = Δcdf ≈ 0.0 ? 0.0 : (u - cdf_edges[j]) / Δcdf
+            samples[i] = edge_vals[j] + t * bin_width
+        end
+        push!(all_samples, samples)
+    end
+
+    if reps > 1
+        return all_samples
+    end
+    return all_samples[1]
+end
+
 function (@main)(ARGS)
+    log_path = make_log_path(@__DIR__, "system_scaling")
+    with_logging(log_path) do
 
-    # -------------------------------------------------------------------------
-    # Configuration: small system (source of coefficients) and large system (target)
-    # -------------------------------------------------------------------------
-    test_folders = [
-        "data/N=(3, 3)_3x2",
-        "data/N=(3, 3)_4x3",
-        "data/N=(3, 3)_3x3",
-        "data/N=(4, 4)_3x3_2",
-        "data/N=(2, 2)_3x2",
-        "data/N=(4, 4)_4x2",
-        "data/N=(2, 2)_2x2",
-    ]
-    nn_folder_specs = [
-        ((3, 3), [3, 2], 2:52, ""),
-        ((2, 2), [3, 2], 2:52, ""),
-        ((3, 3), [3, 3], 2:52, ""),
-        # ((4, 4), [3, 3], 2:52, "_2"),
-        ((4, 4), [4, 2], 2:52, ""),
-        ((2, 2), [2, 2], 2:52, ""),
-    ]
+        # -------------------------------------------------------------------------
+        # Configuration: small system (source of coefficients) and large system (target)
+        # -------------------------------------------------------------------------
+        test_folders = [
+            "data/N=(3, 3)_3x2",
+            "data/N=(3, 3)_4x3",
+            "data/N=(3, 3)_3x3",
+            "data/N=(4, 4)_3x3_2",
+            "data/N=(2, 2)_3x2",
+            "data/N=(4, 4)_4x2",
+            "data/N=(2, 2)_2x2",
+        ]
+        nn_folder_specs = [
+            ((3, 3), [3, 2], 2:52, ""),
+            ((2, 2), [3, 2], 2:52, ""),
+            ((3, 3), [3, 3], 2:52, ""),
+            # ((4, 4), [3, 3], 2:52, "_2"),
+            ((4, 4), [4, 2], 2:52, ""),
+            ((2, 2), [2, 2], 2:52, ""),
+        ]
 
-    small_electrons = (3, 3)
-    small_size = [3, 2]
-    order = 2
+        small_electrons = (3, 3)
+        small_size = [3, 2]
+        order = 2
 
-    if CUDA.functional()
-        println("Using CUDA")
-    else
-        println("Using CPU")
-    end
-
-    # Parse --strategy=legendre (default) or --strategy=neural from ARGS
-    strategy_flag = "legendre"
-    for arg in ARGS
-        if startswith(arg, "--strategy=")
-            strategy_flag = split(arg, "=")[2]
+        if CUDA.functional()
+            println("Using CUDA")
+        else
+            println("Using CPU")
         end
-    end
-    println("\n=== Using interpolation strategy: $strategy_flag ===")
 
-    # -------------------------------------------------------------------------
-    # Step 1: Build interpolation strategy
-    # -------------------------------------------------------------------------
-    strategy = if strategy_flag == "neural"
-        # Neural-network strategy: train across multiple datasets.
-        # Edit folder_specs / hyperparameters to match your training data.
-        nn_filepath = "trained_neural_network.jld2"
+        # Parse --strategy=legendre (default) or --strategy=neural from ARGS
+        strategy_flag = "legendre"
         for arg in ARGS
-            if startswith(arg, "--name=")
-                nn_filepath = "trained_neural_network_" * split(arg, "=")[2] * ".jld2"
+            if startswith(arg, "--strategy=")
+                strategy_flag = split(arg, "=")[2]
             end
         end
-
-        @time get_or_train_neural_strategy(nn_filepath, nn_folder_specs;
-            U_max=10.0,
-            include_dim=true,
-            include_electrons=true,
-            dim_max=4,
-            n_epochs=200,
-            batch_size=256,
-            lr=1e-3,
-            use_gpu=CUDA.functional(),
-            use_scale_head=true,
-        )
-    else
-        # Legendre polynomial strategy: fit one interpolator per U value from the small system.
-        println("\n=== Loading small system coefficients (all U values) ===")
-        coeffs_by_u_small, labels_small, dim_small, U_values_small = load_data_coefficients(small_electrons, small_size)
-        println("Small system: dim=$(dim_small), N=$(length(labels_small)), U_values=$(length(U_values_small))")
-        @time LegendreStrategy(coeffs_by_u_small, labels_small, dim_small, U_values_small)
-    end
-
-    # -------------------------------------------------------------------------
-    # Step 2: Load ED data for the large system
-    # -------------------------------------------------------------------------
-    for large_folder in test_folders
-        regex = r"N=\((?<N>\d+), (?<M>\d+)\)"
-        m = match(regex, large_folder)
-        large_electrons = (parse(Int, m[:N]), parse(Int, m[:M]))
-
-        println("\n===================================")
-        println("Testing on folder: $large_folder")
-        println("===================================")
-        println("\n=== Loading large system ED data ===")
-        U_values_large, target_vecs_large, indexer_large, precomputed_structures_large,
-        N_large, spin_conserved_large, use_symmetry_large, sign_convention_large = load_ED_data(large_folder; verbose=false)
-
-        dim_large = length(indexer_large.inv_comb_dict)
-        println("Large system Hilbert space dim: $dim_large")
+        println("\n=== Using interpolation strategy: $strategy_flag ===")
 
         # -------------------------------------------------------------------------
-        # Step 3: Build the operator structure for the large system
+        # Step 1: Build interpolation strategy
         # -------------------------------------------------------------------------
-        println("\n=== Building operator structure for large system (order=$order) ===")
-        momentum_basis = false
-        initial_loss = 1.0
-
-        @time t_dict_large, t_keys_large = create_randomized_nth_order_operator(
-            order, indexer_large, true;
-            magnitude=initial_loss * 100,
-            omit_H_conj=!use_symmetry_large,
-            conserve_spin=spin_conserved_large,
-            normalize_coefficients=false,
-            conserve_momentum=momentum_basis
-        )
-        @time rows_large, cols_large, signs_large, ops_list_large = build_n_body_structure_from_keys(
-            t_keys_large, indexer_large, typeof(t_dict_large[t_keys_large[1]]);
-            sign_convention=sign_convention_large
-        )
-        param_index_map_large = build_param_index_map(ops_list_large, t_keys_large)
-
-        indices_by_param = [Int[] for _ in 1:length(t_keys_large)]
-        for k in eachindex(param_index_map_large)
-            push!(indices_by_param[param_index_map_large[k]], k)
-        end
-        ops_large = [] # this parameter is actually unused by adjoint_loss (without gradient)
-
-        # -------------------------------------------------------------------------
-        # Step 4: Prepare for coefficient prediction
-        # -------------------------------------------------------------------------
-        dim_large_vec = [parse(Int, x) for x in split(
-            load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))["meta_data"]["sites"], "x")]
-
-        # -------------------------------------------------------------------------
-        # Step 5: Evaluate adjoint_loss for each U in the large system
-        # -------------------------------------------------------------------------
-        println("\n=== Evaluating adjoint_loss per U-index ===")
-        println(@sprintf("%-8.4s  %-12s  %-12s  %-8s  %-15s  %-15s  %-15s  %-15s", "U-value", "Stored loss", "Pred loss", "Ratio", "MeanAbs Stored", "MeanAbs Pred", "RMS Stored", "RMS Pred"))
-        println("-"^125)
-
-        save_name = "unitary_map_energy_symmetry=false_N=$(large_electrons)"
-        ref_u_idx = 1
-        state1 = target_vecs_large[ref_u_idx, :]
-
-        for u_idx in 2:55
-            # Re-predict coefficients for this U value — both strategies now take a U context.
-            new_coeffs = if isa(strategy, NeuralNetStrategy)
-                ctx = NeuralNetContext(U_values_large[u_idx], large_electrons, strategy.U_max)
-                interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
-            else
-                ctx = LegendreContext(U_values_large[u_idx])
-                interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+        strategy = if strategy_flag == "neural"
+            # Neural-network strategy: train across multiple datasets.
+            # Edit folder_specs / hyperparameters to match your training data.
+            nn_filepath = "trained_neural_networks/trained_neural_network.jld2"
+            for arg in ARGS
+                if startswith(arg, "--name=")
+                    nn_filepath = "trained_neural_networks/trained_neural_network_" * split(arg, "=")[2] * ".jld2"
+                end
             end
 
-            state2 = target_vecs_large[u_idx, :]
-            # println("coef magnitude: $(sum(abs.(new_coeffs))/length(new_coeffs))")
-            pred_loss = adjoint_loss(
-                real.(new_coeffs), ops_large,
-                rows_large, cols_large, signs_large,
-                param_index_map_large, nothing, nothing,
-                dim_large, state1, state2, nothing,
-                !use_symmetry_large, false
+            @time get_or_train_neural_strategy(nn_filepath, nn_folder_specs;
+                U_max=10.0,
+                include_dim=true,
+                include_electrons=true,
+                dim_max=4,
+                n_epochs=200,
+                batch_size=256,
+                lr=1e-3,
+                use_gpu=CUDA.functional(),
+                use_scale_head=true,
             )
-
-            u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
-            stored_loss = NaN
-            stored_coeffs = nothing
-            if isfile(u_file)
-                d = load_saved_dict(u_file)
-                stored_loss = d["metrics"]["loss"][1]
-                stored_coeffs = d["coefficients"][2]
-            else
-                error("File not found: $(u_file)")
-            end
-
-            stored_loss_recalc = isnothing(stored_coeffs) ? NaN : adjoint_loss(
-                real.(stored_coeffs), ops_large,
-                rows_large, cols_large, signs_large,
-                param_index_map_large, nothing, nothing,
-                dim_large, state1, state2, nothing,
-                !use_symmetry_large, false
-            )
-
-            mean_abs_pred = mean(abs.(new_coeffs))
-            mean_abs_stored = isnothing(stored_coeffs) ? NaN : mean(abs.(stored_coeffs))
-            rms_pred = sqrt(mean(new_coeffs .^ 2))
-            rms_stored = isnothing(stored_coeffs) ? NaN : sqrt(mean(stored_coeffs .^ 2))
-
-            ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / stored_loss_recalc
-            println(@sprintf("%-8.4g  %-12.6g  %-12.6g  %-8.4g  %-15.6g  %-15.6g  %-15.6g  %-15.6g", U_values_large[u_idx], stored_loss_recalc, pred_loss, ratio, mean_abs_stored, mean_abs_pred, rms_stored, rms_pred))
+        else
+            # Legendre polynomial strategy: fit one interpolator per U value from the small system.
+            println("\n=== Loading small system coefficients (all U values) ===")
+            coeffs_by_u_small, labels_small, dim_small, U_values_small = load_data_coefficients(small_electrons, small_size)
+            println("Small system: dim=$(dim_small), N=$(length(labels_small)), U_values=$(length(U_values_small))")
+            @time LegendreStrategy(coeffs_by_u_small, labels_small, dim_small, U_values_small)
         end
 
-        println("\nDone.")
+        # -------------------------------------------------------------------------
+        # Step 2: Test accuracy of interpolation strategy
+        # -------------------------------------------------------------------------
+        for large_folder in test_folders
+            regex = r"N=\((?<N>\d+), (?<M>\d+)\)"
+            m = match(regex, large_folder)
+            large_electrons = (parse(Int, m[:N]), parse(Int, m[:M]))
+
+            println("\n===================================")
+            println("Testing on folder: $large_folder")
+            println("===================================")
+            println("\n=== Loading large system ED data ===")
+            U_values_large, target_vecs_large, indexer_large, precomputed_structures_large,
+            N_large, spin_conserved_large, use_symmetry_large, sign_convention_large = load_ED_data(large_folder; verbose=false)
+
+            dim_large = length(indexer_large.inv_comb_dict)
+            println("Large system Hilbert space dim: $dim_large")
+
+            # -------------------------------------------------------------------------
+            # Step 3: Build the operator structure for the large system
+            # -------------------------------------------------------------------------
+            println("\n=== Building operator structure for large system (order=$order) ===")
+            momentum_basis = false
+            initial_loss = 1.0
+
+            @time t_dict_large, t_keys_large = create_randomized_nth_order_operator(
+                order, indexer_large, true;
+                magnitude=initial_loss * 100,
+                omit_H_conj=!use_symmetry_large,
+                conserve_spin=spin_conserved_large,
+                normalize_coefficients=false,
+                conserve_momentum=momentum_basis
+            )
+            @time rows_large, cols_large, signs_large, ops_list_large = build_n_body_structure_from_keys(
+                t_keys_large, indexer_large, typeof(t_dict_large[t_keys_large[1]]);
+                sign_convention=sign_convention_large
+            )
+            param_index_map_large = build_param_index_map(ops_list_large, t_keys_large)
+
+            indices_by_param = [Int[] for _ in 1:length(t_keys_large)]
+            for k in eachindex(param_index_map_large)
+                push!(indices_by_param[param_index_map_large[k]], k)
+            end
+            ops_large = [] # this parameter is actually unused by adjoint_loss (without gradient)
+
+            # -------------------------------------------------------------------------
+            # Step 4: Prepare for coefficient prediction
+            # -------------------------------------------------------------------------
+            dim_large_vec = [parse(Int, x) for x in split(
+                load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))["meta_data"]["sites"], "x")]
+
+            # -------------------------------------------------------------------------
+            # Step 5: Evaluate adjoint_loss for each U in the large system
+            # -------------------------------------------------------------------------
+            println("\n=== Evaluating adjoint_loss per U-index ===")
+            println(@sprintf("%-8.4s  %-14s  %-12s  %-14s  %-15s  %-15s  %-15s  %-15s  %-16s  %-14s  %-14s  %-14s  %-14s",
+                "U-value", "Baseline loss", "Pred loss", "pred/baseline",
+                "MeanAbs Stored", "MeanAbs Pred", "RMS Stored", "RMS Pred",
+                "randx10 min loss", "mean loss", "max loss", "pred/rand", "rand/baseline"))
+            println("-"^200)
+
+            # Collect all stored coefficients across u-indices to build a global
+            # histogram that captures the full empirical distribution of training coefficients.
+            all_stored_coeffs = Float64[]
+            save_name_pre = "unitary_map_energy_symmetry=false_N=$(large_electrons)"
+            for ui in 2:55
+                uf = joinpath(large_folder, "$(save_name_pre)_u_$(ui).jld2")
+                if isfile(uf)
+                    d_tmp = load_saved_dict(uf)
+                    c_tmp = d_tmp["coefficients"][2]
+                    if !isnothing(c_tmp)
+                        append!(all_stored_coeffs, real.(c_tmp))
+                    end
+                end
+            end
+
+            save_name = save_name_pre
+            ref_u_idx = 1
+            state1 = target_vecs_large[ref_u_idx, :]
+
+            for u_idx in 2:55
+                # Re-predict coefficients for this U value — both strategies now take a U context.
+                new_coeffs = if isa(strategy, NeuralNetStrategy)
+                    ctx = NeuralNetContext(U_values_large[u_idx], large_electrons, strategy.U_max)
+                    interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                else
+                    ctx = LegendreContext(U_values_large[u_idx])
+                    interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                end
+
+                state2 = target_vecs_large[u_idx, :]
+                # println("coef magnitude: $(sum(abs.(new_coeffs))/length(new_coeffs))")
+                pred_loss = adjoint_loss(
+                    real.(new_coeffs), ops_large,
+                    rows_large, cols_large, signs_large,
+                    param_index_map_large, nothing, nothing,
+                    dim_large, state1, state2, nothing,
+                    !use_symmetry_large, false
+                )
+
+                u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
+                stored_loss = NaN
+                stored_coeffs = nothing
+                if isfile(u_file)
+                    d = load_saved_dict(u_file)
+                    stored_loss = d["metrics"]["loss"][1]
+                    stored_coeffs = d["coefficients"][2]
+                else
+                    error("File not found: $(u_file)")
+                end
+
+                stored_loss_recalc = isnothing(stored_coeffs) ? NaN : adjoint_loss(
+                    real.(stored_coeffs), ops_large,
+                    rows_large, cols_large, signs_large,
+                    param_index_map_large, nothing, nothing,
+                    dim_large, state1, state2, nothing,
+                    !use_symmetry_large, false
+                )
+
+                mean_abs_pred = mean(abs.(new_coeffs))
+                mean_abs_stored = isnothing(stored_coeffs) ? NaN : mean(abs.(stored_coeffs))
+                rms_pred = sqrt(mean(new_coeffs .^ 2))
+                rms_stored = isnothing(stored_coeffs) ? NaN : sqrt(mean(stored_coeffs .^ 2))
+
+                ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / stored_loss_recalc
+
+                rand_coeffs = sample_coefficients_from_histogram(all_stored_coeffs, length(new_coeffs); reps=10)
+                losses = []
+                for coef in rand_coeffs
+                    push!(losses, adjoint_loss(
+                        coef, ops_large,
+                        rows_large, cols_large, signs_large,
+                        param_index_map_large, nothing, nothing,
+                        dim_large, state1, state2, nothing,
+                        !use_symmetry_large, false
+                    ))
+                end
+                rand_loss = minimum(losses)
+                mean_loss = sum(losses) / length(losses)
+                maximum_loss = maximum(losses)
+                rand_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / rand_loss
+                rand_baseline_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : rand_loss / stored_loss_recalc
+
+                println(@sprintf(
+                    "%-8.4g  %-14.6g  %-12.6g  %-14.4g  %-15.6g  %-15.6g  %-15.6g  %-15.6g  %-16.6g  %-14.4g  %-14.4g  %-14.4g  %-14.4g",
+                    U_values_large[u_idx], stored_loss_recalc, pred_loss, ratio,
+                    mean_abs_stored, mean_abs_pred, rms_stored, rms_pred,
+                    rand_loss, mean_loss, maximum_loss, rand_ratio, rand_baseline_ratio
+                ))
+            end
+
+            println("\nDone.")
+        end
     end
 end

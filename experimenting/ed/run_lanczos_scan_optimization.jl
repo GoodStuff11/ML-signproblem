@@ -28,14 +28,20 @@ catch e
     @warn "CUDA setup warning: $e"
 end
 
+using Dates
+
 
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
 include("nn_strategy.jl")
+include("logging.jl")
 
 function (@main)(ARGS)
+    log_path = make_log_path(@__DIR__, "run_lanczos_scan_optimization")
+    with_logging(log_path) do
+
     if length(ARGS) >= 1 && startswith(ARGS[1], "data")
         folder = ARGS[1]
         ARGS = ARGS[2:end]
@@ -137,4 +143,5 @@ function (@main)(ARGS)
         nn_U_values=U_values)
 
     return 0
+    end # with_logging
 end

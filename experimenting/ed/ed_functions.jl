@@ -151,6 +151,129 @@ function get_slater_ground_state(data, sector::Int)
     return best_idx
 end
 
+"""
+    get_su2_ground_state(indexer, target_S; tol=1e-8, sign_convention=:spin_first)
+
+Find the non-interacting (tight-binding) ground state in the momentum sector defined by
+`indexer` that is also an S² eigenstate with eigenvalue `target_S * (target_S + 1)`.
+
+## Theory
+
+In the momentum basis, H_tb is diagonal so each Slater determinant is an exact energy
+eigenstate. Since [H_tb, S²] = 0, the degenerate ground-state manifold D is closed under
+S². We build S² restricted to D using its S⁻S⁺ representation:
+
+    S² = Sz(Sz+1) + S⁻S⁺
+
+The S⁻S⁺ operator maps a Slater determinant (A,B) by swapping the orbital labels of
+a spin-up electron at k_a ∈ A and a spin-down electron at k_b ∈ B (k_a ≠ k_b):
+
+    (A, B) → (A∖{k_a}∪{k_b}, B∖{k_b}∪{k_a})
+
+The kinetic energy change is (ε_{k_b}-ε_{k_a}) + (ε_{k_a}-ε_{k_b}) = 0, so every
+image remains in D. This lets us restrict S² to the small manifold D and diagonalize
+there. The cost scales as O(|D|² N_up N_down + |D|³), polynomial in the Fermi-level
+degeneracy, not exponential in system size.
+
+## Returns
+`(indices, coefficients)` — sparse decomposition of the SU(2) ground state in the full
+Hilbert space basis indexed by `indexer.inv_comb_dict`.
+"""
+function get_su2_ground_state(
+    indexer::CombinationIndexer,
+    target_S::Real;
+    tol::Float64=1e-8,
+    sign_convention::Symbol=:spin_first
+)
+    @assert !isnothing(indexer.lattice_dims) "indexer must be in momentum basis (lattice_dims must be set)"
+    dims = indexer.lattice_dims
+    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+
+    # --- Step 1: Tight-binding energy per basis state ---
+    # In the momentum basis: ε_k = -2t Σ_d cos(2π(k_d - 1)/L_d), t = 1
+    orbital_energy(coord) =
+        sum(-2.0 * cos(2π * (coord.coordinates[d] - 1) / dims[d]) for d in eachindex(coord.coordinates))
+    orbital_energies = Dict(k => orbital_energy(k) for k in indexer.a)
+    state_energy(conf) = sum(orbital_energies[k] for k in conf[1]) +
+                         sum(orbital_energies[k] for k in conf[2])
+
+    # --- Step 2: Find degenerate ground-state manifold D ---
+    E_min = minimum(state_energy(conf) for conf in indexer.inv_comb_dict)
+    degenerate_indices = [i for (i, conf) in enumerate(indexer.inv_comb_dict)
+                          if abs(state_energy(conf) - E_min) < tol]
+    n_deg = length(degenerate_indices)
+
+    # Non-degenerate: unique ground state is automatically an S² eigenstate
+    if n_deg == 1
+        return degenerate_indices, ComplexF64[1.0]
+    end
+
+    # Local index within D: global Hilbert space index → local index 1..n_deg
+    local_idx = Dict(degenerate_indices[li] => li for li in 1:n_deg)
+
+    # Sz is the same for every state in this fixed-(N_up, N_down) sector
+    conf0 = indexer.inv_comb_dict[degenerate_indices[1]]
+    Sz = (length(conf0[1]) - length(conf0[2])) / 2.0
+
+    # --- Step 3: Build S² restricted to D ---
+    # Convention matches create_S2!: M[local_i, local_j] = ⟨d_i|S²|d_j⟩
+    M = zeros(Float64, n_deg, n_deg)
+
+    for (local_i, global_i) in enumerate(degenerate_indices)
+        conf = indexer.inv_comb_dict[global_i]
+        up_set, dn_set = conf[1], conf[2]
+
+        # Diagonal: Sz(Sz+1) + #{k ∈ dn_set : k ∉ up_set}  (the diagonal of S⁻S⁺)
+        M[local_i, local_i] += Sz * (Sz + 1.0) + count(k -> k ∉ up_set, dn_set)
+
+        # Off-diagonal S⁻S⁺: orbital swap k_a↑ ↔ k_b↓
+        for k_a in up_set, k_b in dn_set
+            k_a == k_b && continue   # same orbital: already counted in diagonal
+            k_b ∈ up_set && continue  # k_b must be absent from up
+            k_a ∈ dn_set && continue  # k_a must be absent from down
+
+            new_up = union(setdiff(up_set, [k_a]), [k_b])
+            new_dn = union(setdiff(dn_set, [k_b]), [k_a])
+
+            global_j = get(indexer.comb_dict, (new_up, new_dn), 0)
+            iszero(global_j) && continue
+
+            local_j = get(local_idx, global_j, 0)
+            if iszero(local_j)
+                @warn "Orbital swap exited the degenerate manifold; try increasing tol."
+                continue
+            end
+
+            # JW sign: same operator sequence and initial state as create_S2!
+            ops = [
+                (k_a, 2, :create),
+                (k_a, 1, :annihilate),
+                (k_b, 1, :create),
+                (k_b, 2, :annihilate)
+            ]
+            sign = Float64(compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention))
+            M[local_i, local_j] += sign
+        end
+    end
+
+    # --- Step 4: Diagonalize S² on the small manifold D ---
+    eigenvalues, eigenvectors = eigen(Symmetric(M))
+
+    target_eval = target_S * (target_S + 1.0)
+    best_idx = argmin(abs.(eigenvalues .- target_eval))
+    if abs(eigenvalues[best_idx] - target_eval) > 1e-5
+        @warn ("Target S²=$(target_eval) not found in degenerate manifold. " *
+               "Available: $(round.(eigenvalues; digits=4)). " *
+               "Returning closest (eigenvalue=$(eigenvalues[best_idx])).")
+    end
+
+    coefficients = eigenvectors[:, best_idx]
+
+    # --- Step 5: Return sparse representation (drop negligible components) ---
+    significant = findall(abs.(coefficients) .> tol)
+    return degenerate_indices[significant], ComplexF64.(coefficients[significant])
+end
+
 function load_h5_ED_data(folder; verbose=false)
     valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]# && occursin("(0)", f)] # remove (0) requirement
 
@@ -2024,3 +2147,129 @@ function map_symmetry_groups(t_vals_small, subspace_small, subspace_large;
 
     return t_vals_large, index_mapping, t_keys_large, sym_large
 end
+
+
+"""
+    create_hubbard_matrices(subspace::HubbardSubspace; get_indexer=false, sign_convention=:coordinate_first)
+
+Constructs the hopping and interaction Hubbard Hamiltonians as sparse matrices for the given subspace.
+Returns a tuple (H_hopping, H_interaction). If `get_indexer` is true, returns (H_hopping, H_interaction, indexer).
+"""
+function create_hubbard_matrices(subspace::HubbardSubspace; get_indexer=false, sign_convention=:coordinate_first)
+    hopping_model = HubbardModel(1.0, 0.0, 0.0, false)
+    interaction_model = HubbardModel(0.0, 1.0, 0.0, false)
+    
+    # Check if k-vector constraint is active to set momentum basis
+    momentum_basis = !(subspace.k === nothing)
+    
+    H_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, momentum_basis=momentum_basis, sign_convention=sign_convention)
+    H_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=momentum_basis, sign_convention=sign_convention)
+    if get_indexer
+        return H_hopping, H_interaction, indexer
+    end
+    return H_hopping, H_interaction
+end
+
+"""
+    test_barren_plateaus(H_tuple, subspace, indexer, U, initial_parameters, ϵ; num_samples, use_gpu, antihermitian)
+
+Computes the variance of the gradient of the energy expectation value <ref|U^dag H U|ref>
+across `num_samples` parameter sets `t_vals` centered around `initial_parameters` with standard deviation `ϵ`.
+Returns the variances for each parameter and their mean value.
+"""
+function test_barren_plateaus(
+    H_tuple::Tuple{<:AbstractMatrix,<:AbstractMatrix},
+    subspace::HubbardSubspace,
+    indexer::CombinationIndexer,
+    U::Float64,
+    initial_parameters::AbstractVector{<:Real},
+    ϵ::Float64,
+    ref::AbstractVector{<:Number};
+    num_samples::Int=20,
+    use_gpu::Bool=false,
+    antihermitian::Bool=false,
+    sign_convention::Symbol=:coordinate_first
+)
+    # Computes the variance of the gradient of the energy expectation. When averaging over 
+    # random parameters centered at θ_0, the variance will be given by ϵ^2 Σ_j H_{ij}(θ_0)^2, where
+    # H_{ij} is the Hessian. If we sampled this variance for a bunch of different initial conditions,
+    # then the expectation of the hessian squared over the Haar measure will go exponentially to zero. We
+    # may find a good initial condition that doesn't decay exponentially with system size, but on average, 
+    # they will. 
+
+    dim = get_subspace_dimension(subspace)
+    println("--- Testing Barren Plateaus ---")
+    println("Subspace dimension: $dim")
+
+    # Construct the total Hamiltonian
+    H = H_tuple[1] + H_tuple[2] * U
+
+    # Generate precomputed operator structures (order 2)
+    precomputed_structures = precompute_n_body_structures(indexer, 2; spin_conserved=true, sign_convention=sign_convention)
+    struct_cache = precomputed_structures[(2, false)]
+    rows, cols, signs, ops_list = struct_cache[:rows], struct_cache[:cols], struct_cache[:signs], struct_cache[:ops_list]
+    t_keys, param_index_map = struct_cache[:t_keys], struct_cache[:param_index_map]
+    num_params = length(t_keys)
+    println("Number of variational parameters: $num_params")
+
+    # Group matrix indices by parameter
+    indices_by_param = [Int[] for _ in 1:num_params]
+    for k in eachindex(param_index_map)
+        push!(indices_by_param[param_index_map[k]], k)
+    end
+
+    # Build CPU operator matrices ops
+    ops = []
+    for i in 1:num_params
+        idx = indices_by_param[i]
+        rows_sub = Int[]
+        cols_sub = Int[]
+        vals_sub = ComplexF64[]
+        for j in idx
+            r = rows[j]
+            c = cols[j]
+            s = signs[j]
+            push!(rows_sub, r)
+            push!(cols_sub, c)
+            push!(vals_sub, s)
+            push!(rows_sub, c)
+            push!(cols_sub, r)
+            push!(vals_sub, antihermitian ? -conj(s) : conj(s))
+        end
+        push!(ops, (rows_sub, cols_sub, vals_sub))
+    end
+
+    # Loop to sample reference states and compute gradients
+    all_grads = zeros(Float64, num_samples, num_params)
+
+    # Eagerly allocate to GPU once to avoid memory transfers and allocations inside the sample loop
+    if use_gpu
+        ref_gpu = CUDA.CuArray(ref)
+        H_gpu = CUDA.CUSPARSE.CuSparseMatrixCSC(H)
+        ops_gpu = ops
+    end
+
+    for s in 1:num_samples
+        # Center around initial_parameters with perturbation standard deviation ϵ
+        t_vals = initial_parameters .+ randn(num_params) .* ϵ
+
+        if use_gpu
+            loss, back = Zygote.pullback(t -> gpu_adjoint_energy_loss(t, ops_gpu, rows, cols, signs, param_index_map, nothing, nothing, dim, ref_gpu, H_gpu, nothing, true, antihermitian), t_vals)
+            grad = back(1.0)[1]
+        else
+            loss, back = Zygote.pullback(t -> adjoint_energy_loss(t, ops, rows, cols, signs, param_index_map, nothing, nothing, dim, ref, H, nothing, true, antihermitian), t_vals)
+            grad = back(1.0)[1]
+        end
+        all_grads[s, :] .= grad
+    end
+
+    # Compute variance of gradient across samples
+    variances = [var(all_grads[:, i]) for i in 1:num_params]
+    mean_var = mean(variances)
+    println("Mean variance of the gradient across all parameters: $mean_var")
+    println("Min variance: $(minimum(variances)) | Max variance: $(maximum(variances))")
+    println("-------------------------------")
+
+    return variances, mean_var
+end
+

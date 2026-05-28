@@ -14,11 +14,13 @@ using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
 using ExponentialUtilities
 using CUDA
+using Dates
 
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
+include("logging.jl")
 
 
 function run_pruning_analysis(folder)
@@ -155,9 +157,12 @@ end
 
 # Check if script is run directly
 function @main(ARGS)
+    log_path = make_log_path(@__DIR__, "run_pruning_analysis")
+    with_logging(log_path) do
     if length(ARGS) == 1
         run_pruning_analysis("$(ARGS[1])")
     else
         run_pruning_analysis("data/N=(4, 4)_3x3_2")
     end
+    end # with_logging
 end

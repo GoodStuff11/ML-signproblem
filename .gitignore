@@ -3,3 +3,13 @@
 *.err
 *.out
 
+experimenting/ed/data_new_sign/N=(5, 4)_4x3/HubbardED_Slater_4x3_(5,4)_t_1_m_2.h5
+experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(8)-003.h5
+experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(0)-002.h5
+experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(2)-004.h5
+experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(10)-001.h5
+experimenting/ed/data/N=(4, 5)_4x4/meta_data_and_E.jld2
+experimenting/ed/data/N=(5, 5)_4x4/meta_data_and_E.jld2
+experimenting/ed/data/N=(5, 5)_4x4 copy/meta_data_and_E.jld2
+experimenting/ed/data/N=(6, 6)_4x3/unitary_map_energy_symmetry=false_N=(6, 6)_shared.jld2
+experimenting/ed/data/N=(6, 6)_4x3/unitary_map_energy_symmetry=false_N=(6, 6)_u_2.jld2

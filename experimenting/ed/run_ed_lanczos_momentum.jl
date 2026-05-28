@@ -13,14 +13,19 @@ using KrylovKit
 using Zygote
 using ExponentialUtilities
 using CUDA
+using Dates
 
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
+include("logging.jl")
 
 
 function (@main)(ARGS)
+    log_path = make_log_path(@__DIR__, "run_ed_lanczos_momentum")
+    with_logging(log_path) do
+
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
@@ -223,4 +228,5 @@ function (@main)(ARGS)
     println("saved to: $file_name")
 
     return 0
+    end # with_logging
 end
