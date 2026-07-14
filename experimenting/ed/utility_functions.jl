@@ -1,3 +1,12 @@
+module UtilityFunctions
+
+using JSON
+using JLD2
+
+export serialize_data, save_json, load_json_folder, append_to_json_files,
+       save_energy_with_metadata, save_dictionary, load_saved_dict,
+       merge_jld2_folder, @safe_threads
+
 function serialize_data(obj)
     if obj isa AbstractRange
         return collect(obj)
@@ -243,7 +252,7 @@ Throws an error if the file does not exist or if it does not contain `"dict"`.
 function load_saved_dict(filename::AbstractString)
     @assert isfile(filename) "File does not exist: $filename"
 
-    return JLD2.jldopen(filename, "r") do file
+    return JLD2.jldopen(filename, false, false, false, IOStream) do file
         if !haskey(file, "dict")
             error("File '$filename' does not contain a saved dictionary under key \"dict\".")
         end
@@ -314,3 +323,32 @@ function merge_jld2_folder(folder::String; include_keys=String[], file_filter=[]
 
     return merged
 end
+
+"""
+    @safe_threads(loop)
+
+A wrapper macro around `Threads.@threads`. If the `CUDA` package is loaded in the session
+(detected via `isdefined(Main, :CUDA)` or `@isdefined(CUDA)`), this macro runs the loop serially
+on the CPU to prevent concurrency conflicts between CPU threading and the active CUDA context.
+Otherwise, it executes the loop in parallel using `Threads.@threads`.
+"""
+macro safe_threads(loop)
+    if !(loop.head === :for)
+        error("@safe_threads requires a for loop")
+    end
+    return esc(quote
+        if isdefined(Main, :CUDA) || @isdefined(CUDA)
+            # Warn once to inform the user about serial fallback
+            if Threads.threadid() == 1
+                @warn "CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions." maxlog=1
+            end
+            $loop
+        else
+            Threads.@threads $loop
+        end
+    end)
+end
+
+end # module UtilityFunctions
+
+using .UtilityFunctions

@@ -1,3 +1,66 @@
+#=
+system_scaling.jl
+
+Train a neural network or Legendre strategy to scale unitary map coefficients across system sizes.
+
+Usage:
+  julia --project=.. system_scaling.jl [options]
+
+Options:
+  --strategy=<strategy> (optional): Legendre or neural. Default: "legendre".
+                        Valid options:
+                        - "legendre": Use Legendre polynomial strategy (interpolator per U value).
+                        - "neural": Train/load a Neural Network strategy.
+  --weighting=<weighting> (optional): Weighting scheme. Default: "low_u".
+                        Valid options:
+                        - "low_u_mild": Mild preference for small U (weight ~ U^(-0.25)).
+                        - "low_u": Standard preference for small U (weight ~ U^(-0.5)).
+                        - "low_u_strong": Strong preference for small U (weight ~ U^(-1.5)).
+                        - "low_u_very_strong": Very aggressive preference for small U (weight ~ U^(-3.0)).
+                        - "uniform": Equal weighting for all U values.
+                        - "high_u": Preference for large U (weight ~ U^(0.5)).
+                        - "high_u_strong": Heavy priority for large U (weight ~ U^(1.5)).
+                        - "focus_u8": Gaussian centered at log10(8) ≈ 0.903.
+                        - "loss_mild": Mildly scaling by log10 overlap loss.
+                        - "loss_std": Standard scaling by squared log10 overlap loss.
+                        - "loss_power_mild": Power-law overlap loss scaling with exponent -0.07.
+                        - "loss_power_std": Power-law overlap loss scaling with exponent -0.12.
+                        - "loss_power_neg03": Power-law loss^alpha scaling with alpha = -0.3.
+                        - "loss_power_neg04": Power-law loss^alpha scaling with alpha = -0.4.
+                        - "loss_power_neg05": Power-law loss^alpha scaling with alpha = -0.5.
+                        - "one_minus_loss_power_03": (1-loss)^alpha scaling with alpha = 0.3.
+                        - "one_minus_loss_power_05": (1-loss)^alpha scaling with alpha = 0.5.
+                        - "one_minus_loss_power_07": (1-loss)^alpha scaling with alpha = 0.7.
+                        - "one_minus_loss_power_10": (1-loss)^alpha scaling with alpha = 1.0.
+                        - "one_minus_loss_power_15": (1-loss)^alpha scaling with alpha = 1.5.
+                        - "one_minus_loss_power_20": (1-loss)^alpha scaling with alpha = 2.0.
+                        - "one_minus_loss_power_25": (1-loss)^alpha scaling with alpha = 2.5.
+  --u-range=<u_range> (optional): Range of U indices (e.g. "2:52"). Default: "2:52".
+  --folder-set=<folder_set> (optional): Dataset set. Default: "all".
+                        Valid options:
+                        - "all": Default set with all shapes.
+                        - "2x2_only": 2x2 systems only.
+                        - "small_only": 2x2 and 3x2 small systems.
+                        - "exclude_2x2": Exclude 2x2 systems.
+                        - "large_only": 3x3 and 4x2 systems.
+                        - "small_nonsplit", "medium_nonsplit", "mixed_nonsplit", "square_nonsplit": Non-overlapping training sets.
+                        - "square_pure": Pure square geometries (3x3, 4x5).
+                        - "square_extended": Pure squares including third filling.
+                        - "square_with_2x2": Square systems with 2x2 anchor.
+                        - "square_and_rect": Square systems and small rectangular systems.
+                        - "multiscale_3x3": Square systems and 4x2 rectangles.
+  --name=<name> (optional): Filename suffix for trained NN. Default: "".
+  --base-hidden=<hidden> (optional): Hidden layer sizes (comma-separated). Default: "128,128".
+  --embed-dim=<dim> (optional): Embedding dimension. Default: 64.
+  --context-hidden=<hidden> (optional): Context layers. Default: "64,32".
+  --scale-hidden=<hidden> (optional): Scaling layers. Default: "32,16".
+  --scale-loss-weight=<weight> (optional): Weight of the auxiliary scale loss term. Default: 3.0.
+  --use-gpu=<true|false> (optional): Whether to use GPU acceleration (CUDA). If set to false, it runs entirely on CPU without loading the CUDA package. Default: true.
+
+Examples:
+  julia --project=.. system_scaling.jl --strategy=neural --folder-set=square_pure --name=pure_run
+=#
+
 using IJulia
 using Lattices
 using LinearAlgebra
@@ -14,18 +77,44 @@ using JSON
 using OptimizationOptimJL
 using JLD2
 using ExponentialUtilities
-ENV["JULIA_CUDA_USE_COMPAT"] = "false"
-using CUDA
-# using cuDNN   # Commented out to avoid CUDNNError on activation pullbacks on HPC; CUDA.jl handles MLPs natively and stably
+using KrylovKit
+
+# Pre-scan ARGS for --use-gpu before loading CUDA
+_use_gpu = let val = nothing
+    for arg in ARGS
+        if startswith(arg, "--use-gpu=")
+            val = parse(Bool, split(arg, "=", limit=2)[2])
+        end
+    end
+    val
+end
+
+if _use_gpu !== false
+    try
+        ENV["JULIA_CUDA_USE_COMPAT"] = "true"
+        using CUDA
+        if CUDA.functional()
+            @info "GPU available: $(CUDA.name(CUDA.CuDevice(0)))"
+        else
+            @warn "CUDA not functional. CPU fallback will be used."
+        end
+    catch e
+        @warn "CUDA loading or initialization failed: $e. CPU fallback will be used."
+    end
+end
+
+# using cuDNN   # Commented out to avoid CUDNNError on HPC; CUDA.jl handles MLPs natively and stably
 using Printf
 using Flux
 using Dates
 
 include("logging.jl")
+include("utility_functions.jl")
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
-include("utility_functions.jl")
+include("trotter.jl")
+using .Trotter
 include("nn_strategy.jl")
 
 """
@@ -499,9 +588,80 @@ function sample_coefficients_from_histogram(source_coeffs::Vector{Float64}, n::I
     return all_samples[1]
 end
 
+"""
+    parse_arguments(args::Vector{String})
+
+Parse command line arguments for running the system scaling interpolation study.
+"""
+function parse_arguments(args::Vector{String})
+    weighting_flag = "low_u"
+    u_range_str = "2:52"
+    folder_set_flag = "all"
+    base_hidden_str = "128,128"
+    embed_dim_val = 64
+    context_hidden_str = "64,32"
+    scale_hidden_str = "32,16"
+    strategy_flag = "neural"
+    name_val = ""
+    scale_loss_weight_val = 3.0f0
+    is_trotter_val = false
+    k_max_val = 10
+    loss_type_val = :overlap
+    k_eval_val = 2
+
+    for arg in args
+        if startswith(arg, "--weighting=")
+            weighting_flag = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--u-range=")
+            u_range_str = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--folder-set=")
+            folder_set_flag = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--base-hidden=")
+            base_hidden_str = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--embed-dim=")
+            embed_dim_val = parse(Int, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--context-hidden=")
+            context_hidden_str = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--scale-hidden=")
+            scale_hidden_str = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--strategy=")
+            strategy_flag = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--name=")
+            name_val = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--scale-loss-weight=")
+            scale_loss_weight_val = parse(Float32, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--is-trotter=")
+            is_trotter_val = parse(Bool, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--k-max=")
+            k_max_val = parse(Int, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--loss-type=")
+            val = String(split(arg, "=", limit=2)[2])
+            loss_type_val = val == "energy" ? :energy : :overlap
+        elseif startswith(arg, "--k-eval=")
+            k_eval_val = parse(Int, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--use-gpu=")
+            continue
+        end
+    end
+
+    # Parse u_range range
+    parts = split(u_range_str, ":")
+    u_range = parse(Int, parts[1]):parse(Int, parts[2])
+
+    # Parse hidden layers
+    base_hidden_val = [parse(Int, x) for x in split(base_hidden_str, ",")]
+    context_hidden_val = [parse(Int, x) for x in split(context_hidden_str, ",")]
+    scale_hidden_val = [parse(Int, x) for x in split(scale_hidden_str, ",")]
+
+    return strategy_flag, weighting_flag, u_range, folder_set_flag, name_val, base_hidden_val, embed_dim_val, context_hidden_val, scale_hidden_val, scale_loss_weight_val, is_trotter_val, k_max_val, loss_type_val, k_eval_val
+end
+
+
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "system_scaling")
     with_logging(log_path) do
+
+        strategy_flag, weighting_flag, u_range, folder_set_flag, name_val, base_hidden_val, embed_dim_val, context_hidden_val, scale_hidden_val, scale_loss_weight_val, is_trotter_val, k_max_val, loss_type_val, k_eval_val = parse_arguments(ARGS)
 
         # -------------------------------------------------------------------------
         # Configuration: small system (source of coefficients) and large system (target)
@@ -514,33 +674,131 @@ function (@main)(ARGS)
             "data/N=(2, 2)_3x2",
             "data/N=(4, 4)_4x2",
             "data/N=(2, 2)_2x2",
+            "data/N=(4, 5)_3x3",
+            # "data/N=(3, 2)_3x2",
+            "nn_test_data/N=(5, 5)_4x3",
+            "nn_test_data/N=(3, 4)_4x3"
         ]
-        nn_folder_specs = [
-            ((3, 3), [3, 2], 2:52, ""),
-            ((2, 2), [3, 2], 2:52, ""),
-            ((3, 3), [3, 3], 2:52, ""),
-            # ((4, 4), [3, 3], 2:52, "_2"),
-            ((4, 4), [4, 2], 2:52, ""),
-            ((2, 2), [2, 2], 2:52, ""),
-        ]
+        # Build folder specs based on parsed options
+        # NOTE: test_folders below includes N=(3,3)_3x2, N=(3,3)_4x3, N=(3,3)_3x3,
+        # N=(4,4)_3x3_2, N=(2,2)_3x2, N=(4,4)_4x2, N=(2,2)_2x2.
+        # The "_nonsplit" variants below are disjoint from all those test folders.
+        raw_specs = if folder_set_flag == "small_only"
+            [
+                ((2, 2), [3, 2], ""),
+                ((2, 2), [2, 2], ""),
+            ]
+        elseif folder_set_flag == "2x2_only"
+            [
+                ((2, 2), [2, 2], ""),
+            ]
+        elseif folder_set_flag == "exclude_2x2"
+            [
+                ((3, 3), [3, 2], ""),
+                ((3, 3), [3, 3], ""),
+                ((4, 4), [4, 2], ""),
+            ]
+        elseif folder_set_flag == "large_only"
+            [
+                ((3, 3), [3, 3], ""),
+                ((4, 4), [4, 2], ""),
+            ]
+            # --- New non-overlapping training sets (disjoint from test_folders) ---
+            # Small: only the duplicate 3x2 folders (replications of the smallest system)
+        elseif folder_set_flag == "small_nonsplit"
+            [
+                ((3, 3), [3, 2], "_2"),
+                ((3, 3), [3, 2], "_3"),
+            ]
+            # Medium: duplicate 3x2 + 4x2 variants not in test set
+        elseif folder_set_flag == "medium_nonsplit"
+            [
+                ((3, 3), [3, 2], "_2"),
+                ((3, 3), [3, 2], "_3"),
+                ((4, 4), [4, 2], "_2"),
+            ]
+            # Larger: 3x2 duplicates + 3x3 non-test + 4x2 duplicate
+        elseif folder_set_flag == "mixed_nonsplit"
+            [
+                ((3, 3), [3, 2], "_2"),
+                ((3, 3), [3, 2], "_3"),
+                ((3, 3), [4, 2], ""),
+                ((4, 4), [4, 2], "_2"),
+            ]
+            # --- Aspect-ratio-based sets (same geometry, different filling) ---
+            # Square geometry only: targets the 3x3 test systems
+            # N=(3,3)_3x3_newsign (60 files), N=(4,4)_3x3 (13 files, will be clamped)
+            # N=(4,5)_3x3 (61 files) and N=(4,5)_3x3_3 (60 files) — extra fillings
+        elseif folder_set_flag == "square_nonsplit"
+            [
+                ((3, 3), [3, 3], "_newsign"),
+                ((4, 4), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+            ]
+            # Minimal square set: single clean copy of each filling, no duplicates.
+            # N=(3,3)_3x3_newsign (63 files), N=(4,5)_3x3 (64 files).
+            # Drops the sparse N=(4,4)_3x3 (only 3 u-files) used in square_nonsplit.
+        elseif folder_set_flag == "square_pure"
+            [
+                ((3, 3), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+            ]
+            # Extended square set: adds N=(4,5)_3x3_3 (63 files) — a third filling with full data.
+            # Still no duplicates; each entry is a distinct electron count.
+        elseif folder_set_flag == "square_extended"
+            [
+                ((3, 3), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+                ((4, 5), [3, 3], "_3"),
+            ]
+            # Square set + 2x2 lattice: adds N=(2,2)_2x2 (61 files) to give the network
+            # a small-system anchor at the same square geometry.
+        elseif folder_set_flag == "square_with_2x2"
+            [
+                ((3, 3), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+                ((2, 2), [2, 2], ""),
+            ]
+            # Square geometry + small rectangular systems
+        elseif folder_set_flag == "square_and_rect"
+            [
+                ((3, 3), [3, 3], "_newsign"),
+                ((4, 4), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+                ((3, 3), [3, 2], "_2"),
+                ((3, 3), [3, 2], "_3"),
+            ]
+            # Square geometry + 4x2 rectangles — multiple aspect ratios, all clean
+        elseif folder_set_flag == "multiscale_3x3"
+            [
+                ((3, 3), [3, 3], "_newsign"),
+                ((4, 4), [3, 3], ""),
+                ((4, 5), [3, 3], ""),
+                ((4, 4), [4, 2], "_2"),
+                ((3, 3), [4, 2], ""),
+            ]
+        else # default "all"
+            [
+                ((3, 3), [3, 2], ""),
+                ((2, 2), [3, 2], ""),
+                ((3, 3), [3, 3], ""),
+                ((4, 4), [4, 2], ""),
+                ((2, 2), [2, 2], ""),
+            ]
+        end
+
+        nn_folder_specs = [(spec[1], spec[2], u_range, spec[3]) for spec in raw_specs]
 
         small_electrons = (3, 3)
         small_size = [3, 2]
         order = 2
 
-        if CUDA.functional()
+        if @isdefined(CUDA) && CUDA.functional()
             println("Using CUDA")
         else
             println("Using CPU")
         end
 
-        # Parse --strategy=legendre (default) or --strategy=neural from ARGS
-        strategy_flag = "legendre"
-        for arg in ARGS
-            if startswith(arg, "--strategy=")
-                strategy_flag = split(arg, "=")[2]
-            end
-        end
         println("\n=== Using interpolation strategy: $strategy_flag ===")
 
         # -------------------------------------------------------------------------
@@ -549,23 +807,31 @@ function (@main)(ARGS)
         strategy = if strategy_flag == "neural"
             # Neural-network strategy: train across multiple datasets.
             # Edit folder_specs / hyperparameters to match your training data.
-            nn_filepath = "trained_neural_networks/trained_neural_network.jld2"
-            for arg in ARGS
-                if startswith(arg, "--name=")
-                    nn_filepath = "trained_neural_networks/trained_neural_network_" * split(arg, "=")[2] * ".jld2"
-                end
-            end
+            nn_filepath = isempty(name_val) ? "trained_neural_networks/trained_neural_network.jld2" : "trained_neural_networks/trained_neural_network_$(name_val).jld2"
+
+            println("Training NN with weighting scheme: $weighting_flag")
+            println("Training NN with U index range: $u_range")
+            println("Training NN with folder set: $folder_set_flag")
 
             @time get_or_train_neural_strategy(nn_filepath, nn_folder_specs;
-                U_max=10.0,
+                U_max=20.0,
                 include_dim=true,
                 include_electrons=true,
                 dim_max=4,
                 n_epochs=200,
                 batch_size=256,
                 lr=1e-3,
-                use_gpu=CUDA.functional(),
+                use_gpu=@isdefined(CUDA) && CUDA.functional(),
                 use_scale_head=true,
+                weighting_scheme=weighting_flag,
+                base_hidden=base_hidden_val,
+                embed_dim=embed_dim_val,
+                context_hidden=context_hidden_val,
+                scale_hidden=scale_hidden_val,
+                scale_loss_weight=scale_loss_weight_val,
+                is_trotter=is_trotter_val,
+                loss_type=loss_type_val,
+                k_max=k_max_val
             )
         else
             # Legendre polynomial strategy: fit one interpolator per U value from the small system.
@@ -578,6 +844,30 @@ function (@main)(ARGS)
         # -------------------------------------------------------------------------
         # Step 2: Test accuracy of interpolation strategy
         # -------------------------------------------------------------------------
+        function evaluate_coefficients_metrics(coeffs, rows, cols, signs, param_index_map, dim, state1, state2, H, use_symmetry)
+            vals = update_values(signs, param_index_map, coeffs, nothing, nothing)
+            A = sparse(rows, cols, vals, dim, dim)
+            if !use_symmetry
+                A = make_hermitian(A)
+            end
+
+            # Propagate states using optimized exponentiation (dense exp for small matrices, expv for large)
+            if dim > 128
+                psi_loss = expv(1.0im, A, state2)
+                psi_energy = expv(1.0im, A, state1)
+            else
+                dense_A = Matrix(A)
+                U_mat = exp(1.0im * dense_A)
+                psi_loss = U_mat * state2
+                psi_energy = U_mat * state1
+            end
+
+            loss = 1.0 - abs2(dot(state1, psi_loss))
+            energy = real(dot(psi_energy, H * psi_energy))
+
+            return loss, energy
+        end
+
         for large_folder in test_folders
             regex = r"N=\((?<N>\d+), (?<M>\d+)\)"
             m = match(regex, large_folder)
@@ -586,6 +876,12 @@ function (@main)(ARGS)
             println("\n===================================")
             println("Testing on folder: $large_folder")
             println("===================================")
+
+            if !isfile(joinpath(large_folder, "meta_data_and_E.jld2"))
+                @warn "Skipping $large_folder: no meta_data_and_E.jld2 found"
+                continue
+            end
+
             println("\n=== Loading large system ED data ===")
             U_values_large, target_vecs_large, indexer_large, precomputed_structures_large,
             N_large, spin_conserved_large, use_symmetry_large, sign_convention_large = load_ED_data(large_folder; verbose=false)
@@ -593,140 +889,286 @@ function (@main)(ARGS)
             dim_large = length(indexer_large.inv_comb_dict)
             println("Large system Hilbert space dim: $dim_large")
 
-            # -------------------------------------------------------------------------
-            # Step 3: Build the operator structure for the large system
-            # -------------------------------------------------------------------------
-            println("\n=== Building operator structure for large system (order=$order) ===")
-            momentum_basis = false
-            initial_loss = 1.0
+            if is_trotter_val
+                # -------------------------------------------------------------------------
+                # Step 3 (Trotter): Build basis and gate structures for Trotter
+                # -------------------------------------------------------------------------
+                metadata_large = load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))
+                dim_large_vec = [parse(Int, x) for x in split(metadata_large["meta_data"]["sites"], "x")]
+                all_E_large = metadata_large["E"]
+                k_min_large = find_best_energy_sector(all_E_large, U_values_large; verbose=false)
 
-            @time t_dict_large, t_keys_large = create_randomized_nth_order_operator(
-                order, indexer_large, true;
-                magnitude=initial_loss * 100,
-                omit_H_conj=!use_symmetry_large,
-                conserve_spin=spin_conserved_large,
-                normalize_coefficients=false,
-                conserve_momentum=momentum_basis
-            )
-            @time rows_large, cols_large, signs_large, ops_list_large = build_n_body_structure_from_keys(
-                t_keys_large, indexer_large, typeof(t_dict_large[t_keys_large[1]]);
-                sign_convention=sign_convention_large
-            )
-            param_index_map_large = build_param_index_map(ops_list_large, t_keys_large)
+                # Helper to convert Coordinate to 0-based site index
+                function coord_to_site_idx(coord, Lvec)
+                    c0 = coord.coordinates .- 1
+                    return Trotter.ravel_c(c0, Tuple(Lvec))
+                end
 
-            indices_by_param = [Int[] for _ in 1:length(t_keys_large)]
-            for k in eachindex(param_index_map_large)
-                push!(indices_by_param[param_index_map_large[k]], k)
-            end
-            ops_large = [] # this parameter is actually unused by adjoint_loss (without gradient)
+                # Helper to convert Coordinate set to binary representation
+                function coord_set_to_binary(coord_set, Lvec)
+                    val = zero(UInt)
+                    for coord in coord_set
+                        site_idx = coord_to_site_idx(coord, Lvec)
+                        val |= (one(UInt) << site_idx)
+                    end
+                    return val
+                end
 
-            # -------------------------------------------------------------------------
-            # Step 4: Prepare for coefficient prediction
-            # -------------------------------------------------------------------------
-            dim_large_vec = [parse(Int, x) for x in split(
-                load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))["meta_data"]["sites"], "x")]
+                local basis_sector_large
+                if !isnothing(indexer_large)
+                    println("Reconstructing basis sector from indexer...")
+                    basis_sector_large = Vector{UInt}(undef, length(indexer_large.inv_comb_dict))
+                    for (idx, conf) in enumerate(indexer_large.inv_comb_dict)
+                        u_bin = coord_set_to_binary(conf[1], dim_large_vec)
+                        d_bin = coord_set_to_binary(conf[2], dim_large_vec)
+                        basis_sector_large[idx] = Trotter.combineSpinInts(u_bin, d_bin, prod(dim_large_vec))
+                    end
+                else
+                    error("No indexer loaded for large system: $large_folder")
+                end
 
-            # -------------------------------------------------------------------------
-            # Step 5: Evaluate adjoint_loss for each U in the large system
-            # -------------------------------------------------------------------------
-            println("\n=== Evaluating adjoint_loss per U-index ===")
-            println(@sprintf("%-8.4s  %-14s  %-12s  %-14s  %-15s  %-15s  %-15s  %-15s  %-16s  %-14s  %-14s  %-14s  %-14s",
-                "U-value", "Baseline loss", "Pred loss", "pred/baseline",
-                "MeanAbs Stored", "MeanAbs Pred", "RMS Stored", "RMS Pred",
-                "randx10 min loss", "mean loss", "max loss", "pred/rand", "rand/baseline"))
-            println("-"^200)
+                q_target = Trotter.ravel_c(indexer_large.k .- 1, Tuple(indexer_large.lattice_dims))
+                println("Constructing sector Hamiltonians directly using HubbardMomentumBasis...")
+                H_hop_mom, basis_dict, _ = Trotter.TamFermion.HubbardMomentumBasis(1.0, 0.0, dim_large_vec, large_electrons; q_target=q_target)
+                H_int_mom, _, _ = Trotter.TamFermion.HubbardMomentumBasis(0.0, 1.0, dim_large_vec, large_electrons; q_target=q_target)
 
-            # Collect all stored coefficients across u-indices to build a global
-            # histogram that captures the full empirical distribution of training coefficients.
-            all_stored_coeffs = Float64[]
-            save_name_pre = "unitary_map_energy_symmetry=false_N=$(large_electrons)"
-            for ui in 2:55
-                uf = joinpath(large_folder, "$(save_name_pre)_u_$(ui).jld2")
-                if isfile(uf)
-                    d_tmp = load_saved_dict(uf)
-                    c_tmp = d_tmp["coefficients"][2]
-                    if !isnothing(c_tmp)
-                        append!(all_stored_coeffs, real.(c_tmp))
+                state_to_idx = Dict(val => idx for (idx, val) in enumerate(basis_dict["ints"]))
+                perm = [state_to_idx[val] for val in basis_sector_large]
+
+                H_hop_sector_large = H_hop_mom[perm, perm]
+                H_int_sector_large = H_int_mom[perm, perm]
+
+                println("Enumerating Trotter gates...")
+                gates_large = Trotter.enumerate_ferm_excitations(2, dim_large_vec; conserve_mom=true, conserve_sz=true, include_diagonal=true)
+                t_keys_large = [fgate_to_label(g, dim_large_vec) for g in gates_large]
+
+                function evaluate_trotter_coefficients_metrics(coeffs, gates, basis, N_sites, k_steps, state1, state2, H)
+                    ref_evolved = Trotter.TrotterOptimization.apply_unitary(coeffs, gates, state1, basis, N_sites, k_steps)
+                    overlap = abs2(dot(state2, ref_evolved))
+                    loss = 1.0 - overlap
+                    energy = real(dot(ref_evolved, H * ref_evolved))
+                    return loss, energy
+                end
+
+                prefix_large = loss_type_val == :energy ? "trotter_N=$(prod(dim_large_vec))_loss_energy" : "trotter_N=$(prod(dim_large_vec))"
+                
+                println("\n=== Evaluating Trotter adjoint_loss and energy per U-index (k=$k_eval_val) ===")
+                println(@sprintf(
+                    "%-8.8s  %-12.12s  %-14.14s  %-14.14s  %-12.12s  %-12.12s  %-14.14s  %-14.14s",
+                    "U-value", "True E", "Base loss", "Base E", "Pred loss", "Pred E", "pr/ba loss", "pr-ba E"
+                ))
+                println("-"^110)
+
+                results_strings = Vector{String}(undef, 55)
+                state1 = target_vecs_large[1, :]
+
+                @time begin
+                    @safe_threads for u_idx in 2:55
+                        u_val = U_values_large[u_idx]
+                        
+                        coeffs_pred = Float64[]
+                        for l in 1:k_eval_val
+                            ctx = NeuralNetContext(u_val, large_electrons, strategy.U_max, k_eval_val, l, k_max_val)
+                            c_l = interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                            append!(coeffs_pred, c_l)
+                        end
+                        
+                        H_large = H_hop_sector_large + u_val * H_int_sector_large
+                        true_E = all_E_large[k_min_large][u_idx]
+                        state2 = target_vecs_large[u_idx, :]
+                        
+                        pred_loss, pred_energy = evaluate_trotter_coefficients_metrics(
+                            coeffs_pred, gates_large, basis_sector_large, prod(dim_large_vec), k_eval_val,
+                            state1, state2, H_large
+                        )
+
+                        u_file = joinpath(large_folder, "$(prefix_large)_u_$(u_idx).jld2")
+                        stored_loss, stored_energy = NaN, NaN
+                        if isfile(u_file)
+                            d = load_saved_dict(u_file)
+                            stored_coeffs = d["coefficients"]
+                            k_stored = length(stored_coeffs) ÷ length(gates_large)
+                            stored_loss, stored_energy = evaluate_trotter_coefficients_metrics(
+                                stored_coeffs, gates_large, basis_sector_large, prod(dim_large_vec), k_stored,
+                                state1, state2, H_large
+                            )
+                        end
+                        
+                        ratio = isnan(stored_loss) || stored_loss == 0.0 ? NaN : pred_loss / stored_loss
+                        diff_E = isnan(stored_energy) || isnan(pred_energy) ? NaN : pred_energy - stored_energy
+
+                        results_strings[u_idx] = @sprintf(
+                            "%-8.4g  %-12.6g  %-14.6g  %-14.6g  %-12.6g  %-12.6g  %-14.4g  %-14.4g",
+                            u_val, true_E, stored_loss, stored_energy, pred_loss, pred_energy, ratio, diff_E
+                        )
                     end
                 end
-            end
 
-            save_name = save_name_pre
-            ref_u_idx = 1
-            state1 = target_vecs_large[ref_u_idx, :]
-
-            for u_idx in 2:55
-                # Re-predict coefficients for this U value — both strategies now take a U context.
-                new_coeffs = if isa(strategy, NeuralNetStrategy)
-                    ctx = NeuralNetContext(U_values_large[u_idx], large_electrons, strategy.U_max)
-                    interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
-                else
-                    ctx = LegendreContext(U_values_large[u_idx])
-                    interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                for u_idx in 2:55
+                    if isassigned(results_strings, u_idx)
+                        println(results_strings[u_idx])
+                    end
                 end
+                println("\nDone.")
+            else
+                # -------------------------------------------------------------------------
+                # Step 3: Build the operator structure for the large system
+                # -------------------------------------------------------------------------
+                println("\n=== Building operator structure for large system (order=$order) ===")
+                momentum_basis = false
+                initial_loss = 1.0
 
-                state2 = target_vecs_large[u_idx, :]
-                # println("coef magnitude: $(sum(abs.(new_coeffs))/length(new_coeffs))")
-                pred_loss = adjoint_loss(
-                    real.(new_coeffs), ops_large,
-                    rows_large, cols_large, signs_large,
-                    param_index_map_large, nothing, nothing,
-                    dim_large, state1, state2, nothing,
-                    !use_symmetry_large, false
+                @time t_dict_large, t_keys_large = create_randomized_nth_order_operator(
+                    order, indexer_large, true;
+                    magnitude=initial_loss * 100,
+                    omit_H_conj=!use_symmetry_large,
+                    conserve_spin=spin_conserved_large,
+                    normalize_coefficients=false,
+                    conserve_momentum=momentum_basis
                 )
-
-                u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
-                stored_loss = NaN
-                stored_coeffs = nothing
-                if isfile(u_file)
-                    d = load_saved_dict(u_file)
-                    stored_loss = d["metrics"]["loss"][1]
-                    stored_coeffs = d["coefficients"][2]
-                else
-                    error("File not found: $(u_file)")
-                end
-
-                stored_loss_recalc = isnothing(stored_coeffs) ? NaN : adjoint_loss(
-                    real.(stored_coeffs), ops_large,
-                    rows_large, cols_large, signs_large,
-                    param_index_map_large, nothing, nothing,
-                    dim_large, state1, state2, nothing,
-                    !use_symmetry_large, false
+                @time rows_large, cols_large, signs_large, ops_list_large = build_n_body_structure_from_keys(
+                    t_keys_large, indexer_large, typeof(t_dict_large[t_keys_large[1]]);
+                    sign_convention=sign_convention_large
                 )
+                param_index_map_large = build_param_index_map(ops_list_large, t_keys_large)
 
-                mean_abs_pred = mean(abs.(new_coeffs))
-                mean_abs_stored = isnothing(stored_coeffs) ? NaN : mean(abs.(stored_coeffs))
-                rms_pred = sqrt(mean(new_coeffs .^ 2))
-                rms_stored = isnothing(stored_coeffs) ? NaN : sqrt(mean(stored_coeffs .^ 2))
-
-                ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / stored_loss_recalc
-
-                rand_coeffs = sample_coefficients_from_histogram(all_stored_coeffs, length(new_coeffs); reps=10)
-                losses = []
-                for coef in rand_coeffs
-                    push!(losses, adjoint_loss(
-                        coef, ops_large,
-                        rows_large, cols_large, signs_large,
-                        param_index_map_large, nothing, nothing,
-                        dim_large, state1, state2, nothing,
-                        !use_symmetry_large, false
-                    ))
+                indices_by_param = [Int[] for _ in 1:length(t_keys_large)]
+                for k in eachindex(param_index_map_large)
+                    push!(indices_by_param[param_index_map_large[k]], k)
                 end
-                rand_loss = minimum(losses)
-                mean_loss = sum(losses) / length(losses)
-                maximum_loss = maximum(losses)
-                rand_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / rand_loss
-                rand_baseline_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : rand_loss / stored_loss_recalc
+                ops_large = [] # this parameter is actually unused by adjoint_loss (without gradient)
 
+                # -------------------------------------------------------------------------
+                # Step 4: Prepare for coefficient prediction and energy evaluation
+                # -------------------------------------------------------------------------
+                metadata_large = load_saved_dict(joinpath(large_folder, "meta_data_and_E.jld2"))
+                dim_large_vec = [parse(Int, x) for x in split(metadata_large["meta_data"]["sites"], "x")]
+                all_E_large = metadata_large["E"]
+                k_min_large = find_best_energy_sector(all_E_large, U_values_large; verbose=false)
+
+                subspace_large = reconstruct_subspace(indexer_large, spin_conserved_large)
+                hopping_model_large = HubbardModel(1.0, 0.0, 0.0, false)
+                interaction_model_large = HubbardModel(0.0, 1.0, 0.0, false)
+                H_hopping_large = create_Hubbard(hopping_model_large, subspace_large; indexer=indexer_large, sign_convention=sign_convention_large)
+                H_interaction_large = create_Hubbard(interaction_model_large, subspace_large; indexer=indexer_large, sign_convention=sign_convention_large)
+
+                # -------------------------------------------------------------------------
+                # Step 5: Evaluate adjoint_loss and adjoint_energy_loss for each U in the large system
+                # -------------------------------------------------------------------------
+                println("\n=== Evaluating adjoint_loss and energy per U-index ===")
                 println(@sprintf(
-                    "%-8.4g  %-14.6g  %-12.6g  %-14.4g  %-15.6g  %-15.6g  %-15.6g  %-15.6g  %-16.6g  %-14.4g  %-14.4g  %-14.4g  %-14.4g",
-                    U_values_large[u_idx], stored_loss_recalc, pred_loss, ratio,
-                    mean_abs_stored, mean_abs_pred, rms_stored, rms_pred,
-                    rand_loss, mean_loss, maximum_loss, rand_ratio, rand_baseline_ratio
+                    "%-8.8s  %-12.12s  %-14.14s  %-14.14s  %-12.12s  %-12.12s  %-14.14s  %-14.14s  %-15.15s  %-15.15s  %-15.15s  %-15.15s  %-16.16s  %-16.16s  %-14.14s  %-14.14s  %-14.14s  %-14.14s  %-14.14s  %-14.14s  %-14.14s  %-14.14s",
+                    "U-value", "True E", "Base loss", "Base E", "Pred loss", "Pred E", "pr/ba loss", "pr-ba E",
+                    "MeanAbs Stor", "MeanAbs Pred", "RMS Stored", "RMS Pred",
+                    "rand min loss", "rand min E", "mean loss", "mean E", "max loss", "max E", "pr/rd loss", "pr-rd E", "rd/ba loss", "rd-ba E"
                 ))
-            end
+                println("-"^310)
 
-            println("\nDone.")
+                all_stored_coeffs = Float64[]
+                save_name_pre = "unitary_map_energy_symmetry=false_N=$(large_electrons)"
+                for ui in 2:55
+                    uf = joinpath(large_folder, "$(save_name_pre)_u_$(ui).jld2")
+                    if isfile(uf)
+                        d_tmp = load_saved_dict(uf)
+                        c_tmp = d_tmp["coefficients"][2]
+                        if !isnothing(c_tmp)
+                            append!(all_stored_coeffs, real.(c_tmp))
+                        end
+                    end
+                end
+
+                save_name = save_name_pre
+                ref_u_idx = 1
+                state1 = target_vecs_large[ref_u_idx, :]
+
+                results_strings = Vector{String}(undef, 55)
+
+                @time begin
+                    @safe_threads for u_idx in 2:55
+                        u_val = U_values_large[u_idx]
+                        new_coeffs = if isa(strategy, NeuralNetStrategy)
+                            ctx = NeuralNetContext(u_val, large_electrons, strategy.U_max)
+                            interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                        else
+                            ctx = LegendreContext(u_val)
+                            interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
+                        end
+
+                        H_large = H_hopping_large + u_val * H_interaction_large
+                        true_E = all_E_large[k_min_large][u_idx]
+
+                        state2 = target_vecs_large[u_idx, :]
+                        pred_loss, pred_energy = evaluate_coefficients_metrics(
+                            real.(new_coeffs), rows_large, cols_large, signs_large,
+                            param_index_map_large, dim_large, state1, state2, H_large,
+                            use_symmetry_large
+                        )
+
+                        u_file = joinpath(large_folder, "$(save_name)_u_$(u_idx).jld2")
+                        stored_coeffs = nothing
+                        if isfile(u_file)
+                            d = load_saved_dict(u_file)
+                            stored_coeffs = d["coefficients"][2]
+                        else
+                            error("File not found: $(u_file)")
+                        end
+
+                        stored_loss_recalc, stored_energy_recalc = isnothing(stored_coeffs) ? (NaN, NaN) : evaluate_coefficients_metrics(
+                            real.(stored_coeffs), rows_large, cols_large, signs_large,
+                            param_index_map_large, dim_large, state1, state2, H_large,
+                            use_symmetry_large
+                        )
+
+                        mean_abs_pred = mean(abs.(new_coeffs))
+                        mean_abs_stored = isnothing(stored_coeffs) ? NaN : mean(abs.(stored_coeffs))
+                        rms_pred = sqrt(mean(new_coeffs .^ 2))
+                        rms_stored = isnothing(stored_coeffs) ? NaN : sqrt(mean(stored_coeffs .^ 2))
+
+                        ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / stored_loss_recalc
+                        diff_E = isnan(stored_energy_recalc) || isnan(pred_energy) ? NaN : pred_energy - stored_energy_recalc
+
+                        rand_coeffs = sample_coefficients_from_histogram(all_stored_coeffs, length(new_coeffs); reps=10)
+                        losses = Vector{Float64}(undef, length(rand_coeffs))
+                        energies = Vector{Float64}(undef, length(rand_coeffs))
+                        for idx in eachindex(rand_coeffs)
+                            l, e = evaluate_coefficients_metrics(
+                                rand_coeffs[idx], rows_large, cols_large, signs_large,
+                                param_index_map_large, dim_large, state1, state2, H_large,
+                                use_symmetry_large
+                            )
+                            losses[idx] = l
+                            energies[idx] = e
+                        end
+                        rand_loss = minimum(losses)
+                        mean_loss = sum(losses) / length(losses)
+                        maximum_loss = maximum(losses)
+
+                        rand_energy_min = minimum(energies)
+                        rand_energy_mean = sum(energies) / length(energies)
+                        rand_energy_max = maximum(energies)
+
+                        rand_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : pred_loss / rand_loss
+                        rand_diff_E = isnan(rand_energy_min) || isnan(pred_energy) ? NaN : pred_energy - rand_energy_min
+
+                        rand_baseline_ratio = isnan(stored_loss_recalc) || stored_loss_recalc == 0.0 ? NaN : rand_loss / stored_loss_recalc
+                        rand_baseline_diff_E = isnan(stored_energy_recalc) || isnan(rand_energy_min) ? NaN : rand_energy_min - stored_energy_recalc
+
+                        results_strings[u_idx] = @sprintf(
+                            "%-8.4g  %-12.6g  %-14.6g  %-14.6g  %-12.6g  %-12.6g  %-14.4g  %-14.4g  %-15.6g  %-15.6g  %-15.6g  %-15.6g  %-16.6g  %-16.6g  %-14.4g  %-14.4g  %-14.4g  %-14.4g  %-14.4g  %-14.4g  %-14.4g  %-14.4g",
+                            u_val, true_E, stored_loss_recalc, stored_energy_recalc, pred_loss, pred_energy, ratio, diff_E,
+                            mean_abs_stored, mean_abs_pred, rms_stored, rms_pred,
+                            rand_loss, rand_energy_min, mean_loss, rand_energy_mean, maximum_loss, rand_energy_max, rand_ratio, rand_diff_E, rand_baseline_ratio, rand_baseline_diff_E
+                        )
+                    end
+                end
+
+                for u_idx in 2:55
+                    if isassigned(results_strings, u_idx)
+                        println(results_strings[u_idx])
+                    end
+                end
+                println("\nDone.")
+            end
         end
     end
 end

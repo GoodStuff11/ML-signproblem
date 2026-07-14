@@ -1,8 +1,24 @@
-# experimenting/ed/*_images/*
-# experimenting/ed/data/*
+# Gitignore rules
 *.err
 *.out
 
+# Ignore data and log directories
+experimenting/ed/data/
+experimenting/ed/data_new_sign/
+experimenting/ed/logs/
+experimenting/ed/nn_test_data/
+experimenting/ed/nn_test_data_random/
+experimenting/ed/trained_neural_networks/
+
+# Ignore log files under jobs/
+jobs/*.log
+
+# Python build/cache files
+**/__pycache__/
+*.pyc
+.DS_Store
+
+# Originals from previous gitignore
 experimenting/ed/data_new_sign/N=(5, 4)_4x3/HubbardED_Slater_4x3_(5,4)_t_1_m_2.h5
 experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(8)-003.h5
 experimenting/ed/data_new_sign/N=(6, 6)_4x4/HubbardED_Slater_4x4_(6,6)_t_1_m_2_sectors_(0)-002.h5

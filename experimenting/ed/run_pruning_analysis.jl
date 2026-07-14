@@ -1,3 +1,18 @@
+#=
+run_pruning_analysis.jl
+
+Run pruning analysis on a set of optimized unitary parameter mapping files.
+
+Usage:
+  julia --project=.. run_pruning_analysis.jl [folder]
+
+Arguments:
+  folder (optional): The path to the folder containing optimization files. Default: "data/N=(4, 4)_3x3_2".
+
+Examples:
+  julia --project=.. run_pruning_analysis.jl data/N=(4, 4)_3x3_2
+=#
+
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -13,7 +28,7 @@ using Zygote
 using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
 using ExponentialUtilities
-using CUDA
+# using CUDA
 using Dates
 
 include("ed_objects.jl")
@@ -21,6 +36,23 @@ include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
 include("logging.jl")
+
+
+"""
+    parse_arguments(args::Vector{String})
+
+Parse command line arguments for running pruning analysis.
+Expected arguments:
+1. folder (String): Path to the folder containing unitary optimization files. Default: "data/N=(4, 4)_3x3_2"
+"""
+function parse_arguments(args::Vector{String})
+    folder = "data/N=(4, 4)_3x3_2"
+    if length(args) >= 1
+        folder = args[1]
+    end
+    return folder
+end
+
 
 
 function run_pruning_analysis(folder)
@@ -62,7 +94,7 @@ function run_pruning_analysis(folder)
 
     total_params = 0
 
-    Threads.@threads for k in 1:num_maps
+    @safe_threads for k in 1:num_maps
         iter_data = load_saved_dict(iter_files[k])
         ending_U_index = iter_data["u_idx"]
         ending_U_level = get(instructions, "ending level", 1) # target level 
@@ -134,7 +166,7 @@ function run_pruning_analysis(folder)
 
     println("Done evaluating Overlaps. Saving metrics to disk...")
     # Optionally save results out
-    JLD2.jldsave(joinpath(folder, "pruning_analysis.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
+    # JLD2.jldsave(joinpath(folder, "pruning_analysis.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
 
     display(error_data)
     println("\n=== SUMMARY STATISTICS ===")
@@ -155,14 +187,10 @@ function run_pruning_analysis(folder)
     # display(plot(thresholds, mean(error_data, dims=2), xscale=:log10, yscale=:log10, xlabel="Threshold Cutoff", ylabel="Mean Unitary Misfit Error (Loss)", title="Pruning Deficit Error Tracking"))
 end
 
-# Check if script is run directly
 function @main(ARGS)
     log_path = make_log_path(@__DIR__, "run_pruning_analysis")
     with_logging(log_path) do
-    if length(ARGS) == 1
-        run_pruning_analysis("$(ARGS[1])")
-    else
-        run_pruning_analysis("data/N=(4, 4)_3x3_2")
-    end
+        folder = parse_arguments(ARGS)
+        run_pruning_analysis(folder)
     end # with_logging
 end

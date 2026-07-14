@@ -1,0 +1,51 @@
+================================================================================
+Timestamp: 2026-07-10T13:19:40.967
+Command run: julia testing/test_su2_slater_selection.jl 
+================================================================================
+=== Running SU(2) Slater Selection Tests ===
+
+--- Test 1: Loading H5 with su2_symmetry=true ---
+Loading hdf5 data: /home/jek354/research/ML-signproblem/experimenting/ed/data_new_sign/N=(3, 3)_3x3/HubbardED_Slater_3x3_(3,3)_t_1_m_2.h5 with sign convention: spin_first
+Computing slater ground state for sector 0
+Computing slater ground state for sector 1
+Computing slater ground state for sector 2
+Computing slater ground state for sector 3
+Computing slater ground state for sector 4
+Computing slater ground state for sector 5
+Computing slater ground state for sector 6
+Computing slater ground state for sector 7
+Computing slater ground state for sector 8
+[[-11.863088651085073, -11.812177939452981], [-11.782812937068176, -11.728534173701222], [-11.782812937061822, -11.72853417370074], [-11.782812937068373, -11.728534173701293], [-11.810667849236337, -11.756803094623582], [-11.810667849236326, -11.75680309462555], [-11.782812937068464, -11.728534173701084], [-11.810667849236339, -11.756803094627005], [-11.81066784923633, -11.756803094625898]]
+Computing slater ground state for sector 7
+Computing indexer
+H5 Loaded successfully. target_vecs size: (61, 783)
+Computing slater ground state for sector 0
+Computing slater ground state for sector 1
+Computing slater ground state for sector 2
+Computing slater ground state for sector 3
+Computing slater ground state for sector 4
+Computing slater ground state for sector 5
+Computing slater ground state for sector 6
+Computing slater ground state for sector 7
+Computing slater ground state for sector 8
+Computing slater ground state for sector 7
+Selected k_min: 7, Slater index: 193
+Is doubly occupied: true
+
+--- Test 2: Loading JLD2 with su2_symmetry=true and use_slater_reference=true ---
+Meta data:
+Selected ground state symmetry sector (SU(2) filtered): 1
+JLD2 Loaded successfully. target_vecs size: (62, 68)
+JLD2 Selected k_min: 1, Slater index: 1
+JLD2 Is doubly occupied: true
+
+--- Test 3: Loading JLD2 with su2_symmetry=true and use_slater_reference=false ---
+Meta data:
+Selected ground state symmetry sector (SU(2) filtered): 1
+JLD2 Loaded successfully (no reference). target_vecs size: (61, 68)
+
+--- Test 4: Loading odd electron counts with su2_symmetry=true (Expecting Error) ---
+Loading hdf5 data: /home/jek354/research/ML-signproblem/experimenting/ed/data_new_sign/N=(3, 2)_3x2/HubbardED_Slater_3x2_(3,2)_t_1_m_2.h5 with sign convention: spin_first
+PASSED: Correctly raised error: ErrorException("Odd number of electrons (5), cannot have SU(2) symmetry with doubly occupied sites.")
+
+=== All SU(2) Slater Selection Tests Passed! ===

@@ -7,10 +7,10 @@
 #SBATCH -N 1                                 # Total number of nodes requested
 #SBATCH -n 2                                 # Total number of cores requested
 #SBATCH --get-user-env                       # retrieve the users login environment
-#SBATCH --mem=128G                             # server memory requested (per node)
-#SBATCH -t 72:00:00                           # Time limit (hh:mm:ss)
-#SBATCH --partition=aimi                       # Request partition
-#SBATCH --nodelist=aimi-cpu-01
+#SBATCH --mem=20G                             # server memory requested (per node)
+#SBATCH -t 1-00:00:00                           # Time limit (hh:mm:ss)
+#SBATCH --partition=kim                       # Request partition
+#SBATCH --nodelist=kim-cpu-01
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed/
-julia --threads=auto --project=/home/jek354/research/ML-signproblem/experimenting run_ed_lanczos_momentum.jl
+julia --threads=auto --project=/home/jek354/research/ML-signproblem/experimenting run_ed_lanczos_momentum.jl "$@"

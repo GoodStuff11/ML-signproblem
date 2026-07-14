@@ -58,7 +58,13 @@ struct NeuralNetContext
     U_value::Float64
     electrons::Tuple{Int,Int}
     U_max::Float64
+    k_steps::Int
+    l_step::Int
+    k_max::Int
 end
+
+NeuralNetContext(U_value, electrons, U_max) = NeuralNetContext(U_value, electrons, U_max, 1, 1, 10)
+
 
 struct CoefficientInterpolator{T}
     interpolated_c::Vector{T}
@@ -108,11 +114,22 @@ function LegendreStrategy(coefficients_by_u::Dict{Int,<:Any}, labels, dim::Vecto
     end
     bd = generate_basis_degrees(length(labels_f), dim; labels=labels_f)
 
+    # Compute P and its pseudoinverse once since they only depend on labels, basis degrees, and dim.
+    println("Building Legendre interpolator matrix P and computing its pseudoinverse once...")
+    P = build_P_matrix(labels_f, bd, dim)
+    println("Rank of P: $(rank(P))  dimension of P: $(size(P))")
+    F = svd(P)
+    cond_P = iszero(F.S[end]) ? Inf : F.S[1] / F.S[end]
+    println("Info: Matrix P condition number: ", cond_P)
+
+    S_inv = [s > tol * F.S[1] ? 1 / s : 0.0 for s in F.S]
+    P_inv = F.V * Diagonal(S_inv) * F.U'
+
     interps = Dict{Int,CoefficientInterpolator}()
     for (u_idx, coeffs) in sort(collect(coefficients_by_u), by=first)
         c = filter_spin ? coeffs[valid] : coeffs
-        println("Building Legendre interpolator for u_idx=$(u_idx) (U=$(U_values[u_idx]))...")
-        interps[u_idx] = get_interpolator(c, labels_f, bd, dim; tol)
+        interpolated_c = P_inv * c
+        interps[u_idx] = CoefficientInterpolator{eltype(interpolated_c)}(interpolated_c, bd, length(dim))
     end
 
     return LegendreStrategy(interps, collect(Float64, U_values))
@@ -226,9 +243,11 @@ function featurize_all(raw_data;
     U_max,
     include_dim=false, dim_max=nothing,
     include_electrons=false,
-    use_scale_head::Bool=true)
+    use_scale_head::Bool=true,
+    include_trotter::Bool=false,
+    k_max::Int=10)
     n_feat = length(raw_data[1][3]) + 1   # d + 1 (k components + spin)
-    n_ctx = 1 + (include_dim ? 2 : 0) + (include_electrons ? 2 : 0)
+    n_ctx = 1 + (include_dim ? 2 : 0) + (include_electrons ? 2 : 0) + (include_trotter ? 2 : 0)
     n_per = [length(d[1]) for d in raw_data]
     offsets = [0; cumsum(n_per)]
     N = offsets[end]
@@ -240,9 +259,19 @@ function featurize_all(raw_data;
     Ctx = Matrix{Float32}(undef, n_ctx, N)
     Y = Vector{Float32}(undef, N)
     Y_log_scale = zeros(Float32, N)   # only filled when use_scale_head=true
+    Y_opt_loss = zeros(Float32, N)
 
-    Threads.@threads for ti in eachindex(raw_data)
-        (coefficients, labels, dim, U_value, electrons) = raw_data[ti]
+    @safe_threads for ti in eachindex(raw_data)
+        entry = raw_data[ti]
+        coefficients = entry[1]
+        labels = entry[2]
+        dim = entry[3]
+        U_value = entry[4]
+        electrons = entry[5]
+        opt_loss = entry[6]
+        k = length(entry) >= 8 ? entry[7] : 1
+        l = length(entry) >= 8 ? entry[8] : 1
+        
         ctx_base = if use_scale_head
             val = Float32(log10(max(U_value, 1e-4)))
             log_min = -4.0f0
@@ -253,6 +282,13 @@ function featurize_all(raw_data;
         end
         include_dim && append!(ctx_base, normalize_dim(dim, dim_max))
         include_electrons && append!(ctx_base, normalize_electrons(electrons, prod(dim) ÷ 2))
+
+        if include_trotter
+            k_norm = Float32(2.0 * k / k_max - 1.0)
+            l_norm = Float32(2.0 * l / k - 1.0)
+            push!(ctx_base, k_norm)
+            push!(ctx_base, l_norm)
+        end
 
         c32 = Float32.(coefficients)
 
@@ -272,12 +308,13 @@ function featurize_all(raw_data;
             Ctx[:, col] = ctx_base
             Y[col] = c32[j] * inv_rms   # raw when inv_rms=1, normalized otherwise
             Y_log_scale[col] = entry_log_scale
+            Y_opt_loss[col] = opt_loss
         end
     end
     if use_scale_head
         println("Y_log_scale range: [$(minimum(Y_log_scale)), $(maximum(Y_log_scale))]")
     end
-    return X1, X2, X3, X4, Ctx, Y, Y_log_scale
+    return X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss
 end
 
 # ─────────────────────────────────────────────────────────────
@@ -298,37 +335,148 @@ function load_u_coefficients_nn(folder, electrons, u_idx, e_metadata)
     U_value = e_metadata["meta_data"]["U_values"][u_idx]
     dic = load_saved_dict(joinpath(folder,
         "unitary_map_energy_symmetry=false_N=$(electrons)_u_$(u_idx).jld2"))
-    return dic["coefficients"][2], U_value
+    opt_loss = (haskey(dic, "metrics") && haskey(dic["metrics"], "loss")) ? Float32(dic["metrics"]["loss"][end]) : 0.0f32
+    return dic["coefficients"][2], U_value, opt_loss
 end
 
 function load_data_nn(electrons, system_size, u_indices; file_label="")
     folder, e_metadata, dim, labels = load_folder_header_nn(
         electrons, system_size; file_label)
-    u_vec = collect(u_indices)
-    result = Vector{Tuple}(undef, length(u_vec))
-    Threads.@threads for i in eachindex(u_vec)
-        coefficients, U_value = load_u_coefficients_nn(
-            folder, electrons, u_vec[i], e_metadata)
-        result[i] = (coefficients, labels, dim, U_value)
+    result = Tuple[]
+    for ui in u_indices
+        u_file = joinpath(folder, "unitary_map_energy_symmetry=false_N=$(electrons)_u_$(ui).jld2")
+        if !isfile(u_file)
+            continue  # skip missing indices (e.g. folders with fewer u-files than the range)
+        end
+        coefficients, U_value, opt_loss = load_u_coefficients_nn(folder, electrons, ui, e_metadata)
+        if !isnothing(coefficients)
+            push!(result, (coefficients, labels, dim, U_value, opt_loss))
+        end
+    end
+    if isempty(result)
+        @warn "No u-files found for N=$(electrons) $(system_size[1])x$(system_size[2])$(file_label) in range $(collect(u_indices)[[1,end]])"
     end
     return result
 end
 
-function load_all_data_nn(folder_specs)
+function fgate_to_label(g, Lvec)
+    # Dynamically resolve functions to handle different inclusion scopes
+    tf = @isdefined(Trotter) ? Trotter.TamFermion : Main.Trotter.TamFermion
+    tl = @isdefined(Trotter) ? Trotter.TamLib : Main.Trotter.TamLib
+
+    N_sites = prod(Lvec)
+    cre_up_sites = tf.int2occ(g.cre_up, N_sites)
+    cre_dn_sites = tf.int2occ(g.cre_dn, N_sites)
+    ann_up_sites = tf.int2occ(g.ann_up, N_sites)
+    ann_dn_sites = tf.int2occ(g.ann_dn, N_sites)
+
+    function make_ops(up_sites, dn_sites, op_type)
+        ops = Any[]
+        for s in up_sites
+            coords0 = tl.unravel_c(s - 1, Tuple(Lvec))
+            push!(ops, (Coordinate((coords0 .+ 1)...), 1, op_type))
+        end
+        for s in dn_sites
+            coords0 = tl.unravel_c(s - 1, Tuple(Lvec))
+            push!(ops, (Coordinate((coords0 .+ 1)...), 2, op_type))
+        end
+        return ops
+    end
+
+    ops_create = make_ops(cre_up_sites, cre_dn_sites, :create)
+    ops_annihilate = make_ops(ann_up_sites, ann_dn_sites, :annihilate)
+
+    site_idx(c) = tl.ravel_c(collect(c.coordinates) .- 1, Tuple(Lvec))
+    
+    sort!(ops_create, by = op -> (site_idx(op[1]), op[2]))
+    sort!(ops_annihilate, by = op -> (site_idx(op[1]), op[2]))
+
+    result = Vector{Tuple{Coordinate{length(Lvec),Int},Int,Symbol}}()
+    for op in ops_create
+        push!(result, (op[1], op[2], op[3]))
+    end
+    for op in ops_annihilate
+        push!(result, (op[1], op[2], op[3]))
+    end
+    return result
+end
+
+function load_data_trotter_nn(electrons, system_size, u_indices; file_label="", loss_type=:overlap)
+    folder = "data/N=$(electrons)_$(system_size[1])x$(system_size[2])$file_label"
+    if !isdir(folder)
+        @warn "Directory $folder not found."
+        return Tuple[]
+    end
+
+    N_sites = prod(system_size)
+    prefix = loss_type == :energy ? "trotter_N=$(N_sites)_loss_energy" : "trotter_N=$(N_sites)"
+
+    meta_file = joinpath(folder, "meta_data_and_E.jld2")
+    if !isfile(meta_file)
+        @warn "Metadata file $meta_file not found in $folder."
+        return Tuple[]
+    end
+    e_metadata = load_saved_dict(meta_file)
+    U_values = e_metadata["meta_data"]["U_values"]
+
+    shared_file = joinpath(folder, "$(prefix)_shared.jld2")
+    if !isfile(shared_file)
+        @warn "Shared Trotter file $shared_file not found in $folder."
+        return Tuple[]
+    end
+    shared_dict = load_saved_dict(shared_file)
+    gates = shared_dict["gates"]
+
+    labels = [fgate_to_label(g, system_size) for g in gates]
+
+    result = Tuple[]
+    for ui in u_indices
+        u_file = joinpath(folder, "$(prefix)_u_$(ui).jld2")
+        if !isfile(u_file)
+            continue
+        end
+        dic = load_saved_dict(u_file)
+        coefficients = dic["coefficients"]
+        if isnothing(coefficients)
+            continue
+        end
+        U_value = U_values[ui]
+        opt_loss = (haskey(dic, "metrics") && haskey(dic["metrics"], "loss")) ? Float32(dic["metrics"]["loss"][end]) : 0.0f32
+        push!(result, (coefficients, labels, system_size, U_value, opt_loss))
+    end
+    return result
+end
+
+function load_all_data_nn(folder_specs; is_trotter=false, loss_type=:overlap)
     all_raw = Any[]
     for (electrons, system_size, u_indices, file_label) in folder_specs
-        for (coefficients, labels, dim, U_value) in
-            load_data_nn(electrons, system_size, u_indices; file_label)
-            push!(all_raw, (coefficients, labels, dim, U_value, electrons))
+        if is_trotter
+            trotter_data = load_data_trotter_nn(electrons, system_size, u_indices; file_label, loss_type)
+            for (coefficients, labels, dim, U_value, opt_loss) in trotter_data
+                N_s = length(labels)
+                k_steps = length(coefficients) ÷ N_s
+                for l in 1:k_steps
+                    coeff_slice = coefficients[((l-1)*N_s + 1):(l*N_s)]
+                    push!(all_raw, (coeff_slice, labels, dim, U_value, electrons, opt_loss, k_steps, l))
+                end
+            end
+        else
+            for (coefficients, labels, dim, U_value, opt_loss) in
+                load_data_nn(electrons, system_size, u_indices; file_label)
+                push!(all_raw, (coefficients, labels, dim, U_value, electrons, opt_loss, 1, 1))
+            end
         end
     end
     return all_raw
 end
 
 function prepare_dataset_nn(folder_specs; U_max, include_dim=false,
-    dim_max=nothing, include_electrons=false, use_scale_head=true)
-    return featurize_all(load_all_data_nn(folder_specs);
-        U_max, include_dim, dim_max, include_electrons, use_scale_head)
+    dim_max=nothing, include_electrons=false, use_scale_head=true,
+    is_trotter=false, loss_type=:overlap, k_max=10)
+    raw_data = load_all_data_nn(folder_specs; is_trotter, loss_type)
+    return featurize_all(raw_data;
+        U_max, include_dim, dim_max, include_electrons, use_scale_head,
+        include_trotter=is_trotter, k_max)
 end
 
 
@@ -424,7 +572,7 @@ function compute_F_batch(model, X1, X2, X3, X4, Ctx; use_scale_head::Bool=true)
 end
 
 function to_device(x; use_gpu=true)
-    if use_gpu && CUDA.functional()
+    if use_gpu && @isdefined(CUDA) && CUDA.functional()
         try
             return Flux.fmap(CUDA.cu, x)
         catch e
@@ -448,9 +596,10 @@ end
 
 Returns per-epoch mean losses.
 """
-function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale;
+function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss;
     n_epochs=200, batch_size=256, lr=1e-3,
-    scale_loss_weight=3f0, use_scale_head::Bool=true, verbose=true)
+    scale_loss_weight=3f0, use_scale_head::Bool=true, verbose=true,
+    weighting_scheme::AbstractString="low_u")
     N = size(X1, 2)
     opt_state = Flux.setup(Flux.Adam(lr), model)
     loss_history = Float64[]
@@ -468,17 +617,69 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale;
             bCtx = Ctx[:, idx]
             bY = Y[idx]
             bY_ls = Y_log_scale[idx]
+            bY_ol = Y_opt_loss[idx]
 
             loss, grads = Flux.withgradient(model) do m
                 output, log_scale = compute_F_batch(m, bX1, bX2, bX3, bX4, bCtx; use_scale_head)
                 if use_scale_head
-                    # 1. Low-U Importance Weighting:
+                    # 1. Low-U / Loss Importance Weighting:
                     #    - Reconstruct log10(U) from log-normalized context input: log10(U) = 2.5 * (x_U + 1) - 4
-                    #    - Weight samples exponentially: w = exp(-0.5 * log10(U)) to prioritize small U
+                    #    - Weight samples exponentially or via monotonic function of optimized loss
                     #    - Normalize weights over batch such that mean(w) = 1.0
                     log_norm_U = bCtx[1, :]
                     log10_U = (log_norm_U .+ 1.0f0) .* 2.5f0 .- 4.0f0
-                    w = exp.( -0.5f0 .* log10_U )
+                    w = if weighting_scheme == "low_u_mild"
+                        # Gently favour small U: exp(-0.25 * log10(U)) = U^(-0.25)
+                        exp.( -0.25f0 .* log10_U )
+                    elseif weighting_scheme == "low_u"
+                        exp.( -0.5f0 .* log10_U )
+                    elseif weighting_scheme == "low_u_strong"
+                        # Strongly favour small U: exp(-1.5 * log10(U)) = U^(-1.5)
+                        exp.( -1.5f0 .* log10_U )
+                    elseif weighting_scheme == "low_u_very_strong"
+                        # Very aggressively favour small U: exp(-3.0 * log10(U)) = U^(-3.0)
+                        exp.( -3.0f0 .* log10_U )
+                    elseif weighting_scheme == "uniform"
+                        log10_U .* 0.0f0 .+ 1.0f0
+                    elseif weighting_scheme == "high_u"
+                        exp.( 0.5f0 .* log10_U )
+                    elseif weighting_scheme == "high_u_strong"
+                        # Stronger version: exp(1.5 * log10(U)) = U^1.5, heavily prioritises large U
+                        exp.( 1.5f0 .* log10_U )
+                    elseif weighting_scheme == "focus_u8"
+                        # Gaussian centred at log10(8) ≈ 0.903, σ ≈ 0.4 in log10 space
+                        exp.( -((log10_U .- 0.903f0) .^ 2) ./ (2f0 * 0.4f0^2) )
+                    elseif weighting_scheme == "loss_mild"
+                        (-log10.(max.(bY_ol, 1f-12))) .^ 1.15f0
+                    elseif weighting_scheme == "loss_std"
+                        (-log10.(max.(bY_ol, 1f-12))) .^ 2.0f0
+                    elseif weighting_scheme == "loss_power_mild"
+                        (max.(bY_ol, 1f-12)) .^ -0.07f0
+                    elseif weighting_scheme == "loss_power_std"
+                        (max.(bY_ol, 1f-12)) .^ -0.12f0
+                    elseif weighting_scheme == "loss_power_neg03"
+                        (max.(bY_ol, 1f-12)) .^ -0.3f0
+                    elseif weighting_scheme == "loss_power_neg04"
+                        (max.(bY_ol, 1f-12)) .^ -0.4f0
+                    elseif weighting_scheme == "loss_power_neg05"
+                        (max.(bY_ol, 1f-12)) .^ -0.5f0
+                    elseif weighting_scheme == "one_minus_loss_power_03"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 0.3f0
+                    elseif weighting_scheme == "one_minus_loss_power_05"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 0.5f0
+                    elseif weighting_scheme == "one_minus_loss_power_07"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 0.7f0
+                    elseif weighting_scheme == "one_minus_loss_power_15"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 1.5f0
+                    elseif weighting_scheme == "one_minus_loss_power_20"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 2.0f0
+                    elseif weighting_scheme == "one_minus_loss_power_25"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 2.5f0
+                    elseif weighting_scheme == "one_minus_loss_power_10"
+                        (1.0f0 .- clamp.(bY_ol, 0f0, 1f0)) .^ 1.0f0
+                    else
+                        error("Unknown weighting_scheme: $weighting_scheme")
+                    end
                     w_mean = sum(w) / length(w)
                     w = w ./ w_mean
                     
@@ -556,10 +757,16 @@ function NeuralNetStrategy(folder_specs;
     embed_dim=64,
     context_hidden=[64, 32],
     scale_hidden=[32, 16],
-    use_scale_head::Bool=false)
+    use_scale_head::Bool=false,
+    weighting_scheme::AbstractString="low_u",
+    scale_loss_weight::Float32=3.0f0,
+    is_trotter::Bool=false,
+    loss_type::Symbol=:overlap,
+    k_max::Int=10)
 
-    X1, X2, X3, X4, Ctx, Y, Y_log_scale = prepare_dataset_nn(folder_specs;
-        U_max, include_dim, dim_max, include_electrons, use_scale_head)
+    X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss = prepare_dataset_nn(folder_specs;
+        U_max, include_dim, dim_max, include_electrons, use_scale_head,
+        is_trotter, loss_type, k_max)
 
     n_ctx = size(Ctx, 1)
     f_dim = size(X1, 1)   # d + 1
@@ -571,11 +778,11 @@ function NeuralNetStrategy(folder_specs;
 
     _dev(x) = to_device(x; use_gpu)
     model_d = _dev(model)
-    X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls = (
-        _dev(X1), _dev(X2), _dev(X3), _dev(X4), _dev(Ctx), _dev(Y), _dev(Y_log_scale))
+    X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls, Yd_ol = (
+        _dev(X1), _dev(X2), _dev(X3), _dev(X4), _dev(Ctx), _dev(Y), _dev(Y_log_scale), _dev(Y_opt_loss))
 
-    train_mlp!(model_d, X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls;
-        n_epochs, batch_size, lr, use_scale_head)
+    train_mlp!(model_d, X1d, X2d, X3d, X4d, Ctxd, Yd, Yd_ls, Yd_ol;
+        n_epochs, batch_size, lr, use_scale_head, weighting_scheme, scale_loss_weight)
 
     return NeuralNetStrategy(
         Flux.cpu(model_d),
@@ -593,6 +800,12 @@ Predict coefficients using the trained MLP.
 """
 function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
     labels, dim::Vector{Int})
+    
+    # Check if the model expects Trotter features
+    n_ctx_expected = 1 + (s.include_dim ? 2 : 0) + (s.include_electrons ? 2 : 0)
+    n_ctx_actual = s.use_scale_head ? size(s.model.scale[1].weight, 2) : (size(s.model.context[1].weight, 2) - size(s.model.base[end].weight, 1))
+    include_trotter = (n_ctx_actual == n_ctx_expected + 2)
+
     return map(labels) do label
         k1, k2, k3, k4, spins = label_to_k(label, dim)
         x1 = reshape(nn_feature(k1, spins[1]), :, 1)
@@ -610,6 +823,18 @@ function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
         end
         s.include_dim && append!(feature_ctx, normalize_dim(dim, s.dim_max))
         s.include_electrons && append!(feature_ctx, normalize_electrons(ctx.electrons, prod(dim) ÷ 2))
+        
+        if include_trotter
+            k = :k_steps in fieldnames(typeof(ctx)) ? ctx.k_steps : 1
+            l = :l_step in fieldnames(typeof(ctx)) ? ctx.l_step : 1
+            k_max_val = :k_max in fieldnames(typeof(ctx)) ? ctx.k_max : 10
+            
+            k_norm = Float32(2.0 * k / k_max_val - 1.0)
+            l_norm = Float32(2.0 * l / k - 1.0)
+            push!(feature_ctx, k_norm)
+            push!(feature_ctx, l_norm)
+        end
+
         ctx_m = reshape(feature_ctx, :, 1)
 
         output, log_scale = compute_F_batch(s.model, x1, x2, x3, x4, ctx_m;
@@ -642,15 +867,21 @@ end
 Load a `NeuralNetStrategy` from the specified JLD2 file.
 """
 function load_neural_network(filepath::AbstractString)
-    if !isfile(filepath)
-        error("Neural network strategy file not found at: $filepath")
+    actual_path = filepath
+    if !isfile(actual_path)
+        resolved = joinpath("trained_neural_networks", "trained_neural_network_$(filepath).jld2")
+        if isfile(resolved)
+            actual_path = resolved
+        else
+            error("Neural network strategy file not found at: $filepath (also tried $resolved)")
+        end
     end
-    data = load(filepath)
+    data = load(actual_path)
     if !haskey(data, "strategy")
-        error("JLD2 file at $filepath does not contain a saved 'strategy'.")
+        error("JLD2 file at $actual_path does not contain a saved 'strategy'.")
     end
     strategy = data["strategy"]
-    println("Loaded neural network strategy from: $filepath")
+    println("Loaded neural network strategy from: $actual_path")
     return strategy
 end
 
@@ -674,13 +905,19 @@ function get_or_train_neural_strategy(nn_filepath::AbstractString, folder_specs;
     embed_dim=64,
     context_hidden=[64, 32],
     scale_hidden=[32, 16],
-    use_scale_head::Bool=false)
+    use_scale_head::Bool=false,
+    weighting_scheme::AbstractString="low_u",
+    scale_loss_weight::Float32=3.0f0,
+    is_trotter::Bool=false,
+    loss_type::Symbol=:overlap,
+    k_max::Int=10)
 
     if isfile(nn_filepath)
         println("Found existing neural network at $nn_filepath. Loading...")
         return load_neural_network(nn_filepath)
     else
         println("No existing neural network found at $nn_filepath. Training a new model...")
+        println("Training NN with architecture parameters: base_hidden=$base_hidden, embed_dim=$embed_dim, context_hidden=$context_hidden, scale_hidden=$scale_hidden")
         strategy = NeuralNetStrategy(folder_specs;
             U_max=U_max,
             include_dim=include_dim,
@@ -694,7 +931,12 @@ function get_or_train_neural_strategy(nn_filepath::AbstractString, folder_specs;
             embed_dim=embed_dim,
             context_hidden=context_hidden,
             scale_hidden=scale_hidden,
-            use_scale_head=use_scale_head
+            use_scale_head=use_scale_head,
+            weighting_scheme=weighting_scheme,
+            scale_loss_weight=scale_loss_weight,
+            is_trotter=is_trotter,
+            loss_type=loss_type,
+            k_max=k_max
         )
         save_neural_network(nn_filepath, strategy)
         return strategy

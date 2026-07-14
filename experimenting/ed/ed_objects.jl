@@ -29,6 +29,15 @@ import Base.Order: Ordering, lt
 struct RowSnake <: Ordering end
 struct ColSnake <: Ordering end
 
+function Base.isless(x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
+    for i in eachindex(x.coordinates)
+        if x.coordinates[i] != y.coordinates[i]
+            return x.coordinates[i] < y.coordinates[i]
+        end
+    end
+    return false
+end
+
 function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
     for i in eachindex(x.coordinates)
         if x.coordinates[i] != y.coordinates[i]
@@ -39,7 +48,7 @@ function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where
 end
 
 function Base.Order.lt(::ColSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
-    for i in reverse(eachindex(x.coordinates))
+    for i in eachindex(x.coordinates)
         if x.coordinates[i] != y.coordinates[i]
             return x.coordinates[i] < y.coordinates[i]
         end

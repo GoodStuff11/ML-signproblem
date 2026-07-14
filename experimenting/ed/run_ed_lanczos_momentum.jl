@@ -1,3 +1,23 @@
+#=
+run_ed_lanczos_momentum.jl
+
+Run exact diagonalization using Lanczos with momentum sector projections.
+
+Usage:
+  julia --project=.. run_ed_lanczos_momentum.jl [Lx] [Ly] [N_up] [N_down] [save_dir]
+
+Arguments:
+  Lx (optional): Lattice width (default: 2)
+  Ly (optional): Lattice height (default: 2)
+  N_up (optional): Number of spin-up electrons (default: 2)
+  N_down (optional): Number of spin-down electrons (default: 2)
+  save_dir (optional): Subdirectory where the output is saved, relative to the script directory (default: "data")
+
+Examples:
+  julia --project=.. run_ed_lanczos_momentum.jl 4 3 4 4 nn_test_data
+  julia --project=.. run_ed_lanczos_momentum.jl 2 2 2 2 data
+=#
+
 using Lattices
 using LinearAlgebra
 using Combinatorics
@@ -15,33 +35,73 @@ using ExponentialUtilities
 using CUDA
 using Dates
 
+include("utility_functions.jl")
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
-include("utility_functions.jl")
 include("logging.jl")
+
+
+"""
+    parse_arguments(args::Vector{String})
+
+Parse command line arguments for running Lanczos momentum.
+Expected arguments:
+1. Lx (Int): Lattice X dimension. Default: 2
+2. Ly (Int): Lattice Y dimension. Default: 2
+3. N_up (Int): Number of spin-up electrons. Default: 2
+4. N_down (Int): Number of spin-down electrons. Default: 2
+5. save_dir (String): Directory to save the output files. Default: "data"
+"""
+function parse_arguments(args::Vector{String})
+    Lx = 2
+    Ly = 2
+    N_up = 2
+    N_down = 2
+    save_dir = "data"
+
+    if length(args) >= 1
+        Lx = parse(Int, args[1])
+    end
+    if length(args) >= 2
+        Ly = parse(Int, args[2])
+    end
+    if length(args) >= 3
+        N_up = parse(Int, args[3])
+    end
+    if length(args) >= 4
+        N_down = parse(Int, args[4])
+    end
+    if length(args) >= 5
+        save_dir = args[5]
+    end
+
+    return Lx, Ly, N_up, N_down, save_dir
+end
 
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_ed_lanczos_momentum")
     with_logging(log_path) do
 
+    Lx, Ly, N_up_val, N_down_val, save_dir = parse_arguments(ARGS)
+
     U_values = [0.00001; LinRange(2.1, 9, 20)]
     U_values = sort([U_values; 10.0 .^ LinRange(-3, 2, 40)])
 
-    sign_convention = :coordinate_first
+    sign_convention = :spin_first
 
-    lattice_dimension = (2, 2)
+    lattice_dimension = (Lx, Ly)
     spin_polarized = true
 
     if spin_polarized
-        N_up = 2
-        N_down = 2
+        N_up = N_up_val
+        N_down = N_down_val
         N = (N_up, N_down)
     else
         N = 6
     end
-    file_name = joinpath(@__DIR__, "data", "N=$(N)_" * join(lattice_dimension, "x"))
+    file_name = joinpath(@__DIR__, save_dir, "N=$(N)_" * join(lattice_dimension, "x"))
     bc = "periodic"
     lattice = Square(lattice_dimension, if bc == "periodic"
         Periodic()
@@ -61,7 +121,7 @@ function (@main)(ARGS)
     all_E = Vector{Any}(undef, n_sectors)
     all_indexers = Vector{Any}(undef, n_sectors)
 
-    Threads.@threads for k in 1:n_sectors
+    @safe_threads for k in 1:n_sectors
         eig_indices = collect(all_eig_indices[k])
         k_tuple = Tuple(eig_indices)
 

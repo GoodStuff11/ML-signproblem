@@ -25,6 +25,7 @@ catch
 end
 
 # Include the source files
+include("../utility_functions.jl")
 include("../ed_objects.jl")
 include("../ed_functions.jl")
 include("../ed_optimization.jl")
@@ -58,11 +59,14 @@ function test_matrix_free_gradients()
     parameter_mapping = nothing
     parity = nothing
 
-    # Build the ops flat arrays the way ensure_operator_structure! does
+    # Build the ops flat arrays the way ensure_operator_structure! does (GPU representation)
     flat_rows = Int[]
     flat_cols = Int[]
     flat_vals = ComplexF64[]
     flat_params = Int[]
+
+    # Build CPU ops: Vector of tuples (rows_sub, cols_sub, vals_sub) for each parameter
+    ops_cpu = []
 
     # Simulate indices_by_param
     indices_by_param = [Int[] for _ in 1:num_params]
@@ -72,6 +76,9 @@ function test_matrix_free_gradients()
 
     for i in 1:num_params
         idx = indices_by_param[i]
+        rows_sub = Int[]
+        cols_sub = Int[]
+        vals_sub = ComplexF64[]
         for j in idx
             r = rows[j]
             c = cols[j]
@@ -90,7 +97,16 @@ function test_matrix_free_gradients()
                 push!(flat_vals, conj(s))
             end
             push!(flat_params, i)
+
+            # Build CPU-specific subgroups
+            push!(rows_sub, r)
+            push!(cols_sub, c)
+            push!(vals_sub, s)
+            push!(rows_sub, c)
+            push!(cols_sub, r)
+            push!(vals_sub, antihermitian ? -conj(s) : conj(s))
         end
+        push!(ops_cpu, (rows_sub, cols_sub, vals_sub))
     end
 
     ops = Dict(
@@ -109,7 +125,7 @@ function test_matrix_free_gradients()
     
     println("\n--- Testing CPU Matrix-Free Adjoint Gradient ---")
     # Note: adjoint_loss expects state2, state1 swapped
-    loss_cpu, back_cpu = Zygote.pullback(t -> adjoint_loss(t, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state2, state1, nothing, !use_symmetry, antihermitian), t_vals)
+    loss_cpu, back_cpu = Zygote.pullback(t -> adjoint_loss(t, ops_cpu, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, state2, state1, nothing, !use_symmetry, antihermitian), t_vals)
     grad_cpu = back_cpu(1.0)[1]
     
     println("CPU Matrix-Free Loss: $loss_cpu")
