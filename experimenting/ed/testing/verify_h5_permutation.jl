@@ -39,11 +39,7 @@ function (@main)(ARGS)
     n_up, n_dn = N_elec
 
     # Parse Lvec from folder name
-    Lvec = [3, 3]
-    m_dim = match(r"_(?<W>\d+)x(?<H>\d+)", folder)
-    if !isnothing(m_dim)
-        Lvec = [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
-    end
+    Lvec = parse_lattice_dimension(folder)
     N_sites = prod(Lvec)
     println("Lvec = $Lvec, N_sites = $N_sites, N_elec = $N_elec")
 
@@ -91,8 +87,8 @@ function (@main)(ARGS)
     state_to_kron_idx = Dict(val => idx for (idx, val) in enumerate(kron_ints))
     sector_indices_in_kron = [state_to_kron_idx[val] for val in basis_sector]
 
-    H_hop_sector = (F_total * H_hop_real * F_total')[sector_indices_in_kron, sector_indices_in_kron]
-    H_int_sector = (F_total * H_int_real * F_total')[sector_indices_in_kron, sector_indices_in_kron]
+    H_hop_sector = (F_total*H_hop_real*F_total')[sector_indices_in_kron, sector_indices_in_kron]
+    H_int_sector = (F_total*H_int_real*F_total')[sector_indices_in_kron, sector_indices_in_kron]
 
     println("\n=== Eigenvalue comparison ===")
     println("target_vecs size: $(size(target_vecs))")
@@ -117,7 +113,7 @@ function (@main)(ARGS)
             H_full = H_hop_sector .+ U .* H_int_sector
 
             # Get the eigenvector from target_vecs (row u_idx+1, since row 1 is reference)
-            psi = Vector{ComplexF64}(target_vecs[u_idx + 1, :])
+            psi = Vector{ComplexF64}(target_vecs[u_idx+1, :])
 
             # Compute energy expectation value
             E_trotter = real(dot(psi, H_full * psi))

@@ -48,9 +48,8 @@ using HDF5
 using Zygote
 
 # Include utility_functions.jl and trotter.jl
-if !isdefined(Main, :UtilityFunctions)
-    include("utility_functions.jl")
-end
+include("data_path.jl")
+include("utility_functions.jl")
 using .UtilityFunctions
 include("trotter.jl")
 using .Trotter
@@ -109,71 +108,14 @@ function parse_arguments(args::Vector{String})
     end
 
     if length(filtered_args) < 1
-        error("Please input a folder. Ex: data/N=(2, 2)_2x2")
+        error("Please input a folder. Ex: N=(2, 2)_2x2")
     end
-    folder = filtered_args[1]
+    folder = data_folder(filtered_args[1])
 
     u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
     u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing
 
     return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg
-end
-
-"""
-    construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, basis_sector::Vector{UInt}, U_values::Vector{Float64})
-
-Construct a custom Slater determinant reference state vector if requested by the command line argument.
-Returns a `Vector{ComplexF64}` or `nothing`.
-"""
-function construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, basis_sector::Vector{UInt}, U_values::Vector{Float64})
-    if isnothing(custom_ref_state_arg)
-        return nothing
-    end
-
-    local slater_idx
-    if custom_ref_state_arg == "slater"
-        jld2_path = joinpath(folder, "meta_data_and_E.jld2")
-        if isfile(jld2_path)
-            println("Finding Slater ground state index from JLD2 file...")
-            dic = load_saved_dict(jld2_path)
-            all_E = dic["E"]
-            U_values_for_sector = dic["meta_data"]["U_values"]
-            k_min = find_best_energy_sector(all_E, U_values_for_sector; data=dic)
-            slater_idx = get_slater_ground_state(dic, k_min)
-        else
-            println("Finding Slater ground state index from HDF5 file...")
-            valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-            if isempty(valid_files)
-                error("No HubbardED HDF5 file found in folder: $folder")
-            end
-            h5_file = joinpath(folder, valid_files[1])
-            slater_idx = h5open(h5_file, "r") do data
-                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-                k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-                return get_slater_ground_state(data, k_min)
-            end
-        end
-        println("Slater ground state index found: $slater_idx")
-    else
-        try
-            slater_idx = parse(Int, custom_ref_state_arg)
-        catch e
-            error("Invalid --custom_ref_state value: '$custom_ref_state_arg'. Must be 'slater' or an integer index.")
-        end
-        if slater_idx < 1 || slater_idx > length(basis_sector)
-            error("Parsed Slater index $slater_idx is out of bounds (1 to $(length(basis_sector))).")
-        end
-        println("Using user-specified Slater index: $slater_idx")
-    end
-
-    if slater_idx == -1
-        error("No Slater ground state could be found in the current sector.")
-    end
-
-    custom_ref = zeros(ComplexF64, length(basis_sector))
-    custom_ref[slater_idx] = 1.0
-    return custom_ref
 end
 
 function (@main)(ARGS)
@@ -182,144 +124,40 @@ function (@main)(ARGS)
         folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg = parse_arguments(ARGS)
 
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
-        if isnothing(custom_ref_state_arg)
-            U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
-                load_ED_data(folder; verbose=true, sign_convention=:spin_first)
-        else
-            U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
-                load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=false)
-        end
+        U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
+            load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=isnothing(custom_ref_state_arg))
 
         n_up, n_dn = N_elec
 
         # Parse dimension from folder name, default to (3, 3) if fails
-        Lvec = [3, 3]
-        try
-            m_dim = match(r"_(?<W>\d+)x(?<H>\d+)", folder)
-            if !isnothing(m_dim)
-                Lvec = [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
-            end
-        catch e
-            @warn "Could not parse dimensions from folder path, using default [3, 3]"
-        end
+        Lvec = parse_lattice_dimension(folder)
         N_sites = prod(Lvec)
 
-        # Helper to convert Coordinate to 0-based site index
-        function coord_to_site_idx(coord, Lvec)
-            c0 = coord.coordinates .- 1
-            return Trotter.ravel_c(c0, Tuple(Lvec))
+        # 2. Computing the basis
+        # Convert each (up_coords_set, dn_coords_set) entry in the indexer to a combined
+        # 2N-bit integer that fgateToTauSector expects: up bits in the low N bits, dn bits
+        # in the upper N bits (via combineSpinInts).
+        basis_sector = Trotter.get_basis_sector(indexer, Lvec, N_sites)
+
+        # 3. Find the Hamiltonian
+        # Derive the momentum sector from the indexer (same convention as trotter_exp_testing.jl).
+        # indexer.k is 1-based coordinate tuple; q_target is the C-order flat index (0-based).
+        q_target = nothing
+        if !isnothing(indexer.k) && !isnothing(indexer.lattice_dims)
+            q_target = Trotter.ravel_c(Tuple(k - 1 for k in indexer.k), Tuple(Lvec))
         end
+        @time H_hop_sector, basis_dict_sector, _ = Trotter.TamFermion.HubbardMomentumBasis(
+            1.0, 0.0, Lvec, (n_up, n_dn); q_target=q_target
+        )
+        @time H_int_sector, _, _ = Trotter.TamFermion.HubbardMomentumBasis(
+            0.0, 1.0, Lvec, (n_up, n_dn); q_target=q_target
+        )
 
-        # Helper to convert Coordinate set to binary representation (the configuration stored in indexer)
-        function coord_set_to_binary(coord_set, Lvec)
-            val = zero(UInt)
-            for coord in coord_set
-                site_idx = coord_to_site_idx(coord, Lvec)
-                val |= (one(UInt) << site_idx)
-            end
-            return val
-        end
-
-        # 2. Reconstruct the sector basis integers
-        local basis_sector
-        if !isnothing(indexer)
-            println("Reconstructing basis sector from indexer...")
-            basis_sector = Vector{UInt}(undef, length(indexer.inv_comb_dict))
-            for (idx, conf) in enumerate(indexer.inv_comb_dict)
-                u_bin = coord_set_to_binary(conf[1], Lvec)
-                d_bin = coord_set_to_binary(conf[2], Lvec)
-                basis_sector[idx] = Trotter.combineSpinInts(u_bin, d_bin, N_sites)
-            end
-        else
-            println("Reconstructing basis sector from HDF5 file...")
-            valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-            if isempty(valid_files)
-                error("No indexer loaded, and no HubbardED HDF5 file found in folder: $folder")
-            end
-            h5_file = joinpath(folder, valid_files[1])
-
-            basis_sector = h5open(h5_file, "r") do data
-                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-                k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-
-                separate_spins_stored = (read(data, "metadata/slater_labels/$k_min") isa Dict)
-                if !separate_spins_stored
-                    slater_labels = read(data, "metadata/slater_labels/$k_min")
-                    H_dim = size(slater_labels, 2)
-                else
-                    slater_labels_up = read(data, "metadata/slater_labels/$k_min/up")
-                    slater_labels_down = read(data, "metadata/slater_labels/$k_min/dn")
-                    H_dim = size(slater_labels_up, 2)
-                end
-
-                # Helper to convert orbital indices to binary representation
-                function orbital_indices_to_binary(indices, N)
-                    val = zero(UInt)
-                    for idx in indices
-                        val |= (one(UInt) << idx)
-                    end
-                    return val
-                end
-
-                basis_sector_h5 = Vector{UInt}(undef, H_dim)
-                for idx in 1:H_dim
-                    up_indices = separate_spins_stored ? slater_labels_up[:, idx] : slater_labels[:, idx, 1]
-                    dn_indices = separate_spins_stored ? slater_labels_down[:, idx] : slater_labels[:, idx, 2]
-
-                    u_bin = orbital_indices_to_binary(up_indices, N_sites)
-                    d_bin = orbital_indices_to_binary(dn_indices, N_sites)
-
-                    # Combine up and dn spins
-                    basis_sector_h5[idx] = Trotter.combineSpinInts(u_bin, d_bin, N_sites)
-                end
-
-                return basis_sector_h5
-            end
-        end
-        # 3. Supply Hamiltonian components in the momentum sector directly
-        # Determine the target momentum sector index q_target
-        local q_target
-        if isnothing(indexer)
-            # Find the sector from HDF5 file
-            valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-            if isempty(valid_files)
-                error("No indexer loaded, and no HubbardED HDF5 file found in folder: $folder")
-            end
-            h5_file = joinpath(folder, valid_files[1])
-            q_target = h5open(h5_file, "r") do data
-                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-                k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-                kvecs = read(data, "metadata/kvecs")
-                k_tuple = tuple((kvecs[:, k_min+1] .+ 1)...)
-                return Trotter.ravel_c(k_tuple .- 1, Tuple(Lvec))
-            end
-        else
-            q_target = Trotter.ravel_c(indexer.k .- 1, Tuple(indexer.lattice_dims))
-        end
-
-        println("Constructing sector Hamiltonians directly using HubbardMomentumBasis (q_target = $q_target)...")
-        @time H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(1.0, 0.0, Lvec, (n_up, n_dn); q_target=q_target)
-        @time H_int_mom, _, _ = TamFermion.HubbardMomentumBasis(0.0, 1.0, Lvec, (n_up, n_dn); q_target=q_target)
-
-        # 4. Map basis_sector to basis_dict["ints"] and find the permutation mapping
-        state_to_idx = Dict(val => idx for (idx, val) in enumerate(basis_dict["ints"]))
-        for val in basis_sector
-            if !haskey(state_to_idx, val)
-                error("State $val from basis_sector not found in HubbardMomentumBasis sector ints!")
-            end
-        end
-        perm = [state_to_idx[val] for val in basis_sector]
-
-        H_hop_sector = H_hop_mom[perm, perm]
-        H_int_sector = H_int_mom[perm, perm]
-
-        # 5. Enumerate Trotter gates and tau terms
+        # 4. Enumerate Trotter gates and tau terms
         @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=true)
         @time tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_sector; antihermitian=antihermitian)
 
-        # 6. Set up scan range
+        # 5. Set up scan range
         scan_instructions = Dict{String,Any}(
             "starting level" => 1,
             "ending level" => 1,
@@ -352,12 +190,10 @@ function (@main)(ARGS)
             end
         end
 
-        custom_ref = construct_custom_ref_state(custom_ref_state_arg, folder, basis_sector, U_values)
-
-        # 7. Run scan optimization
+        # 6. Run scan optimization
         Trotter.interaction_scan_map_to_state(
             state_vecs, scan_instructions, gates, tau_terms, basis_sector, N_sites;
-            maxiters=maxiters,
+            maxiters=10,
             optimizer=[:LBFGS, :GradientDescent, :LBFGS],
             initialization_samples=10,
             H_hopping=H_hop_sector, H_interaction=H_int_sector,
@@ -365,7 +201,6 @@ function (@main)(ARGS)
             loss_type=loss_type,
             U_values=U_values,
             antihermitian=antihermitian,
-            custom_ref_state=custom_ref
         )
 
         return 0

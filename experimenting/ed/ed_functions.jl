@@ -183,9 +183,9 @@ function get_slater_ground_state_jld2(data::Dict, sector::Int)
     sites_list = meta_data["sites"]
     clean_coord(c) = Coordinate(c.coordinates...)
     L = if isa(sites_list, AbstractString)
-        m_dim = match(r"(?<W>\d+)x(?<H>\d+)", sites_list)
-        if !isnothing(m_dim)
-            [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
+        parsed_dim = parse_lattice_dimension(sites_list)
+        if !isnothing(parsed_dim)
+            parsed_dim
         else
             error("Could not parse lattice dimensions from sites string: '$sites_list'")
         end
@@ -204,7 +204,7 @@ function get_slater_ground_state_jld2(data::Dict, sector::Int)
     else
         state_prob = abs.(target_vecs[1, :])
     end
-    indices_of_interest = findall(state_prob .> 0.1)
+    indices_of_interest = findall(state_prob .> 0.5 * maximum(state_prob))
 
     single_spin_energies = zeros(Float64, L[1] * L[2])
     momenta = [[i, j] for j in 0:L[2]-1 for i in 0:L[1]-1]
@@ -240,7 +240,7 @@ function get_slater_ground_state_h5(data, sector::Int)
     L = read(data, "metadata/Lvec")
     Ne = read(data, "metadata/nup"), read(data, "metadata/ndown")
     state_prob = abs.(read(data, "data/evecs/$sector")[:, 1, 1])
-    indices_of_interest = findall(state_prob .> 0.1)
+    indices_of_interest = findall(state_prob .> 0.5 * maximum(state_prob))
 
     separate_spins_stored = (read(data, "metadata/slater_labels/$sector") isa Dict)
     if !separate_spins_stored
@@ -582,7 +582,10 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
     use_slater_reference = get(kwargs, :use_slater_reference, true)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
 
-    valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]# && occursin("(0)", f)] # remove (0) requirement
+    valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
+    if isempty(valid_files)
+        error("No meta_data_and_E.jld2 file, and no HubbardED HDF5 files found in folder: $folder")
+    end
 
     file_path = joinpath(folder, valid_files[1])
     if verbose
@@ -790,9 +793,9 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
         # 1. Determine lattice dimensions Lvec from the metadata sites
         sites_list = meta_data["sites"]
         Lvec = if isa(sites_list, AbstractString)
-            m_dim = match(r"(?<W>\d+)x(?<H>\d+)", sites_list)
-            if !isnothing(m_dim)
-                [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
+            parsed_dim = parse_lattice_dimension(sites_list)
+            if !isnothing(parsed_dim)
+                parsed_dim
             else
                 error("Could not parse lattice dimensions from sites string: '$sites_list'")
             end
@@ -877,6 +880,41 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
 
     return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, requested_sign_convention
 end
+
+"""
+    parse_electron_count(path::AbstractString) -> Union{Tuple{Int, Int}, Nothing}
+
+Parse the spin-up and spin-down electron counts from a path containing a pattern like `N=(n_up, n_dn)`.
+Returns a tuple `(n_up, n_dn)` or `nothing` if parsing fails.
+"""
+function parse_electron_count(path::AbstractString; default=:crash)
+    m = match(r"N=\((?<N>\d+),\s*(?<M>\d+)\)", path)
+    if !isnothing(m)
+        return (parse(Int, m[:N]), parse(Int, m[:M]))
+    end
+    if default == :crash
+        error("Unable to parse $path to collect electron count N=(Nup, Ndn)")
+    end
+    return default
+end
+
+"""
+    parse_lattice_dimension(path::AbstractString) -> Union{Vector{Int}, Nothing}
+
+Parse the lattice dimensions (width W and height H) from a path or string containing a pattern like `WxH`.
+Returns a 2-element vector `[W, H]` or `nothing` if parsing fails.
+"""
+function parse_lattice_dimension(path::AbstractString; default=:crash)
+    m = match(r"(?<W>\d+)x(?<H>\d+)", path)
+    if !isnothing(m)
+        return [parse(Int, m[:W]), parse(Int, m[:H])]
+    end
+    if default == :crash
+        error("Unable to parse $path to collect lattice dimension (NxM)")
+    end
+    return nothing
+end
+
 
 """
     load_ED_data(folder; verbose=false, kwargs...)

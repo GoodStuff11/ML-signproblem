@@ -2,15 +2,17 @@
 run_pruning_analysis.jl
 
 Run pruning analysis on a set of optimized unitary parameter mapping files.
+Supports both exact exponential (unitary map) and Trotterized optimizations.
 
 Usage:
-  julia --project=.. run_pruning_analysis.jl [folder]
+  julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>]
 
 Arguments:
   folder (optional): The path to the folder containing optimization files. Default: "data/N=(4, 4)_3x3_2".
-
-Examples:
-  julia --project=.. run_pruning_analysis.jl data/N=(4, 4)_3x3_2
+  --type (optional): Whether to use trotter or exact exponential coefficients. Default: "exact".
+  --custom_ref_state (optional): The custom reference state to use (e.g. "slater" or an integer index). Default: nothing.
+  --antihermitian (optional): Whether antihermitian generators were used. Default: false.
+  --loss (optional): The loss function used during optimization. Default: "overlap".
 =#
 
 using Lattices
@@ -28,145 +30,278 @@ using Zygote
 using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
 using ExponentialUtilities
-# using CUDA
 using Dates
+
+include("utility_functions.jl")
+using .UtilityFunctions
+
+include("trotter.jl")
+using .Trotter
+include("trotter_optimization.jl")
+using .TrotterOptimization
 
 include("ed_objects.jl")
 include("ed_functions.jl")
 include("ed_optimization.jl")
-include("utility_functions.jl")
 include("logging.jl")
+include("data_path.jl")
 
 
 """
     parse_arguments(args::Vector{String})
 
 Parse command line arguments for running pruning analysis.
-Expected arguments:
-1. folder (String): Path to the folder containing unitary optimization files. Default: "data/N=(4, 4)_3x3_2"
 """
 function parse_arguments(args::Vector{String})
-    folder = "data/N=(4, 4)_3x3_2"
-    if length(args) >= 1
-        folder = args[1]
+    folder = data_folder("N=(4, 4)_3x3_2")
+    type = :exact
+    custom_ref_state_arg = nothing
+    antihermitian = false
+    loss_type = :overlap
+    positional = String[]
+
+    for arg in args
+        if startswith(arg, "--type=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val == "trotter"
+                type = :trotter
+            elseif val == "exact"
+                type = :exact
+            else
+                error("Invalid --type: '$val'. Valid options: 'trotter', 'exact'")
+            end
+        elseif startswith(arg, "--custom_ref_state=")
+            custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--antihermitian")
+            if occursin("=", arg)
+                antihermitian = parse(Bool, split(arg, "=", limit=2)[2])
+            else
+                antihermitian = true
+            end
+        elseif startswith(arg, "--loss=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val == "overlap"
+                loss_type = :overlap
+            elseif val == "energy"
+                loss_type = :energy
+            else
+                error("Invalid --loss: '$val'. Valid options: 'overlap', 'energy'")
+            end
+        elseif startswith(arg, "--")
+            error("Unknown option: $arg")
+        else
+            push!(positional, arg)
+        end
     end
-    return folder
+
+    if length(positional) >= 1
+        folder = data_folder(positional[1])
+    end
+
+    return folder, type, custom_ref_state_arg, antihermitian, loss_type
 end
 
+function get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type)
+    local prefix
+    if type == :trotter
+        prefix = "trotter_N=$N_sites"
+        if !isnothing(custom_ref_state_arg)
+            prefix *= "_ref_$(custom_ref_state_arg)"
+        end
+        if antihermitian
+            prefix *= "_antihermitian"
+        end
+        if loss_type == :energy
+            prefix *= "_loss_energy"
+        end
+    else
+        prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$N"
+        if !isnothing(custom_ref_state_arg)
+            prefix *= "_ref_$(custom_ref_state_arg)"
+        end
+        if antihermitian
+            prefix *= "_antihermitian"
+        end
+        if loss_type == :energy
+            prefix *= "_loss_energy"
+        end
+    end
+    return prefix
+end
 
-
-function run_pruning_analysis(folder)
-    U_values, target_vecs, indexer, _, N, _, _, sign_convention = load_ED_data(folder)
+function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type)
+    sign_convention = type == :trotter ? :spin_first : :coordinate_first
+    use_slater_ref = (type == :trotter && isnothing(custom_ref_state_arg)) || (custom_ref_state_arg == "slater")
+    U_values, target_vecs, indexer, _, N, _, use_symmetry, sign_convention =
+        load_ED_data(folder; verbose=true, use_slater_reference=use_slater_ref, sign_convention=sign_convention)
 
     dim = length(indexer.inv_comb_dict)
 
-    # Load shared data
-    shared_data = load_saved_dict(joinpath(folder, "unitary_map_energy_symmetry=false_N=$(N)_shared.jld2"))
+    # Parse Lvec and N_sites for Trotter
+    dim_parsed = parse_lattice_dimension(folder)
+    N_sites = prod(dim_parsed)
 
-    coefficient_labels = shared_data["coefficient_labels"]
-    param_mapping = shared_data["param_mapping"]
-    parities = shared_data["parities"]
-    instructions = shared_data["instructions"]
+    prefix = get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type)
+
+    # Load shared data
+    shared_data_path = joinpath(folder, "$(prefix)_shared.jld2")
+    if !isfile(shared_data_path)
+        error("Shared data file not found at: $shared_data_path")
+    end
+    shared_data = load_saved_dict(shared_data_path)
 
     # Find coefficient iteration files
-    iter_files = filter(f -> occursin("_u_", basename(f)) && endswith(basename(f), ".jld2"), readdir(folder, join=true))
+    iter_files = filter(f -> startswith(basename(f), "$(prefix)_u_") && endswith(basename(f), ".jld2"), readdir(folder, join=true))
+    num_maps = length(iter_files)
+    if num_maps == 0
+        error("No iteration files found matching prefix: $(prefix)_u_")
+    end
+
+    state1 = target_vecs[1, :]
+
+    local gates, basis_ints
+    # Shared keys/structures for Exact Exp
+    local coefficient_labels, param_mapping, parities, cached_structures
+    if type == :trotter
+        println("Reconstructing basis sector and gates for Trotter...")
+        basis_ints = Trotter.get_basis_sector(indexer, dim_parsed, N_sites)
+        gates = Trotter.enumerate_ferm_excitations(2, dim_parsed; conserve_mom=true, conserve_sz=true, include_diagonal=true)
+    else#if type == :exact
+        coefficient_labels = shared_data["coefficient_labels"]
+        param_mapping = shared_data["param_mapping"]
+        parities = shared_data["parities"]
+
+        # PRE-COMPUTE Sparse Matrix Mappings
+        cached_structures = Dict()
+        for o_idx in eachindex(coefficient_labels)
+            if isnothing(coefficient_labels[o_idx]) || isempty(coefficient_labels[o_idx])
+                continue
+            end
+
+            sorted_labels = sort(coefficient_labels[o_idx], order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+            rows, cols, signs, ops_list = build_n_body_structure_from_keys(sorted_labels, indexer, Float64; sign_convention=sign_convention)
+            param_index_map = build_param_index_map(ops_list, coefficient_labels[o_idx])
+
+            cached_structures[o_idx] = (rows, cols, signs, param_index_map)
+        end
+    end
 
     thresholds = 10.0 .^ (-8:0.1:0)
     removed_terms = zeros(Int, length(thresholds), length(U_values))
     error_data = zeros(Float64, length(thresholds), length(U_values))
 
-    num_maps = length(iter_files)
     println("Analyzing $num_maps unitary mappings against $(length(thresholds)) thresholds")
-
-    # PRE-COMPUTE Sparse Matrix Mappings
-    cached_structures = Dict()
-    for o_idx in eachindex(coefficient_labels)
-        if isnothing(coefficient_labels[o_idx]) || isempty(coefficient_labels[o_idx])
-            continue
-        end
-
-        sorted_labels = sort(coefficient_labels[o_idx], order=sign_convention == :spin_first ? ColSnake() : RowSnake())
-        rows, cols, signs, ops_list = build_n_body_structure_from_keys(sorted_labels, indexer, Float64; sign_convention=sign_convention)
-        param_index_map = build_param_index_map(ops_list, coefficient_labels[o_idx])
-
-        cached_structures[o_idx] = (rows, cols, signs, param_index_map)
-    end
 
     total_params = 0
 
     @safe_threads for k in 1:num_maps
         iter_data = load_saved_dict(iter_files[k])
         ending_U_index = iter_data["u_idx"]
-        ending_U_level = get(instructions, "ending level", 1) # target level 
-
-        starting_U_index = 1 # ref_u_idx defined in the interaction mapping
-        starting_U_level = 1 # ref_level
-
-        # Exact Overlap test
-        state1 = target_vecs[starting_U_index, :]
         state2 = target_vecs[ending_U_index, :]
 
-        coeffs = iter_data["coefficients"]
-        total_params = sum(isnothing(c) ? 0 : length(c) for c in coeffs)
+        if type == :exact
+            coeffs = iter_data["coefficients"]
+            total_params = sum(isnothing(c) ? 0 : length(c) for c in coeffs)
 
-        println("Processing Map $k / $num_maps (U index: $ending_U_index)")
-        for (l, threshold) in enumerate(thresholds)
+            println("Processing Map $k / $num_maps (U index: $ending_U_index)")
+            for (l, threshold) in enumerate(thresholds)
 
-            # Form Pruned Matrix
-            pruned_mats = []
-            removed_count = 0
+                # Form Pruned Matrix
+                pruned_mats = []
+                removed_count = 0
 
-            if isnothing(coeffs)
-                push!(pruned_mats, sparse(zeros(ComplexF64, dim, dim)))
-            else
-                for o_idx in eachindex(coeffs)
-                    if isnothing(coeffs[o_idx]) || isempty(coeffs[o_idx])
-                        continue
-                    end
-
-                    if o_idx > length(coefficient_labels) || isnothing(coefficient_labels[o_idx])
-                        continue
-                    end
-
-                    c_vals = coeffs[o_idx] isa AbstractArray ? copy(coeffs[o_idx]) : [coeffs[o_idx]]
-
-                    # Apply threshold
-                    removed_mask = abs.(c_vals) .< threshold
-                    removed_count += sum(removed_mask)
-
-                    for idx in eachindex(c_vals)
-                        if removed_mask[idx]
-                            c_vals[idx] = 0.0
+                if isnothing(coeffs)
+                    push!(pruned_mats, sparse(zeros(ComplexF64, dim, dim)))
+                else
+                    for o_idx in eachindex(coeffs)
+                        if isnothing(coeffs[o_idx]) || isempty(coeffs[o_idx])
+                            continue
                         end
+
+                        if o_idx > length(coefficient_labels) || isnothing(coefficient_labels[o_idx])
+                            continue
+                        end
+
+                        c_vals = coeffs[o_idx] isa AbstractArray ? copy(coeffs[o_idx]) : [coeffs[o_idx]]
+
+                        # Apply threshold
+                        removed_mask = abs.(c_vals) .< threshold
+                        removed_count += sum(removed_mask)
+
+                        for idx in eachindex(c_vals)
+                            if removed_mask[idx]
+                                c_vals[idx] = 0.0
+                            end
+                        end
+
+                        # Load matrix topology mapping variables directly from pre-computed cache
+                        rows, cols, signs, param_index_map = cached_structures[o_idx]
+                        vals = update_values(signs, param_index_map, c_vals, param_mapping[o_idx], parities[o_idx])
+
+                        mat = sparse(rows, cols, vals, dim, dim)
+                        if antihermitian
+                            mat = make_antihermitian(mat)
+                        else
+                            mat = make_hermitian(mat)
+                        end
+
+                        push!(pruned_mats, mat)
                     end
-
-                    # Load matrix topology mapping variables directly from pre-computed cache
-                    rows, cols, signs, param_index_map = cached_structures[o_idx]
-                    vals = update_values(signs, param_index_map, c_vals, param_mapping[o_idx], parities[o_idx])
-
-                    mat = sparse(rows, cols, vals, dim, dim)
-                    mat = make_hermitian(mat)
-
-                    push!(pruned_mats, mat)
                 end
+
+                # Combine across orders
+                summed_mat = isempty(pruned_mats) ? sparse(zeros(ComplexF64, dim, dim)) : sum(pruned_mats)
+
+                # Overlap Calculation with mapped state
+                if antihermitian
+                    mapped_state = expv(1.0, summed_mat, state1)
+                else
+                    mapped_state = expv(1im, summed_mat, state1)
+                end
+                mapped_overlap = state2' * mapped_state
+                true_loss = 1 - abs2(mapped_overlap)
+
+                removed_terms[l, ending_U_index] = removed_count
+                error_data[l, ending_U_index] = true_loss
             end
+        else # type == :trotter
+            A_base = iter_data["coefficients"]
+            total_params = length(A_base)
+            num_gates = length(gates)
+            stored_num_exp = length(A_base) ÷ num_gates
 
-            # Combine across orders
-            summed_mat = isempty(pruned_mats) ? sparse(zeros(ComplexF64, dim, dim)) : sum(pruned_mats)
+            println("Processing Trotter Map $k / $num_maps (U index: $ending_U_index)")
+            for (l, threshold) in enumerate(thresholds)
+                # Apply threshold to coefficients
+                A_pruned = copy(A_base)
+                removed_mask = abs.(A_pruned) .< threshold
+                removed_count = sum(removed_mask)
 
-            # Overlap Calculation with mapped state
-            mapped_state = expv(1im, summed_mat, state1)
-            mapped_overlap = state2' * mapped_state
-            true_loss = 1 - abs2(mapped_overlap)
+                for idx in eachindex(A_pruned)
+                    if removed_mask[idx]
+                        A_pruned[idx] = 0.0
+                    end
+                end
 
-            removed_terms[l, ending_U_index] = removed_count
-            error_data[l, ending_U_index] = true_loss
+                # Apply unitary sequence
+                psi = TrotterOptimization.apply_unitary(
+                    A_pruned, gates, state1, basis_ints, N_sites, stored_num_exp;
+                    antihermitian=antihermitian
+                )
+
+                mapped_overlap = state2' * psi
+                true_loss = 1 - abs2(mapped_overlap)
+
+                removed_terms[l, ending_U_index] = removed_count
+                error_data[l, ending_U_index] = true_loss
+            end
         end
     end
 
     println("Done evaluating Overlaps. Saving metrics to disk...")
-    # Optionally save results out
-    # JLD2.jldsave(joinpath(folder, "pruning_analysis.jld2"); error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
+    save_path = joinpath(folder, "pruning_analysis_$(prefix).jld2")
+    println("Saving results to: ", save_path)
+    JLD2.jldsave(save_path; error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
 
     display(error_data)
     println("\n=== SUMMARY STATISTICS ===")
@@ -175,22 +310,21 @@ function run_pruning_analysis(folder)
     println("Max parameters removed at max threshold: ", maximum(removed_terms[end, :]))
 
     # Evaluate a generic baseline error for reference
-    ref_overlap = abs2(target_vecs[1, :]' * target_vecs[33, :])
-    println("Unmapped (Baseline) Error between State U=$(round(U_values[1], digits=2)) and State U=$(round(U_values[33], digits=2)): ", 1 - ref_overlap)
-    println("Mapped Error at max threshold (U=$(round(U_values[33], digits=2))): ", error_data[end, 33])
-    println("Mapped Error at zero threshold (U=$(round(U_values[33], digits=2))): ", error_data[1, 33])
-    println("Mapped Error at zero threshold (U=$(round(U_values[15], digits=2))): ", error_data[1, 15])
-    println("==========================\n")
+    u_idx_test = min(33, length(U_values))
+    ref_overlap = abs2(target_vecs[1, :]' * target_vecs[u_idx_test, :])
+    println("Unmapped (Baseline) Error between State U=$(round(U_values[1], digits=2)) and State U=$(round(U_values[u_idx_test], digits=2)): ", 1 - ref_overlap)
+    println("Mapped Error at max threshold (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[end, u_idx_test])
+    println("Mapped Error at zero threshold (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[1, u_idx_test])
 
-    # Simple plots
-    # plot tracking pruning impact on maps globally
-    # display(plot(thresholds, mean(error_data, dims=2), xscale=:log10, yscale=:log10, xlabel="Threshold Cutoff", ylabel="Mean Unitary Misfit Error (Loss)", title="Pruning Deficit Error Tracking"))
+    u_idx_mid = min(15, length(U_values))
+    println("Mapped Error at zero threshold (U=$(round(U_values[u_idx_mid], digits=2))): ", error_data[1, u_idx_mid])
+    println("==========================\n")
 end
 
 function @main(ARGS)
     log_path = make_log_path(@__DIR__, "run_pruning_analysis")
     with_logging(log_path) do
-        folder = parse_arguments(ARGS)
-        run_pruning_analysis(folder)
+        folder, type, custom_ref_state_arg, antihermitian, loss_type = parse_arguments(ARGS)
+        run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type)
     end # with_logging
 end

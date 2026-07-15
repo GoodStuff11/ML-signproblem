@@ -116,6 +116,7 @@ include("ed_optimization.jl")
 include("trotter.jl")
 using .Trotter
 include("nn_strategy.jl")
+include("data_path.jl")
 
 """
     load_data_coefficients(electrons::Tuple{Int, Int}, system_size::Vector{Int})
@@ -126,8 +127,8 @@ Loads the specified quantum many-body system data from JLD2 files based on the g
 dimensions of the system, and the full vector of U values.
 """
 function load_data_coefficients(electrons, system_size)
-    folder = "data/N=$(electrons)_$(system_size[1])x$(system_size[2])"
-    # folder="data/tmp"
+    folder = data_folder("N=$(electrons)_$(system_size[1])x$(system_size[2])")
+    # folder = data_folder("tmp")
 
     e_metadata = load_saved_dict(joinpath(folder, "meta_data_and_E.jld2"))
     dim = [parse(Int, x) for x in split(e_metadata["meta_data"]["sites"], "x")]
@@ -667,15 +668,15 @@ function (@main)(ARGS)
         # Configuration: small system (source of coefficients) and large system (target)
         # -------------------------------------------------------------------------
         test_folders = [
-            "data/N=(3, 3)_3x2",
-            "data/N=(3, 3)_4x3",
-            "data/N=(3, 3)_3x3",
-            "data/N=(4, 4)_3x3_2",
-            "data/N=(2, 2)_3x2",
-            "data/N=(4, 4)_4x2",
-            "data/N=(2, 2)_2x2",
-            "data/N=(4, 5)_3x3",
-            # "data/N=(3, 2)_3x2",
+            data_folder("N=(3, 3)_3x2"),
+            data_folder("N=(3, 3)_4x3"),
+            data_folder("N=(3, 3)_3x3"),
+            data_folder("N=(4, 4)_3x3_2"),
+            data_folder("N=(2, 2)_3x2"),
+            data_folder("N=(4, 4)_4x2"),
+            data_folder("N=(2, 2)_2x2"),
+            data_folder("N=(4, 5)_3x3"),
+            # data_folder("N=(3, 2)_3x2"),
             "nn_test_data/N=(5, 5)_4x3",
             "nn_test_data/N=(3, 4)_4x3"
         ]
@@ -869,9 +870,7 @@ function (@main)(ARGS)
         end
 
         for large_folder in test_folders
-            regex = r"N=\((?<N>\d+), (?<M>\d+)\)"
-            m = match(regex, large_folder)
-            large_electrons = (parse(Int, m[:N]), parse(Int, m[:M]))
+            large_electrons = parse_electron_count(large_folder)
 
             println("\n===================================")
             println("Testing on folder: $large_folder")
@@ -951,7 +950,7 @@ function (@main)(ARGS)
                 end
 
                 prefix_large = loss_type_val == :energy ? "trotter_N=$(prod(dim_large_vec))_loss_energy" : "trotter_N=$(prod(dim_large_vec))"
-                
+
                 println("\n=== Evaluating Trotter adjoint_loss and energy per U-index (k=$k_eval_val) ===")
                 println(@sprintf(
                     "%-8.8s  %-12.12s  %-14.14s  %-14.14s  %-12.12s  %-12.12s  %-14.14s  %-14.14s",
@@ -965,18 +964,18 @@ function (@main)(ARGS)
                 @time begin
                     @safe_threads for u_idx in 2:55
                         u_val = U_values_large[u_idx]
-                        
+
                         coeffs_pred = Float64[]
                         for l in 1:k_eval_val
                             ctx = NeuralNetContext(u_val, large_electrons, strategy.U_max, k_eval_val, l, k_max_val)
                             c_l = interpolate_coefficients(strategy, ctx, t_keys_large, dim_large_vec)
                             append!(coeffs_pred, c_l)
                         end
-                        
+
                         H_large = H_hop_sector_large + u_val * H_int_sector_large
                         true_E = all_E_large[k_min_large][u_idx]
                         state2 = target_vecs_large[u_idx, :]
-                        
+
                         pred_loss, pred_energy = evaluate_trotter_coefficients_metrics(
                             coeffs_pred, gates_large, basis_sector_large, prod(dim_large_vec), k_eval_val,
                             state1, state2, H_large
@@ -993,7 +992,7 @@ function (@main)(ARGS)
                                 state1, state2, H_large
                             )
                         end
-                        
+
                         ratio = isnan(stored_loss) || stored_loss == 0.0 ? NaN : pred_loss / stored_loss
                         diff_E = isnan(stored_energy) || isnan(pred_energy) ? NaN : pred_energy - stored_energy
 

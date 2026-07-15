@@ -27,7 +27,8 @@ export SlaterCOB_RtoK_nparticle, sectorTotMom, fullSlaterMomBasis
 # Hamiltonians
 export findForwardLatticeNeighbors, findLatticeEdges
 export fermionNNHopping, fermionOnSiteSpinDensity, Hubbard, HubbardRealSpace, HubbardOrbitBasis, HubbardMomentumBasis
-
+# Conversions to exact exponential
+export get_basis_sector, conf_to_int, conjugate_canonical, key_to_canonical
 
 # ═══════════════════════════════════════════════════════════════════════
 # DATA TYPES
@@ -1938,5 +1939,69 @@ end
 function Hubbard(t::Real, u::Real, Lvec, nvec, use_pbc::Bool, returnBasis::Bool=true)
     return Hubbard(t, u, Lvec, nvec, :real; use_pbc=use_pbc, returnBasis=returnBasis)
 end
+
+
+
+
+## Exact exponential compatibility ##
+
+# Helper to convert key to canonical
+function key_to_canonical(k)
+    [(get_clean_coords(c), spin, op) for (c, spin, op) in k]
+end
+function conjugate_canonical(ck)
+    conj_ops = [(c, spin, op == :create ? :annihilate : :create) for (c, spin, op) in ck]
+    cre = sort(filter(op -> op[3] == :create, conj_ops), by=op -> (op[1], op[2]))
+    ann = sort(filter(op -> op[3] == :annihilate, conj_ops), by=op -> (op[1], op[2]))
+    return [cre; ann]
+end
+
+"""
+    get_clean_coords(c) -> Tuple
+
+Robustly extract the flat coordinates tuple from a Lattices.Coordinate object,
+supporting both in-memory and JLD2-reconstructed structures.
+"""
+function get_clean_coords(c)
+    coords = c.coordinates
+    if !isempty(coords) && coords[1] isa Tuple
+        return coords[1]
+    else
+        return coords
+    end
+end
+
+function coord_to_site_idx(coord, Lvec)
+    c0 = get_clean_coords(coord) .- 1
+    return ravel_c(c0, Tuple(Lvec))
+end
+
+function coord_set_to_binary(coord_set, Lvec)
+    val = zero(UInt)
+    for coord in coord_set
+        site_idx = coord_to_site_idx(coord, Lvec)
+        val |= (one(UInt) << site_idx)
+    end
+    return val
+end
+
+function conf_to_int(conf, Lvec, N_sites)
+    u_bin = coord_set_to_binary(conf[1], Lvec)
+    d_bin = coord_set_to_binary(conf[2], Lvec)
+    return combineSpinInts(u_bin, d_bin, N_sites)
+end
+"""
+    get_basis_sector(indexer, Lvec, N_sites)
+
+Reconstruct the basis state integers.
+"""
+function get_basis_sector(indexer, Lvec, N_sites)
+    basis_sector = Vector{UInt}(undef, length(indexer.inv_comb_dict))
+    for (idx, conf) in enumerate(indexer.inv_comb_dict)
+        basis_sector[idx] = conf_to_int(conf, Lvec, N_sites)
+    end
+    return basis_sector
+end
+
 
 end # module TamFermion

@@ -1,6 +1,8 @@
 using Flux
 using JLD2
 
+include(joinpath(@__DIR__, "data_path.jl"))
+
 # ─────────────────────────────────────────────────────────────
 #  Abstract strategy interface
 # ─────────────────────────────────────────────────────────────
@@ -271,12 +273,12 @@ function featurize_all(raw_data;
         opt_loss = entry[6]
         k = length(entry) >= 8 ? entry[7] : 1
         l = length(entry) >= 8 ? entry[8] : 1
-        
+
         ctx_base = if use_scale_head
             val = Float32(log10(max(U_value, 1e-4)))
             log_min = -4.0f0
             log_max = Float32(log10(U_max))
-            Float32[2f0 * (val - log_min) / (log_max - log_min) - 1f0]
+            Float32[2f0*(val-log_min)/(log_max-log_min)-1f0]
         else
             Float32[normalize_U(U_value, U_max)]
         end
@@ -322,7 +324,7 @@ end
 # ─────────────────────────────────────────────────────────────
 
 function load_folder_header_nn(electrons, system_size; file_label="")
-    folder = "data/N=$(electrons)_$(system_size[1])x$(system_size[2])$file_label"
+    folder = data_folder("N=$(electrons)_$(system_size[1])x$(system_size[2])$file_label")
     e_metadata = load_saved_dict(joinpath(folder, "meta_data_and_E.jld2"))
     dim = [parse(Int, x) for x in split(e_metadata["meta_data"]["sites"], "x")]
     shared = load_saved_dict(joinpath(folder,
@@ -387,9 +389,9 @@ function fgate_to_label(g, Lvec)
     ops_annihilate = make_ops(ann_up_sites, ann_dn_sites, :annihilate)
 
     site_idx(c) = tl.ravel_c(collect(c.coordinates) .- 1, Tuple(Lvec))
-    
-    sort!(ops_create, by = op -> (site_idx(op[1]), op[2]))
-    sort!(ops_annihilate, by = op -> (site_idx(op[1]), op[2]))
+
+    sort!(ops_create, by=op -> (site_idx(op[1]), op[2]))
+    sort!(ops_annihilate, by=op -> (site_idx(op[1]), op[2]))
 
     result = Vector{Tuple{Coordinate{length(Lvec),Int},Int,Symbol}}()
     for op in ops_create
@@ -402,7 +404,7 @@ function fgate_to_label(g, Lvec)
 end
 
 function load_data_trotter_nn(electrons, system_size, u_indices; file_label="", loss_type=:overlap)
-    folder = "data/N=$(electrons)_$(system_size[1])x$(system_size[2])$file_label"
+    folder = data_folder("N=$(electrons)_$(system_size[1])x$(system_size[2])$file_label")
     if !isdir(folder)
         @warn "Directory $folder not found."
         return Tuple[]
@@ -456,7 +458,7 @@ function load_all_data_nn(folder_specs; is_trotter=false, loss_type=:overlap)
                 N_s = length(labels)
                 k_steps = length(coefficients) ÷ N_s
                 for l in 1:k_steps
-                    coeff_slice = coefficients[((l-1)*N_s + 1):(l*N_s)]
+                    coeff_slice = coefficients[((l-1)*N_s+1):(l*N_s)]
                     push!(all_raw, (coeff_slice, labels, dim, U_value, electrons, opt_loss, k_steps, l))
                 end
             end
@@ -630,25 +632,25 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss;
                     log10_U = (log_norm_U .+ 1.0f0) .* 2.5f0 .- 4.0f0
                     w = if weighting_scheme == "low_u_mild"
                         # Gently favour small U: exp(-0.25 * log10(U)) = U^(-0.25)
-                        exp.( -0.25f0 .* log10_U )
+                        exp.(-0.25f0 .* log10_U)
                     elseif weighting_scheme == "low_u"
-                        exp.( -0.5f0 .* log10_U )
+                        exp.(-0.5f0 .* log10_U)
                     elseif weighting_scheme == "low_u_strong"
                         # Strongly favour small U: exp(-1.5 * log10(U)) = U^(-1.5)
-                        exp.( -1.5f0 .* log10_U )
+                        exp.(-1.5f0 .* log10_U)
                     elseif weighting_scheme == "low_u_very_strong"
                         # Very aggressively favour small U: exp(-3.0 * log10(U)) = U^(-3.0)
-                        exp.( -3.0f0 .* log10_U )
+                        exp.(-3.0f0 .* log10_U)
                     elseif weighting_scheme == "uniform"
                         log10_U .* 0.0f0 .+ 1.0f0
                     elseif weighting_scheme == "high_u"
-                        exp.( 0.5f0 .* log10_U )
+                        exp.(0.5f0 .* log10_U)
                     elseif weighting_scheme == "high_u_strong"
                         # Stronger version: exp(1.5 * log10(U)) = U^1.5, heavily prioritises large U
-                        exp.( 1.5f0 .* log10_U )
+                        exp.(1.5f0 .* log10_U)
                     elseif weighting_scheme == "focus_u8"
                         # Gaussian centred at log10(8) ≈ 0.903, σ ≈ 0.4 in log10 space
-                        exp.( -((log10_U .- 0.903f0) .^ 2) ./ (2f0 * 0.4f0^2) )
+                        exp.(-((log10_U .- 0.903f0) .^ 2) ./ (2f0 * 0.4f0^2))
                     elseif weighting_scheme == "loss_mild"
                         (-log10.(max.(bY_ol, 1f-12))) .^ 1.15f0
                     elseif weighting_scheme == "loss_std"
@@ -682,7 +684,7 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss;
                     end
                     w_mean = sum(w) / length(w)
                     w = w ./ w_mean
-                    
+
                     # 2. Joint and Auxiliary Loss Formulation:
                     #    - log_ratio = log10(scale_pred / scale_true)
                     #    - pred = (scale_pred / scale_true) * y_norm_pred, matching y_norm_true
@@ -692,7 +694,7 @@ function train_mlp!(model, X1, X2, X3, X4, Ctx, Y, Y_log_scale, Y_opt_loss;
                     pred = (10f0 .^ log_ratio) .* output
                     joint_loss = sum(w .* (pred .- bY) .^ 2) / length(bY)
                     aux_loss = sum(w .* (log_scale .- bY_ls) .^ 2) / length(bY_ls)
-                    
+
                     # Combined objective scaled by scale_loss_weight
                     (joint_loss + scale_loss_weight * aux_loss) / (1f0 + scale_loss_weight)
                 else
@@ -800,7 +802,7 @@ Predict coefficients using the trained MLP.
 """
 function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
     labels, dim::Vector{Int})
-    
+
     # Check if the model expects Trotter features
     n_ctx_expected = 1 + (s.include_dim ? 2 : 0) + (s.include_electrons ? 2 : 0)
     n_ctx_actual = s.use_scale_head ? size(s.model.scale[1].weight, 2) : (size(s.model.context[1].weight, 2) - size(s.model.base[end].weight, 1))
@@ -817,18 +819,18 @@ function interpolate_coefficients(s::NeuralNetStrategy, ctx::NeuralNetContext,
             val = Float32(log10(max(ctx.U_value, 1e-4)))
             log_min = -4.0f0
             log_max = Float32(log10(ctx.U_max))
-            Float32[2f0 * (val - log_min) / (log_max - log_min) - 1f0]
+            Float32[2f0*(val-log_min)/(log_max-log_min)-1f0]
         else
             Float32[normalize_U(ctx.U_value, ctx.U_max)]
         end
         s.include_dim && append!(feature_ctx, normalize_dim(dim, s.dim_max))
         s.include_electrons && append!(feature_ctx, normalize_electrons(ctx.electrons, prod(dim) ÷ 2))
-        
+
         if include_trotter
             k = :k_steps in fieldnames(typeof(ctx)) ? ctx.k_steps : 1
             l = :l_step in fieldnames(typeof(ctx)) ? ctx.l_step : 1
             k_max_val = :k_max in fieldnames(typeof(ctx)) ? ctx.k_max : 10
-            
+
             k_norm = Float32(2.0 * k / k_max_val - 1.0)
             l_norm = Float32(2.0 * l / k - 1.0)
             push!(feature_ctx, k_norm)

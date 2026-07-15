@@ -109,6 +109,7 @@ function parse_arguments(args::Vector{String})
     maxiters = 200
     loss_type = :overlap
     custom_ref_state_arg = nothing
+    antihermitian = false
     filtered_args = String[]
     for arg in args
         if startswith(arg, "--nn=")
@@ -137,6 +138,12 @@ function parse_arguments(args::Vector{String})
             end
         elseif startswith(arg, "--custom_ref_state=")
             custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--antihermitian")
+            if occursin("=", arg)
+                antihermitian = parse(Bool, split(arg, "=", limit=2)[2])
+            else
+                antihermitian = true
+            end
         elseif startswith(arg, "--use-gpu=")
             # Pre-scanned at top level, skip in standard argument processing
             continue
@@ -153,7 +160,7 @@ function parse_arguments(args::Vector{String})
     u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
     u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing
 
-    return folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg
+    return folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian
 end
 
 
@@ -218,20 +225,14 @@ function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_lanczos_scan_optimization")
     with_logging(log_path) do
 
-        folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg = parse_arguments(ARGS)
+        folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian = parse_arguments(ARGS)
 
         # Parse electrons and dimension from the folder name
         electrons_parsed = (2, 2)
         dim_parsed = [2, 2]
         try
-            m_elec = match(r"N=\((?<N>\d+),\s*(?<M>\d+)\)", folder)
-            if !isnothing(m_elec)
-                electrons_parsed = (parse(Int, m_elec[:N]), parse(Int, m_elec[:M]))
-            end
-            m_dim = match(r"_(?<W>\d+)x(?<H>\d+)", folder)
-            if !isnothing(m_dim)
-                dim_parsed = [parse(Int, m_dim[:W]), parse(Int, m_dim[:H])]
-            end
+            electrons_parsed = parse_electron_count(folder)
+            dim_parsed = parse_lattice_dimension(folder)
         catch e
             @warn "Could not parse electrons or dimensions from folder path, using defaults: (2, 2) and [2, 2]"
         end
@@ -253,7 +254,8 @@ function (@main)(ARGS)
             "multi_start_samples" => 5, #5
             "initialization_samples" => 20,#20
             "sign_convention" => sign_convention,
-            "U_values" => U_values
+            "U_values" => U_values,
+            "antihermitian" => antihermitian
         )
 
         if nn_strategy_file !== nothing
@@ -263,6 +265,9 @@ function (@main)(ARGS)
         save_name_prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$N"
         if !isnothing(custom_ref_state_arg)
             save_name_prefix *= "_ref_$(custom_ref_state_arg)"
+        end
+        if antihermitian
+            save_name_prefix *= "_antihermitian"
         end
         if loss_type == :energy
             save_name_prefix *= "_loss_energy"

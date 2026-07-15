@@ -2,6 +2,9 @@
 *.err
 *.out
 
+# Per-environment data path configuration (not tracked; set your path in this file)
+experimenting/ed/data_config.txt
+
 # Ignore data and log directories
 experimenting/ed/data/
 experimenting/ed/data_new_sign/

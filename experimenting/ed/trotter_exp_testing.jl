@@ -52,12 +52,11 @@ using Optimization
 using OptimizationOptimJL
 using Combinatorics
 
-if !isdefined(Main, :UtilityFunctions)
-    include("utility_functions.jl")
-end
+include("utility_functions.jl")
 using .UtilityFunctions
 include("trotter.jl")
 using .Trotter
+include("data_path.jl")
 include("logging.jl")
 include("nn_strategy.jl")
 
@@ -83,7 +82,7 @@ Returns:
   - output         (String)        : output filename
 """
 function parse_arguments(args::Vector{String})
-    folder = "data/N=(2, 2)_3x2"
+    folder = data_folder("N=(2, 2)_3x2")
     output = "trotter_order_comparison"
     trotter_orders = [1, 2, 4, 8]
     n_up = 4
@@ -133,7 +132,7 @@ function parse_arguments(args::Vector{String})
     end
 
     if length(positional) >= 1
-        folder = positional[1]
+        folder = data_folder(positional[1])
     end
 
     return folder, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg
@@ -202,21 +201,6 @@ function load_exact_exp_instructions(folder::String, prefix::String)
 end
 
 """
-    get_clean_coords(c) -> Tuple
-
-Robustly extract the flat coordinates tuple from a Lattices.Coordinate object,
-supporting both in-memory and JLD2-reconstructed structures.
-"""
-function get_clean_coords(c)
-    coords = c.coordinates
-    if !isempty(coords) && coords[1] isa Tuple
-        return coords[1]
-    else
-        return coords
-    end
-end
-
-"""
     reorder_exact_to_trotter_coeffs(A_exact, t_keys_JLD2, gates, lvec, indexer, basis_ints) -> Vector{Float64}
 
 Re-order the exact-exponential coefficient vector to match the ordering of the Trotter gates,
@@ -234,24 +218,7 @@ function reorder_exact_to_trotter_coeffs(
 )
     N_sites = prod(lvec)
     # Reconstruct basis_sector from indexer
-    function coord_to_site_idx(coord, Lvec)
-        c0 = get_clean_coords(coord) .- 1
-        return Trotter.ravel_c(c0, Tuple(Lvec))
-    end
-    function coord_set_to_binary(coord_set, Lvec)
-        val = zero(UInt)
-        for coord in coord_set
-            site_idx = coord_to_site_idx(coord, Lvec)
-            val |= (one(UInt) << site_idx)
-        end
-        return val
-    end
-    basis_sector = Vector{UInt}(undef, length(indexer.inv_comb_dict))
-    for (idx, conf) in enumerate(indexer.inv_comb_dict)
-        u_bin = coord_set_to_binary(conf[1], lvec)
-        d_bin = coord_set_to_binary(conf[2], lvec)
-        basis_sector[idx] = Trotter.combineSpinInts(u_bin, d_bin, N_sites)
-    end
+    basis_sector = Trotter.get_basis_sector(indexer, lvec, N_sites)
 
     # Determine the present orders from t_keys_JLD2
     present_orders = Int[]
@@ -283,34 +250,23 @@ function reorder_exact_to_trotter_coeffs(
         end
     end
 
-    # Helper to convert key to canonical
-    function key_to_canonical(k)
-        [(get_clean_coords(c), spin, op) for (c, spin, op) in k]
-    end
-    function conjugate_canonical(ck)
-        conj_ops = [(c, spin, op == :create ? :annihilate : :create) for (c, spin, op) in ck]
-        cre = sort(filter(op -> op[3] == :create, conj_ops), by=op -> (op[1], op[2]))
-        ann = sort(filter(op -> op[3] == :annihilate, conj_ops), by=op -> (op[1], op[2]))
-        return [cre; ann]
-    end
-
     # Lookups
-    canon_keys_JLD2 = [key_to_canonical(k) for k in t_keys_JLD2]
+    canon_keys_JLD2 = [Trotter.key_to_canonical(k) for k in t_keys_JLD2]
     canon_to_idx_JLD2 = Dict(k => idx for (idx, k) in enumerate(canon_keys_JLD2))
 
-    canon_keys_exact = [key_to_canonical(k) for k in t_keys_exact]
+    canon_keys_exact = [Trotter.key_to_canonical(k) for k in t_keys_exact]
     canon_to_idx_exact = Dict(k => idx for (idx, k) in enumerate(canon_keys_exact))
 
     A_reordered = zeros(Float64, length(gates))
 
     for (g_idx, g) in enumerate(gates)
         lbl = fgate_to_label(g, lvec)
-        ck = key_to_canonical(lbl)
+        ck = Trotter.key_to_canonical(lbl)
 
         # Look up in JLD2 keys
         idx_JLD2 = get(canon_to_idx_JLD2, ck, 0)
         if idx_JLD2 == 0
-            idx_JLD2 = get(canon_to_idx_JLD2, conjugate_canonical(ck), 0)
+            idx_JLD2 = get(canon_to_idx_JLD2, Trotter.conjugate_canonical(ck), 0)
         end
         if idx_JLD2 == 0
             # If the gate is not present in JLD2, it was not part of the optimized ansatz, so its coefficient is 0.0
@@ -321,7 +277,7 @@ function reorder_exact_to_trotter_coeffs(
         # Look up in exact struct_data keys
         idx_exact = get(canon_to_idx_exact, ck, 0)
         if idx_exact == 0
-            idx_exact = get(canon_to_idx_exact, conjugate_canonical(ck), 0)
+            idx_exact = get(canon_to_idx_exact, Trotter.conjugate_canonical(ck), 0)
         end
         if idx_exact == 0
             error("Gate $g_idx (label $ck) has no matching key in exact-exp t_keys (struct_data).")
@@ -360,36 +316,6 @@ function reorder_exact_to_trotter_coeffs(
     return A_reordered
 end
 
-"""
-    derive_q_target(folder, inst, lvec) -> Int
-
-Derive the momentum-sector index q_target from the Trotter shared file's
-instructions dict, or fall back to scanning the HubbardED HDF5 file for the
-sector with the lowest ground-state energy. Returns 0 (Gamma point) if neither
-source is available.
-"""
-function derive_q_target(folder::String, inst::Dict, lvec::Vector{Int})
-    # Try instructions dict first
-    q = get(inst, "q_target", nothing)
-    !isnothing(q) && return q
-
-    # Fall back to HDF5 file
-    h5_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-    if !isempty(h5_files)
-        h5_file = joinpath(folder, h5_files[1])
-        return h5open(h5_file, "r") do data
-            key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-            all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-            k_min = key_labels[argmin([minimum(e) for e in all_E])]
-            kvecs = read(data, "metadata/kvecs")
-            k_tuple = tuple((kvecs[:, k_min+1] .+ 1)...)
-            Trotter.ravel_c(k_tuple .- 1, Tuple(lvec))
-        end
-    end
-
-    @warn "Could not determine q_target; defaulting to 0 (Gamma point)"
-    return 0
-end
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ENERGY COMPUTATION HELPERS
@@ -450,43 +376,15 @@ function compute_exact_exp_energies(
 
     # 1. Reconstruct basis_sector from indexer
     N_sites = prod(lvec)
-    function coord_to_site_idx(coord, Lvec)
-        c0 = get_clean_coords(coord) .- 1
-        return Trotter.ravel_c(c0, Tuple(Lvec))
-    end
-    function coord_set_to_binary(coord_set, Lvec)
-        val = zero(UInt)
-        for coord in coord_set
-            site_idx = coord_to_site_idx(coord, Lvec)
-            val |= (one(UInt) << site_idx)
-        end
-        return val
-    end
-    basis_sector = Vector{UInt}(undef, length(indexer.inv_comb_dict))
-    for (idx, conf) in enumerate(indexer.inv_comb_dict)
-        u_bin = coord_set_to_binary(conf[1], lvec)
-        d_bin = coord_set_to_binary(conf[2], lvec)
-        basis_sector[idx] = Trotter.combineSpinInts(u_bin, d_bin, N_sites)
-    end
+    basis_sector = Trotter.get_basis_sector(indexer, lvec, N_sites)
 
     # Build state mappings
     state_to_idx = Dict(val => idx for (idx, val) in enumerate(basis_ints))
     perm = [state_to_idx[val] for val in basis_sector]
     inv_perm = invperm(perm)
 
-    # Helpers
-    function key_to_canonical(k)
-        [(get_clean_coords(c), spin, op) for (c, spin, op) in k]
-    end
-    function conjugate_canonical(ck)
-        conj_ops = [(c, spin, op == :create ? :annihilate : :create) for (c, spin, op) in ck]
-        cre = sort(filter(op -> op[3] == :create, conj_ops), by=op -> (op[1], op[2]))
-        ann = sort(filter(op -> op[3] == :annihilate, conj_ops), by=op -> (op[1], op[2]))
-        return [cre; ann]
-    end
-
     # Map JLD2 keys
-    canon_keys_JLD2 = [key_to_canonical(k) for k in t_keys_JLD2]
+    canon_keys_JLD2 = [Trotter.key_to_canonical(k) for k in t_keys_JLD2]
     canon_to_idx_JLD2 = Dict(k => idx for (idx, k) in enumerate(canon_keys_JLD2))
 
     # Determine present orders
@@ -525,10 +423,10 @@ function compute_exact_exp_energies(
 
             coeffs_exact_order = zeros(Float64, length(t_keys_exact))
             for (idx_exact, key_exact) in enumerate(t_keys_exact)
-                ck = key_to_canonical(key_exact)
+                ck = Trotter.key_to_canonical(key_exact)
                 idx_JLD2 = get(canon_to_idx_JLD2, ck, 0)
                 if idx_JLD2 == 0
-                    idx_JLD2 = get(canon_to_idx_JLD2, conjugate_canonical(ck), 0)
+                    idx_JLD2 = get(canon_to_idx_JLD2, Trotter.conjugate_canonical(ck), 0)
                 end
                 if idx_JLD2 == 0
                     coeffs_exact_order[idx_exact] = 0.0
@@ -606,62 +504,6 @@ function compute_trotterized_energies(
     return result
 end
 
-"""
-    construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, H_dim::Int, U_values::Vector{Float64})
-
-Construct a custom Slater determinant reference state vector of length `H_dim` if requested by the command line argument.
-Returns a `Vector{ComplexF64}` or `nothing`.
-"""
-function construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, H_dim::Int, U_values::Vector{Float64})
-    if isnothing(custom_ref_state_arg)
-        return nothing
-    end
-
-    local slater_idx
-    if custom_ref_state_arg == "slater"
-        jld2_path = joinpath(folder, "meta_data_and_E.jld2")
-        if isfile(jld2_path)
-            println("Finding Slater ground state index from JLD2 file...")
-            dic = load_saved_dict(jld2_path)
-            all_E = dic["E"]
-            U_values_for_sector = dic["meta_data"]["U_values"]
-            k_min = find_best_energy_sector(all_E, U_values_for_sector; data=dic)
-            slater_idx = get_slater_ground_state(dic, k_min)
-        else
-            println("Finding Slater ground state index from HDF5 file...")
-            valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-            if isempty(valid_files)
-                error("No HubbardED HDF5 file found in folder: $folder")
-            end
-            h5_file = joinpath(folder, valid_files[1])
-            slater_idx = h5open(h5_file, "r") do data
-                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-                k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-                return get_slater_ground_state(data, k_min)
-            end
-        end
-        println("Slater ground state index found: $slater_idx")
-    else
-        try
-            slater_idx = parse(Int, custom_ref_state_arg)
-        catch e
-            error("Invalid --custom_ref_state value: '$custom_ref_state_arg'. Must be 'slater' or an integer index.")
-        end
-        if slater_idx < 1 || slater_idx > H_dim
-            error("Parsed Slater index $slater_idx is out of bounds (1 to $H_dim).")
-        end
-        println("Using user-specified Slater index: $slater_idx")
-    end
-
-    if slater_idx == -1
-        error("No Slater ground state could be found in the current sector.")
-    end
-
-    custom_ref = zeros(ComplexF64, H_dim)
-    custom_ref[slater_idx] = 1.0
-    return custom_ref
-end
 
 """
     load_trotter_opt_energies(folder, N_sites, n_U; custom_ref_state_arg, antihermitian, loss_type) -> Vector{Float64}
@@ -789,18 +631,15 @@ function (@main)(ARGS)
 
         N_sites = prod(lvec)
 
-        # ── 1. Load U_values ───────────────────────────────────────────────────
-        meta = load(joinpath(folder, "meta_data_and_E.jld2"))["dict"]
-        U_values = meta["meta_data"]["U_values"]
+        # ── 1. Load ED data ────────────────────────────────────────────────────
+        # use_slater_reference=true prepends the Slater determinant reference
+        # state as target_vecs[1,:]; rows 2:end are the ground states per U.
+        U_values, target_vecs, indexer, _, N_elec, _, _, sign_convention =
+            load_ED_data(folder; verbose=true, use_slater_reference=true)
+        n_up_loaded, n_dn_loaded = N_elec
         n_U = length(U_values)
         println("Loaded U_values: $n_U entries, range $(U_values[1]) to $(U_values[end])")
-
-        # Find best energy sector to get indexer
-        k_min = find_best_energy_sector(meta["E"], U_values; verbose=false)
-        indexer = meta["indexer"]
-        if indexer isa Vector
-            indexer = indexer[k_min]
-        end
+        println("Loaded N_elec: n_up=$n_up_loaded, n_dn=$n_dn_loaded")
 
         # ── 2. Derive momentum sector and build Hamiltonians ───────────────────
         local antihermitian
@@ -833,23 +672,44 @@ function (@main)(ARGS)
             trotter_prefix *= "_loss_energy"
         end
 
-        shared_trotter_path = joinpath(folder, "$(trotter_prefix)_shared.jld2")
         println("Using antihermitian = $antihermitian")
-        println("Loading shared trotter info from $shared_trotter_path")
 
-        shared_trotter = load(shared_trotter_path)["dict"]
-
-        q_target = derive_q_target(folder, shared_trotter["instructions"], lvec)
+        # Derive q_target from the indexer's embedded momentum sector.
+        # indexer.k is a 1-based coordinate tuple; q_target is the C-order flat
+        # index (0-based). Falls back to nothing (full basis) if no k is stored.
+        q_target = nothing
+        k_val = try
+            indexer.k
+        catch
+            nothing
+        end
+        dims_val = try
+            indexer.lattice_dims
+        catch
+            nothing
+        end
+        if !isnothing(k_val) && !isnothing(dims_val)
+            q_target = Trotter.ravel_c(Tuple(k - 1 for k in k_val), Tuple(lvec))
+        end
         println("q_target = $q_target")
 
-        println("\nBuilding sector Hamiltonians...")
-        @time H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(
-            1.0, 0.0, lvec, (n_up, n_dn); q_target=q_target,
-        )
-        @time H_int_mom, _, _ = TamFermion.HubbardMomentumBasis(
-            0.0, 1.0, lvec, (n_up, n_dn); q_target=q_target,
-        )
-        basis_ints = basis_dict["ints"]
+        local H_hop_mom, H_int_mom, basis_ints
+        if isnothing(q_target)
+            println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
+            basis_ints = Trotter.get_basis_sector(indexer, lvec, N_sites)
+            lattice = Square(Tuple(lvec), Periodic())
+            subspace = HubbardSubspace(n_up_loaded, n_dn_loaded, lattice; k=nothing)
+            H_hop_mom, H_int_mom = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
+        else
+            println("\nBuilding sector Hamiltonians in momentum basis...")
+            @time H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(
+                1.0, 0.0, lvec, (n_up_loaded, n_dn_loaded); q_target=q_target,
+            )
+            @time H_int_mom, _, _ = TamFermion.HubbardMomentumBasis(
+                0.0, 1.0, lvec, (n_up_loaded, n_dn_loaded); q_target=q_target,
+            )
+            basis_ints = basis_dict["ints"]
+        end
         println("Hilbert space sector dim = $(length(basis_ints))")
 
         # ── 3. Enumerate gates ─────────────────────────────────────────────────
@@ -862,9 +722,12 @@ function (@main)(ARGS)
         println("num_gates = $num_gates")
 
         # ── 4. Load exact-exp coefficients and expand to Trotter gate basis ──
-        unitary_prefix = "unitary_map_energy_symmetry=false_N=($n_up, $n_dn)"
+        unitary_prefix = "unitary_map_energy_symmetry=false_N=($n_up_loaded, $n_dn_loaded)"
         if !isnothing(custom_ref_state_arg)
             unitary_prefix *= "_ref_$(custom_ref_state_arg)"
+        end
+        if antihermitian
+            unitary_prefix *= "_antihermitian"
         end
         if loss_type == :energy
             unitary_prefix *= "_loss_energy"
@@ -883,7 +746,6 @@ function (@main)(ARGS)
         # Load the operator keys used by the exact-exp optimization and reorder
         # the coefficients to match the Trotter gate ordering.
         t_keys = load_exact_exp_keys(folder, unitary_prefix)
-        sign_convention = :coordinate_first
         println("  Using sign convention: $sign_convention")
 
         exact_coeffs = if !isnothing(t_keys) && n_loaded > 0
@@ -896,20 +758,11 @@ function (@main)(ARGS)
             fill(nothing, n_U)
         end
 
-        # ── 5. Compute sector ground states via eigen ──────────────────────────
-        println("\nComputing sector ground states ($n_U U values)...")
-        gs_states, gs_energies = compute_gs_states(H_hop_mom, H_int_mom, U_values)
-        println("gs energies; $gs_energies")
-        println("  Done")
+        # ── 5. Extract ground states and reference state from loaded target_vecs ──
+        gs_states = [ComplexF64.(vec(target_vecs[u_i+1, :])) for u_i in 1:n_U]
+        gs_energies = [compute_energy(gs_states[u_i], H_hop_mom + U_values[u_i] * H_int_mom) for u_i in 1:n_U]
+        println("gs energies: $gs_energies")
 
-        # Determine reference state
-        local ref_state
-        if !isnothing(custom_ref_state_arg)
-            H_dim = length(basis_ints)
-            ref_state = construct_custom_ref_state(custom_ref_state_arg, folder, H_dim, U_values)
-        else
-            ref_state = gs_states[1]
-        end
 
         # ── 6. Exact-exp energies ─────────────────────────────────────────────
         println("\nComputing exact-exp energies...")
@@ -951,7 +804,7 @@ function (@main)(ARGS)
         p = build_comparison_plot(
             U_values, gs_energies, exact_exp_energies,
             trotter_energies, trotter_opt_energies,
-            trotter_orders, n_up, n_dn, lvec;
+            trotter_orders, n_up_loaded, n_dn_loaded, lvec;
             custom_ref_state_arg=custom_ref_state_arg,
             loss_type=loss_type
         )

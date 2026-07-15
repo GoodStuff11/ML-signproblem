@@ -163,7 +163,7 @@ Cycle decomposition of a 0-based permutation.
 Returns a vector of cycles (each a `Vector{Int}` of 0-based elements).
 """
 function cycle_decomp(perm::AbstractVector{<:Integer}, pos_include_fixed::Bool=false, pos_returnParity::Bool=false, pos_validate::Bool=false;
-                      include_fixed::Bool=pos_include_fixed, returnParity::Bool=pos_returnParity, validate::Bool=pos_validate)
+    include_fixed::Bool=pos_include_fixed, returnParity::Bool=pos_returnParity, validate::Bool=pos_validate)
     N = length(perm)
     if validate && sort(perm) != collect(0:N-1)
         error("Invalid permutation.")
@@ -256,12 +256,12 @@ function fill_diagonal_offset(arr::AbstractMatrix, val, pos_offset::Integer=0; o
     if offset >= 0
         dlen = min(rows, cols - offset)
         for k in 1:dlen
-            arr[k, k + offset] = val
+            arr[k, k+offset] = val
         end
     else
         dlen = min(rows + offset, cols)
         for k in 1:dlen
-            arr[k - offset, k] = val
+            arr[k-offset, k] = val
         end
     end
     return arr
@@ -528,7 +528,7 @@ circshift_list(arr, n::Integer) = circshift(collect(arr), n)
 Shift array `x` by `n` places along `axis`, padding with `fill` (no wrap).
 """
 function shiftarr(x::AbstractArray, n::Integer;
-                  axis::Integer=ndims(x), fill=zero(eltype(x)))
+    axis::Integer=ndims(x), fill=zero(eltype(x)))
     n == 0 && return copy(x)
     L = size(x, axis)
     abs(n) >= L && return Base.fill!(similar(x), fill)
@@ -538,12 +538,12 @@ function shiftarr(x::AbstractArray, n::Integer;
     # Build slice objects
     if n > 0
         out_idx = ntuple(d -> d == axis ? (n+1:L) : Colon(), nd)
-        in_idx  = ntuple(d -> d == axis ? (1:L-n) : Colon(), nd)
+        in_idx = ntuple(d -> d == axis ? (1:L-n) : Colon(), nd)
         pad_idx = ntuple(d -> d == axis ? (1:n) : Colon(), nd)
     else
         a = abs(n)
         out_idx = ntuple(d -> d == axis ? (1:L-a) : Colon(), nd)
-        in_idx  = ntuple(d -> d == axis ? (a+1:L) : Colon(), nd)
+        in_idx = ntuple(d -> d == axis ? (a+1:L) : Colon(), nd)
         pad_idx = ntuple(d -> d == axis ? (L-a+1:L) : Colon(), nd)
     end
     xs[out_idx...] .= x[in_idx...]
@@ -624,7 +624,7 @@ Sort sites clockwise from `ref` on a ring of size `L`.
 """
 function sortCwiseFrom(sites, L::Integer, pos_ref::Integer=0; ref::Integer=pos_ref)
     s = [mod(x, L) for x in sites]
-    return sort(s; by = x -> mod(x - ref, L))
+    return sort(s; by=x -> mod(x - ref, L))
 end
 
 """Clockwise distance from `iL` to `iR` on a ring of size `L`."""
@@ -717,7 +717,7 @@ Sample `n` vectors from Haar measure on U(d) (complex) or O(d) (real).
 Returns `(n × d)` matrix.
 """
 function Haarvec(d::Integer, pos_n::Integer=1, pos_real::Bool=false, pos_seed=nothing;
-                 n::Integer=pos_n, real::Bool=pos_real, seed=pos_seed)
+    n::Integer=pos_n, real::Bool=pos_real, seed=pos_seed)
     seed !== nothing && Random.seed!(seed)
     X = real ?
         randn(n, d) :
@@ -948,5 +948,4 @@ function unique_in_sorted(arr, pos_returnCounts::Bool=false; returnCounts::Bool=
     end
     return returnCounts ? (uniq, counts) : uniq
 end
-
-end # module TamLib
+end

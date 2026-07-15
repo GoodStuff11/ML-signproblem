@@ -26,12 +26,13 @@ include("ed_functions.jl")
 include("ed_optimization.jl")
 include("utility_functions.jl")
 include("nn_strategy.jl")
+include("data_path.jl")
 
 function run_benchmark()
     test_folders = [
-        "data/N=(6, 6)_4x3",
-        "data/N=(4, 5)_4x4",
-        "data/N=(5, 5)_4x4"
+        data_folder("N=(6, 6)_4x3"),
+        data_folder("N=(4, 5)_4x4"),
+        data_folder("N=(5, 5)_4x4")
     ]
 
     strategies = [
@@ -71,9 +72,7 @@ function run_benchmark()
             continue
         end
 
-        regex = r"N=\((?<N>\d+), (?<M>\d+)\)"
-        m = match(regex, large_folder)
-        large_electrons = (parse(Int, m[:N]), parse(Int, m[:M]))
+        large_electrons = parse_electron_count(large_folder)
 
         println("\n" * "="^80)
         println("EVALUATING SYSTEM: $large_folder (electrons=$large_electrons)")

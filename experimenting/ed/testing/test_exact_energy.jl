@@ -27,7 +27,7 @@ H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(1.0, 0.0, lvec, (n_up
 basis_ints = basis_dict["ints"]
 
 # Load indexer and target vecs from metadata file
-folder = "data/N=(3, 3)_3x2"
+folder = "data/N=(3, 3)_3x2_3"
 meta_file = joinpath(folder, "meta_data_and_E.jld2")
 meta_data = load(meta_file)
 # If indexer is a vector, select the first one (Gamma sector)
