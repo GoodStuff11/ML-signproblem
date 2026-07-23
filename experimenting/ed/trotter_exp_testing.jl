@@ -9,14 +9,22 @@ Compare Hamiltonian energies across three methods:
   3. Trotter-optimized  – overlap-optimized Trotter coefficients from
                           trotter_N=<N_sites>_u files.
 
-The plot is saved to <folder>/trotter_order_comparison.png.
-
 Usage:
-  julia --project=.. trotter_exp_testing.jl [folder] [--trotter_orders=<list>]
+  julia --project=.. trotter_exp_testing.jl [folders...] [options]
 
-Arguments:
-  folder (optional): Path to the ED data folder containing the JLD2 files.
-                     Default: "data/N=(4, 4)_3x3_2".
+Arguments/Options:
+  folders (positional, optional): Zero, one, or more paths to ED data folders (or system size suffixes like "3x2", "3x3").
+                                 - If zero are provided: defaults to "N=(2, 2)_3x2".
+                                 - If one is provided and no --u option is specified: runs a U-value sweep analysis
+                                   for that single system size, saving the plot to <folder>/<output_file>.png.
+                                 - If multiple are provided (or one folder with the --u option is specified): runs a
+                                   system-size comparison analysis at the specified U value.
+                                   Saves the plot to <first_folder>/<output_file>_system_size.png.
+
+  --u=<float> or --U=<float> (optional): Specify a single U value to perform system size comparison at.
+                                         This argument is REQUIRED if multiple folders/system sizes are specified.
+                                         If multiple system sizes are inputted but this option is missing, the script
+                                         raises an error.
 
   --trotter_orders=<list> (optional): Comma-separated list of positive integers
                      specifying the Trotterization repetition counts P to compare.
@@ -31,13 +39,27 @@ Arguments:
   --lvec=<WxH> (optional): Lattice dimensions in the format WxH (e.g. "3x3").
                      Default: "3x3".
 
-  --output=<string> (optional): Name of png to output (will have .png appendend to end). Default: trotter_order_comparison
+  --output=<string> (optional): Name of png to output (will have .png or _system_size.png appended). Default: trotter_order_comparison
+
+  --antihermitian (optional): Whether to use antihermitian operators. Can be true/false or --antihermitian. Default: auto-detect from shared.jld2 files.
+
+  --loss=<string> (optional): Loss type. Valid options are:
+                              - "overlap": overlap-optimized loss
+                              - "energy": energy-optimized loss
+                              Default: "overlap".
+
+  --custom_ref_state=<string> (optional): Custom reference state label. Default: nothing (use Slater determinant).
 
 Examples:
-  julia --project=.. trotter_exp_testing.jl
-  julia --project=.. trotter_exp_testing.jl "data/N=(4, 5)_3x3"
-  julia --project=.. trotter_exp_testing.jl "data/N=(4, 4)_3x3_2" --trotter_orders=1,2,4,8,16
-  julia --project=.. trotter_exp_testing.jl "data/N=(4, 4)_3x3_2" --n_up=4 --n_dn=4 --lvec=3x3 --output=trotter_order_comparison
+  1. Sweep U values for a single system:
+     julia --project=.. trotter_exp_testing.jl
+     julia --project=.. trotter_exp_testing.jl "N=(2, 2)_3x2"
+
+  2. Compare trotterized energies across system sizes at a single U value:
+     julia --project=.. trotter_exp_testing.jl "N=(2, 2)_3x2" "N=(3, 3)_3x3" --u=2.0
+
+  3. System size comparison specifying short system size suffixes:
+     julia --project=.. trotter_exp_testing.jl 3x2 3x3 --u=4.0 --trotter_orders=1,2,4
 =#
 
 using Lattices
@@ -68,21 +90,51 @@ include("ed_optimization.jl")
 # ARGUMENT PARSING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+
 """
-    parse_arguments(args) -> (folder, trotter_orders, n_up, n_dn, lvec)
+    resolve_system_folder(input::String) -> String
+
+Resolves the positional input to a full directory path inside get_data_root().
+Supports absolute paths, folders within the data root, or strings that end with or match system names.
+"""
+function resolve_system_folder(input::String)
+    if isabspath(input) && isdir(input)
+        return input
+    end
+    root = get_data_root()
+    p1 = joinpath(root, input)
+    if isdir(p1)
+        return p1
+    end
+    # Search for matching folders
+    for item in readdir(root)
+        if isdir(joinpath(root, item))
+            if item == input || endswith(item, "_" * input)
+                return joinpath(root, item)
+            end
+        end
+    end
+    error("Could not resolve system size / folder: '$input' in data root '$root'")
+end
+
+"""
+    parse_arguments(args::Vector{String}) -> (folders, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg, u_val)
 
 Parse command-line arguments for the trotter_exp_testing script.
 
 Returns:
-  - folder         (String)        : path to the ED data folder.
-  - trotter_orders (Vector{Int})   : Trotter repetition counts to sweep over.
-  - n_up           (Int)           : number of spin-up electrons.
-  - n_dn           (Int)           : number of spin-down electrons.
-  - lvec           (Vector{Int})   : lattice dimensions [W, H].
-  - output         (String)        : output filename
+  - folders        (Vector{String}) : resolved paths to ED data folders.
+  - trotter_orders (Vector{Int})    : Trotter repetition counts to sweep over.
+  - n_up           (Int)            : number of spin-up electrons.
+  - n_dn           (Int)            : number of spin-down electrons.
+  - lvec           (Vector{Int})    : lattice dimensions [W, H].
+  - output         (String)         : output filename
+  - antihermitian  (Union{Bool,Nothing}) : antihermitian flag or nothing
+  - loss_type      (Symbol)         : loss type (:overlap or :energy)
+  - custom_ref_state_arg (Union{String,Nothing}) : custom reference state name or nothing
+  - u_val          (Union{Float64,Nothing}) : specified U value or nothing
 """
 function parse_arguments(args::Vector{String})
-    folder = data_folder("N=(2, 2)_3x2")
     output = "trotter_order_comparison"
     trotter_orders = [1, 2, 4, 8]
     n_up = 4
@@ -91,6 +143,7 @@ function parse_arguments(args::Vector{String})
     antihermitian = nothing
     loss_type = :overlap
     custom_ref_state_arg = nothing
+    u_val = nothing
     positional = String[]
 
     for arg in args
@@ -124,6 +177,8 @@ function parse_arguments(args::Vector{String})
             end
         elseif startswith(arg, "--custom_ref_state=")
             custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--u=") || startswith(arg, "--U=")
+            u_val = parse(Float64, split(arg, "=", limit=2)[2])
         elseif startswith(arg, "--")
             error("Unknown option: $arg")
         else
@@ -131,11 +186,20 @@ function parse_arguments(args::Vector{String})
         end
     end
 
-    if length(positional) >= 1
-        folder = data_folder(positional[1])
+    folders = String[]
+    if isempty(positional)
+        push!(folders, resolve_system_folder("N=(2, 2)_3x2"))
+    else
+        for pos in positional
+            push!(folders, resolve_system_folder(pos))
+        end
     end
 
-    return folder, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg
+    if length(folders) > 1 && isnothing(u_val)
+        error("If multiple system sizes are specified, a single U value must be provided via the --u parameter (e.g. --u=2.0).")
+    end
+
+    return folders, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg, u_val
 end
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -615,203 +679,454 @@ end
 # MAIN
 # ═══════════════════════════════════════════════════════════════════════════════
 
-function (@main)(ARGS)
-    log_path = make_log_path(@__DIR__, "trotter_exp_testing")
-    with_logging(log_path) do
-        folder, trotter_orders, n_up, n_dn, lvec, output_file, antihermitian_arg, loss_type, custom_ref_state_arg = parse_arguments(ARGS)
+# ═══════════════════════════════════════════════════════════════════════════════
+# MODULAR SYSTEM HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
 
-        println("=== Trotter experiment testing ===")
-        println("  folder         = $folder")
-        println("  lvec           = $lvec")
-        println("  (n_up, n_dn)   = ($n_up, $n_dn)")
-        println("  trotter_orders = $trotter_orders")
-        println("  loss_type      = $loss_type")
-        println("  custom_ref     = $custom_ref_state_arg")
-        println()
+"""
+    setup_system(folder, custom_ref_state_arg, antihermitian_arg, loss_type)
 
-        N_sites = prod(lvec)
+Loads ED data, determines the antihermitian flag, constructs the Hamiltonians in
+momentum (or coordinate) basis, and enumerates the Trotter gates.
+"""
+function setup_system(
+    folder::String,
+    custom_ref_state_arg::Union{String,Nothing},
+    antihermitian_arg::Union{Bool,Nothing},
+    loss_type::Symbol
+)
+    U_values, target_vecs, indexer, _, N_elec, _, _, sign_convention =
+        load_ED_data(folder; verbose=true, use_slater_reference=antihermitian_arg == "slater")
+    n_up_loaded, n_dn_loaded = N_elec
+    n_U = length(U_values)
+    N_sites = prod(indexer.lattice_dims)
+    dims_val = collect(Int, indexer.lattice_dims)
 
-        # ── 1. Load ED data ────────────────────────────────────────────────────
-        # use_slater_reference=true prepends the Slater determinant reference
-        # state as target_vecs[1,:]; rows 2:end are the ground states per U.
-        U_values, target_vecs, indexer, _, N_elec, _, _, sign_convention =
-            load_ED_data(folder; verbose=true, use_slater_reference=true)
-        n_up_loaded, n_dn_loaded = N_elec
-        n_U = length(U_values)
-        println("Loaded U_values: $n_U entries, range $(U_values[1]) to $(U_values[end])")
-        println("Loaded N_elec: n_up=$n_up_loaded, n_dn=$n_dn_loaded")
-
-        # ── 2. Derive momentum sector and build Hamiltonians ───────────────────
-        local antihermitian
-        if isnothing(antihermitian_arg)
-            test_prefix = "trotter_N=$N_sites"
-            if !isnothing(custom_ref_state_arg)
-                test_prefix *= "_ref_$(custom_ref_state_arg)"
-            end
-            test_prefix *= "_antihermitian"
-            if loss_type == :energy
-                test_prefix *= "_loss_energy"
-            end
-            if isfile(joinpath(folder, "$(test_prefix)_shared.jld2"))
-                antihermitian = true
-            else
-                antihermitian = false
-            end
-        else
-            antihermitian = antihermitian_arg
-        end
-
-        trotter_prefix = "trotter_N=$N_sites"
+    # Derive antihermitian
+    local antihermitian
+    if isnothing(antihermitian_arg)
+        test_prefix = "trotter_N=$N_sites"
         if !isnothing(custom_ref_state_arg)
-            trotter_prefix *= "_ref_$(custom_ref_state_arg)"
+            test_prefix *= "_ref_$(custom_ref_state_arg)"
         end
-        if antihermitian
-            trotter_prefix *= "_antihermitian"
-        end
+        test_prefix *= "_antihermitian"
         if loss_type == :energy
-            trotter_prefix *= "_loss_energy"
+            test_prefix *= "_loss_energy"
         end
-
-        println("Using antihermitian = $antihermitian")
-
-        # Derive q_target from the indexer's embedded momentum sector.
-        # indexer.k is a 1-based coordinate tuple; q_target is the C-order flat
-        # index (0-based). Falls back to nothing (full basis) if no k is stored.
-        q_target = nothing
-        k_val = try
-            indexer.k
-        catch
-            nothing
-        end
-        dims_val = try
-            indexer.lattice_dims
-        catch
-            nothing
-        end
-        if !isnothing(k_val) && !isnothing(dims_val)
-            q_target = Trotter.ravel_c(Tuple(k - 1 for k in k_val), Tuple(lvec))
-        end
-        println("q_target = $q_target")
-
-        local H_hop_mom, H_int_mom, basis_ints
-        if isnothing(q_target)
-            println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
-            basis_ints = Trotter.get_basis_sector(indexer, lvec, N_sites)
-            lattice = Square(Tuple(lvec), Periodic())
-            subspace = HubbardSubspace(n_up_loaded, n_dn_loaded, lattice; k=nothing)
-            H_hop_mom, H_int_mom = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
+        if isfile(joinpath(folder, "$(test_prefix)_shared.jld2"))
+            antihermitian = true
         else
-            println("\nBuilding sector Hamiltonians in momentum basis...")
-            @time H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(
-                1.0, 0.0, lvec, (n_up_loaded, n_dn_loaded); q_target=q_target,
-            )
-            @time H_int_mom, _, _ = TamFermion.HubbardMomentumBasis(
-                0.0, 1.0, lvec, (n_up_loaded, n_dn_loaded); q_target=q_target,
-            )
-            basis_ints = basis_dict["ints"]
+            antihermitian = false
         end
-        println("Hilbert space sector dim = $(length(basis_ints))")
+    else
+        antihermitian = antihermitian_arg
+    end
 
-        # ── 3. Enumerate gates ─────────────────────────────────────────────────
-        println("\nEnumerating Trotter gates...")
-        @time gates = TamFermion.enumerate_ferm_excitations(
-            2, lvec; conserve_mom=true, conserve_sz=true, include_diagonal=true,
+    # Derive q_target
+    q_target = nothing
+    k_val = try
+        indexer.k
+    catch
+        nothing
+    end
+    if !isnothing(k_val) && !isnothing(dims_val)
+        q_target = Trotter.ravel_c(Tuple(k - 1 for k in k_val), Tuple(dims_val))
+    end
+
+    local H_hop_mom, H_int_mom, basis_ints
+    if isnothing(q_target)
+        println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
+        basis_ints = Trotter.get_basis_sector(indexer, dims_val, N_sites)
+        lattice = Square(Tuple(dims_val), Periodic())
+        subspace = HubbardSubspace(n_up_loaded, n_dn_loaded, lattice; k=nothing)
+        H_hop_mom, H_int_mom = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
+    else
+        println("\nBuilding sector Hamiltonians in momentum basis...")
+        H_hop_mom, basis_dict, _ = TamFermion.HubbardMomentumBasis(
+            1.0, 0.0, dims_val, (n_up_loaded, n_dn_loaded); q_target=q_target,
         )
-        @time tau_terms = TamFermion.fgateToTauSector(gates, N_sites, basis_ints; antihermitian=antihermitian)
-        num_gates = length(gates)
-        println("num_gates = $num_gates")
+        H_int_mom, _, _ = TamFermion.HubbardMomentumBasis(
+            0.0, 1.0, dims_val, (n_up_loaded, n_dn_loaded); q_target=q_target,
+        )
+        basis_ints = basis_dict["ints"]
+    end
 
-        # ── 4. Load exact-exp coefficients and expand to Trotter gate basis ──
-        unitary_prefix = "unitary_map_energy_symmetry=false_N=($n_up_loaded, $n_dn_loaded)"
-        if !isnothing(custom_ref_state_arg)
-            unitary_prefix *= "_ref_$(custom_ref_state_arg)"
+    println("Hilbert space sector dim = $(length(basis_ints))")
+
+    println("\nEnumerating Trotter gates...")
+    gates = TamFermion.enumerate_ferm_excitations(
+        2, dims_val; conserve_mom=true, conserve_sz=true, include_diagonal=true,
+    )
+    tau_terms = TamFermion.fgateToTauSector(gates, N_sites, basis_ints; antihermitian=antihermitian)
+    num_gates = length(gates)
+
+    return U_values, target_vecs, indexer, sign_convention, antihermitian, H_hop_mom, H_int_mom, basis_ints, gates, num_gates, N_sites, n_up_loaded, n_dn_loaded
+end
+
+"""
+    get_exact_coefficients(folder, U_values, n_up_loaded, n_dn_loaded, custom_ref_state_arg, antihermitian, loss_type, sign_convention, gates, indexer, basis_ints)
+
+Loads the optimized exact-exponential coefficient vector and maps/reorders them to match the Trotter gate ordering.
+"""
+function get_exact_coefficients(
+    folder::String,
+    U_values::Vector{Float64},
+    n_up_loaded::Int,
+    n_dn_loaded::Int,
+    custom_ref_state_arg::Union{String,Nothing},
+    antihermitian::Bool,
+    loss_type::Symbol,
+    sign_convention::Symbol,
+    gates,
+    indexer,
+    basis_ints
+)
+    n_U = length(U_values)
+    unitary_prefix = "unitary_map_energy_symmetry=false_N=($n_up_loaded, $n_dn_loaded)"
+    if !isnothing(custom_ref_state_arg)
+        unitary_prefix *= "_ref_$(custom_ref_state_arg)"
+    end
+    if antihermitian
+        unitary_prefix *= "_antihermitian"
+    end
+    if loss_type == :energy
+        unitary_prefix *= "_loss_energy"
+    end
+
+    exact_coeffs_raw = [
+        load_exact_exp_coefficients(folder, unitary_prefix, u_i) for u_i in 1:n_U
+    ]
+    n_loaded = sum(!isnothing, exact_coeffs_raw)
+    println("\nLoaded exact-exp coefficients for $n_loaded / $n_U U values")
+    if n_loaded > 0
+        first_nz = findfirst(!isnothing, exact_coeffs_raw)
+        println("  First non-nothing: u_i=$first_nz, length=$(length(exact_coeffs_raw[first_nz]))")
+    end
+
+    t_keys = load_exact_exp_keys(folder, unitary_prefix)
+    num_gates = length(gates)
+    lvec = collect(Int, indexer.lattice_dims)
+
+    exact_coeffs = if !isnothing(t_keys) && n_loaded > 0
+        println("  Operator keys loaded: $(length(t_keys)). Reordering to $num_gates gate basis...")
+        map(exact_coeffs_raw) do A
+            isnothing(A) ? nothing : reorder_exact_to_trotter_coeffs(A, t_keys, gates, lvec, indexer, basis_ints; antihermitian=antihermitian, sign_convention=sign_convention)
         end
-        if antihermitian
-            unitary_prefix *= "_antihermitian"
-        end
-        if loss_type == :energy
-            unitary_prefix *= "_loss_energy"
+    else
+        @warn "Could not load operator keys from shared file; exact-exp evaluation skipped."
+        fill(nothing, n_U)
+    end
+
+    return exact_coeffs_raw, t_keys, exact_coeffs
+end
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# HIGH-LEVEL ANALYSES
+# ═══════════════════════════════════════════════════════════════════════════════
+
+
+"""
+    compute_trotterized_energies_u_sweep(folder, trotter_orders, custom_ref_state_arg, antihermitian_arg, loss_type)
+
+Runs the sweep over all U values for a single system size/folder, returning the computed data.
+"""
+function compute_trotterized_energies_u_sweep(
+    folder::String,
+    trotter_orders::Vector{Int},
+    custom_ref_state_arg::Union{String,Nothing},
+    antihermitian_arg::Union{Bool,Nothing},
+    loss_type::Symbol
+)
+    # 1. Setup system
+    U_values, target_vecs, indexer, sign_convention, antihermitian, H_hop_mom, H_int_mom, basis_ints, gates, num_gates, N_sites, n_up_loaded, n_dn_loaded =
+        setup_system(folder, custom_ref_state_arg, antihermitian_arg, loss_type)
+
+    n_U = length(U_values)
+    lvec = collect(Int, indexer.lattice_dims)
+
+    # 2. Get exact coefficients
+    exact_coeffs_raw, t_keys, exact_coeffs = get_exact_coefficients(
+        folder, U_values, n_up_loaded, n_dn_loaded, custom_ref_state_arg, antihermitian, loss_type, sign_convention, gates, indexer, basis_ints
+    )
+
+    # 3. Extract ground states and reference state
+    gs_states = [ComplexF64.(vec(target_vecs[u_i+1, :])) for u_i in 1:n_U]
+    gs_energies = [compute_energy(gs_states[u_i], H_hop_mom + U_values[u_i] * H_int_mom) for u_i in 1:n_U]
+    println("gs energies: $gs_energies")
+
+    ref_state = ComplexF64.(vec(target_vecs[1, :]))
+
+    # 4. Compute exact-exp energies
+    println("\nComputing exact-exp energies...")
+    exact_exp_energies = if !isnothing(t_keys) && sum(!isnothing, exact_coeffs_raw) > 0
+        compute_exact_exp_energies(
+            exact_coeffs_raw, t_keys, indexer, lvec, basis_ints, ref_state,
+            H_hop_mom, H_int_mom, U_values; antihermitian=antihermitian, sign_convention=sign_convention
+        )
+    else
+        fill(NaN, n_U)
+    end
+    println("  Done ($(sum(!isnan, exact_exp_energies)) non-NaN values)")
+
+    if all(isnan, exact_exp_energies)
+        error("No exact exponential data found (all exact-exp energies are NaN). The comparison is meaningless without exact exponential data.")
+    end
+
+    # 5. Compute trotterized energies
+    println("\nComputing trotterized energies for orders P = $trotter_orders...")
+    trotter_energies = compute_trotterized_energies(
+        exact_coeffs, trotter_orders, gates, ref_state, basis_ints,
+        N_sites, H_hop_mom, H_int_mom, U_values, num_gates; antihermitian=antihermitian
+    )
+
+    # 6. Load trotter-optimized energies
+    println("\nLoading trotter-optimized (energy-loss) results...")
+    trotter_opt_energies = load_trotter_opt_energies(
+        folder, N_sites, n_U;
+        custom_ref_state_arg=custom_ref_state_arg,
+        antihermitian=antihermitian,
+        loss_type=loss_type
+    )
+    println("trotter energies: $trotter_opt_energies")
+    println("Diff energies: $(trotter_opt_energies - gs_energies)")
+    println("  Loaded $(sum(!isnan, trotter_opt_energies)) values")
+
+    return U_values, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies, n_up_loaded, n_dn_loaded, lvec
+end
+
+"""
+    compute_trotterized_energies_system_size(system_folders, U_target, trotter_orders, custom_ref_state_arg, antihermitian_arg, loss_type)
+
+Computes exact ground states, exact-exp, trotterized, and trotter-optimized energies for a single U value across multiple system sizes.
+"""
+function compute_trotterized_energies_system_size(
+    system_folders::Vector{String},
+    U_target::Float64,
+    trotter_orders::Vector{Int},
+    custom_ref_state_arg::Union{String,Nothing},
+    antihermitian_arg::Union{Bool,Nothing},
+    loss_type::Symbol
+)
+    n_systems = length(system_folders)
+    system_names = String[]
+    num_sites = Int[]
+    gs_energies = Float64[]
+    exact_exp_energies = Float64[]
+    trotter_energies = Dict{Int,Vector{Float64}}()
+    for P in trotter_orders
+        trotter_energies[P] = fill(NaN, n_systems)
+    end
+    trotter_opt_energies = fill(NaN, n_systems)
+
+    for (s_idx, folder) in enumerate(system_folders)
+        println("\n=======================================================")
+        println("Processing system: $(basename(folder))")
+        println("=======================================================")
+
+        # 1. Setup system
+        U_values, target_vecs, indexer, sign_convention, antihermitian, H_hop_mom, H_int_mom, basis_ints, gates, num_gates, N_sites, n_up_loaded, n_dn_loaded =
+            setup_system(folder, custom_ref_state_arg, antihermitian_arg, loss_type)
+
+        push!(system_names, basename(folder))
+        push!(num_sites, N_sites)
+
+        # 2. Find the U index closest to U_target
+        u_i = findmin(abs.(U_values .- U_target))[2]
+        U_actual = U_values[u_i]
+        println("Target U = $U_target, closest actual U = $U_actual (index $u_i)")
+
+        # 3. Load ground state and reference state
+        gs_state = ComplexF64.(vec(target_vecs[u_i+1, :]))
+        gs_energy = compute_energy(gs_state, H_hop_mom + U_actual * H_int_mom)
+        push!(gs_energies, gs_energy)
+        println("GS energy: $gs_energy")
+
+        ref_state = ComplexF64.(vec(target_vecs[1, :]))
+
+        # 4. Load exact coefficients
+        exact_coeffs_raw, t_keys, exact_coeffs = get_exact_coefficients(
+            folder, U_values, n_up_loaded, n_dn_loaded, custom_ref_state_arg, antihermitian, loss_type, sign_convention, gates, indexer, basis_ints
+        )
+
+        # 5. Compute exact-exp energy for this U
+        if !isnothing(t_keys) && !isnothing(exact_coeffs_raw[u_i])
+            # Call compute_exact_exp_energies wrapping just this U
+            exact_val = compute_exact_exp_energies(
+                [exact_coeffs_raw[u_i]], t_keys, indexer, collect(Int, indexer.lattice_dims), basis_ints, ref_state,
+                H_hop_mom, H_int_mom, [U_actual]; antihermitian=antihermitian, sign_convention=sign_convention
+            )[1]
+            push!(exact_exp_energies, exact_val)
+            println("Exact exp energy: $exact_val")
+        else
+            push!(exact_exp_energies, NaN)
+            println("Exact exp energy: NaN")
         end
 
-        exact_coeffs_raw = [
-            load_exact_exp_coefficients(folder, unitary_prefix, u_i) for u_i in 1:n_U
-        ]
-        n_loaded = sum(!isnothing, exact_coeffs_raw)
-        println("\nLoaded exact-exp coefficients for $n_loaded / $n_U U values")
-        if n_loaded > 0
-            first_nz = findfirst(!isnothing, exact_coeffs_raw)
-            println("  First non-nothing: u_i=$first_nz, length=$(length(exact_coeffs_raw[first_nz]))")
-        end
-
-        # Load the operator keys used by the exact-exp optimization and reorder
-        # the coefficients to match the Trotter gate ordering.
-        t_keys = load_exact_exp_keys(folder, unitary_prefix)
-        println("  Using sign convention: $sign_convention")
-
-        exact_coeffs = if !isnothing(t_keys) && n_loaded > 0
-            println("  Operator keys loaded: $(length(t_keys)). Reordering to $num_gates gate basis...")
-            map(exact_coeffs_raw) do A
-                isnothing(A) ? nothing : reorder_exact_to_trotter_coeffs(A, t_keys, gates, lvec, indexer, basis_ints; antihermitian=antihermitian, sign_convention=sign_convention)
+        # 6. Compute trotterized energies for each P
+        if !isnothing(exact_coeffs[u_i])
+            trotter_vals = compute_trotterized_energies(
+                [exact_coeffs[u_i]], trotter_orders, gates, ref_state, basis_ints,
+                N_sites, H_hop_mom, H_int_mom, [U_actual], num_gates; antihermitian=antihermitian
+            )
+            for P in trotter_orders
+                trotter_energies[P][s_idx] = trotter_vals[P][1]
             end
-        else
-            @warn "Could not load operator keys from shared file; exact-exp evaluation skipped."
-            fill(nothing, n_U)
         end
 
-        # ── 5. Extract ground states and reference state from loaded target_vecs ──
-        gs_states = [ComplexF64.(vec(target_vecs[u_i+1, :])) for u_i in 1:n_U]
-        gs_energies = [compute_energy(gs_states[u_i], H_hop_mom + U_values[u_i] * H_int_mom) for u_i in 1:n_U]
-        println("gs energies: $gs_energies")
-
-
-        # ── 6. Exact-exp energies ─────────────────────────────────────────────
-        println("\nComputing exact-exp energies...")
-        exact_exp_energies = if !isnothing(t_keys) && n_loaded > 0
-            compute_exact_exp_energies(
-                exact_coeffs_raw, t_keys, indexer, lvec, basis_ints, ref_state,
-                H_hop_mom, H_int_mom, U_values; antihermitian=antihermitian, sign_convention=sign_convention
-            )
-        else
-            fill(NaN, n_U)
-        end
-        println("  Done ($(sum(!isnan, exact_exp_energies)) non-NaN values)")
-
-        if all(isnan, exact_exp_energies)
-            error("No exact exponential data found (all exact-exp energies are NaN). The comparison is meaningless without exact exponential data.")
-        end
-
-        # ── 7. Trotterized energies for each P ────────────────────────────────
-        println("\nComputing trotterized energies for orders P = $trotter_orders...")
-        trotter_energies = compute_trotterized_energies(
-            exact_coeffs, trotter_orders, gates, ref_state, basis_ints,
-            N_sites, H_hop_mom, H_int_mom, U_values, num_gates; antihermitian=antihermitian
-        )
-
-        # ── 8. Trotter-optimized energies ─────────────────────────────────────
-        println("\nLoading trotter-optimized (energy-loss) results...")
-        trotter_opt_energies = load_trotter_opt_energies(
-            folder, N_sites, n_U;
+        # 7. Load trotter-optimized energies
+        trotter_opt = load_trotter_opt_energies(
+            folder, N_sites, length(U_values);
             custom_ref_state_arg=custom_ref_state_arg,
             antihermitian=antihermitian,
             loss_type=loss_type
         )
-        println("trotter energies: $trotter_opt_energies")
-        println("Diff energies: $(trotter_opt_energies - gs_energies)")
-        println("  Loaded $(sum(!isnan, trotter_opt_energies)) values")
+        trotter_opt_energies[s_idx] = trotter_opt[u_i]
+        println("Trotter opt energy: $(trotter_opt[u_i])")
+    end
 
-        # ── 9. Plot and save ──────────────────────────────────────────────────
-        println("\nBuilding and saving plot...")
-        p = build_comparison_plot(
-            U_values, gs_energies, exact_exp_energies,
-            trotter_energies, trotter_opt_energies,
-            trotter_orders, n_up_loaded, n_dn_loaded, lvec;
-            custom_ref_state_arg=custom_ref_state_arg,
-            loss_type=loss_type
+    return system_names, num_sites, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies
+end
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SYSTEM SIZE PLOTTING
+# ═══════════════════════════════════════════════════════════════════════════════
+
+"""
+    build_system_size_comparison_plot(system_sizes, num_sites, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies, trotter_orders, U_value, loss_type) -> Plot
+
+Plots energy differences (E - E_gs) vs system sizes at a single U value.
+"""
+function build_system_size_comparison_plot(
+    system_sizes::Vector{String},
+    num_sites::Vector{Int},
+    gs_energies::Vector{Float64},
+    exact_exp_energies::Vector{Float64},
+    trotter_energies::Dict{Int,Vector{Float64}},
+    trotter_opt_energies::Vector{Float64},
+    trotter_orders::Vector{Int},
+    U_value::Float64,
+    loss_type::Symbol
+)
+    # Sort systems by: 1. Number of sites, 2. GS Energy (as proxy for size/filling uniqueness), 3. System name
+    sort_keys = [(num_sites[i], gs_energies[i], system_sizes[i]) for i in 1:length(system_sizes)]
+    perm = sortperm(sort_keys)
+
+    sorted_sizes = system_sizes[perm]
+    sorted_gs = gs_energies[perm]
+    sorted_exact = exact_exp_energies[perm]
+    sorted_opt = trotter_opt_energies[perm]
+
+    sorted_trotter = Dict{Int,Vector{Float64}}()
+    for P in trotter_orders
+        sorted_trotter[P] = trotter_energies[P][perm]
+    end
+
+    x_coords = 1:length(system_sizes)
+
+    p = plot(
+        xlabel="System",
+        ylabel="Energy Difference (E - E_gs)",
+        title="Hamiltonian energy difference vs System Size\n(U = $U_value, loss=$(loss_type))",
+        legend=:outerright,
+        size=(1000, 550),
+        xticks=(x_coords, sorted_sizes),
+        yscale=:log10,
+        margin=5Plots.mm
+    )
+
+    valid_exact = .!isnan.(sorted_exact)
+    plot!(p, x_coords[valid_exact], max.(sorted_exact[valid_exact] .- sorted_gs[valid_exact], 1e-15);
+        label="Exact exp ($(loss_type)-opt)",
+        color=:blue,
+        lw=2,
+        marker=:circle,
+        markersize=5
+    )
+
+    trotter_palette = [:red, :orange, :purple, :darkgreen, :magenta, :brown]
+    for (idx, P) in enumerate(trotter_orders)
+        energies_P = sorted_trotter[P]
+        valid = .!isnan.(energies_P)
+        plot!(p, x_coords[valid], max.(energies_P[valid] .- sorted_gs[valid], 1e-15);
+            label="Trotterized P=$P",
+            color=trotter_palette[mod1(idx, length(trotter_palette))],
+            lw=1.5,
+            marker=:square,
+            markersize=4
         )
+    end
 
-        out_path = joinpath(folder, "$output_file.png")
-        savefig(p, out_path)
-        println("  Saved → $out_path")
+    valid_opt = .!isnan.(sorted_opt)
+    plot!(p, x_coords[valid_opt], max.(sorted_opt[valid_opt] .- sorted_gs[valid_opt], 1e-15);
+        label="Trotter opt ($(loss_type)-optimized)",
+        color=:cyan,
+        lw=2,
+        marker=:diamond,
+        markersize=5
+    )
+
+    return p
+end
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MAIN ENTRY POINT
+# ═══════════════════════════════════════════════════════════════════════════════
+
+function (@main)(ARGS)
+    log_path = make_log_path(@__DIR__, "trotter_exp_testing")
+    with_logging(log_path) do
+        folders, trotter_orders, n_up, n_dn, lvec, output_file, antihermitian, loss_type, custom_ref_state_arg, u_val = parse_arguments(ARGS)
+
+        println("=== Trotter experiment testing ===")
+        println("  folders        = $folders")
+        println("  trotter_orders = $trotter_orders")
+        println("  loss_type      = $loss_type")
+        println("  custom_ref     = $custom_ref_state_arg")
+        println("  u_val          = $u_val")
+        println()
+
+        if !isnothing(u_val)
+            # Run system size computation for the given folders
+            system_names, num_sites, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies =
+                compute_trotterized_energies_system_size(
+                    folders, u_val, trotter_orders, custom_ref_state_arg, antihermitian, loss_type
+                )
+
+            # Plot the results
+            println("\nBuilding and saving system size comparison plot...")
+            p = build_system_size_comparison_plot(
+                system_names, num_sites, gs_energies, exact_exp_energies,
+                trotter_energies, trotter_opt_energies,
+                trotter_orders, u_val, loss_type
+            )
+
+            # Save the plot in the first folder (or a default path)
+            out_path = joinpath(folders[1], "$(output_file)_system_size.png")
+            savefig(p, out_path)
+            println("  Saved → $out_path")
+        else
+            # Run U sweep for the single folder
+            U_values, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies, n_up_loaded, n_dn_loaded, lvec =
+                compute_trotterized_energies_u_sweep(
+                    folders[1], trotter_orders, custom_ref_state_arg, antihermitian, loss_type
+                )
+
+            # Plot the results
+            println("\nBuilding and saving plot...")
+            p = build_comparison_plot(
+                U_values, gs_energies, exact_exp_energies,
+                trotter_energies, trotter_opt_energies,
+                trotter_orders, n_up_loaded, n_dn_loaded, lvec;
+                custom_ref_state_arg=custom_ref_state_arg,
+                loss_type=loss_type
+            )
+
+            # Save the plot
+            out_path = joinpath(folders[1], "$output_file.png")
+            savefig(p, out_path)
+            println("  Saved → $out_path")
+        end
 
         return 0
     end

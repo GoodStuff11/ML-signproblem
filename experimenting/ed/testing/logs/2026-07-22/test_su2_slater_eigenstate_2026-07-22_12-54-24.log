@@ -1,0 +1,24 @@
+================================================================================
+Timestamp: 2026-07-22T12:54:24.506
+Command run: julia testing/test_su2_slater_eigenstate.jl 
+================================================================================
+================================================================================
+           SU(2) Slater Reference State Eigenstate Verification Test            
+================================================================================ERROR: UndefVarError: `sc` not defined
+ in `Main`
+Suggestion: check for spelling errors or missing imports.
+Stacktrace:
+ [1] (::var"#main##0#main##1"{Vector{String}})()
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_su2_slater_eigenstate.jl:188
+ [2] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+   @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [3] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+   @ Base ./io.jl:410
+ [4] open
+   @ ./io.jl:407 [inlined]
+ [5] with_logging
+   @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [6] main(ARGS::Vector{String})
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_su2_slater_eigenstate.jl:147
+ [7] _start()
+   @ Base ./client.jl:556

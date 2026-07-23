@@ -1767,17 +1767,30 @@ function HubbardOrbitBasis(t::Real, u::Real, Lvec, nvec;
 end
 
 """
-    HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec; q_target::Union{Integer, Nothing}=nothing, returnBasis::Bool=true)
+    HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec; q_target::Union{Integer, Nothing}=nothing, basis_sector::Union{AbstractVector{<:Integer}, Nothing}=nothing, indexer=nothing, returnBasis::Bool=true)
 
-Build the Hubbard Hamiltonian in the Slater momentum basis.
+Build the Hubbard Hamiltonian in the Slater momentum basis. If `indexer` or `basis_sector` is provided,
+the returned Hamiltonian matrix and basis dictionary are permuted to match the specified basis sector order.
 """
 function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
     q_target::Union{Integer,Nothing}=nothing,
+    basis_sector::Union{AbstractVector{<:Integer},Nothing}=nothing,
+    indexer=nothing,
     returnBasis::Bool=true)
     Lvec = collect(Int, Lvec)
     N = prod(Lvec)
     n_up, n_dn = nvec
     dims = Tuple(Lvec)
+
+    # if indexer is supplied use it to figure out what the momentum subspace is.
+    if indexer !== nothing
+        if basis_sector === nothing
+            basis_sector = get_basis_sector(indexer, Lvec, N)
+        end
+        if q_target === nothing && !isnothing(indexer.k) && !isnothing(indexer.lattice_dims)
+            q_target = ravel_c(Tuple(k - 1 for k in indexer.k), Tuple(Lvec))
+        end
+    end
 
     # 1. Get Slater momentum basis & total momentum info
     basis_dict = fullSlaterMomBasis(Lvec, n_up, n_dn)
@@ -1895,6 +1908,18 @@ function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
 
     H_mom_sorted = H_hop + H_int
 
+    if basis_sector !== nothing
+        state_to_idx = Dict(val => idx for (idx, val) in enumerate(basis_dict["ints"]))
+        perm = [state_to_idx[val] for val in basis_sector]
+        H_mom_sorted = H_mom_sorted[perm, perm]
+        basis_dict["ints"] = basis_dict["ints"][perm]
+        for key in ("qtot_up", "qtot_dn", "qtot", "sortOrder")
+            if haskey(basis_dict, key)
+                basis_dict[key] = basis_dict[key][perm]
+            end
+        end
+    end
+
     if returnBasis
         return H_mom_sorted, basis_dict, counts
     else
@@ -1903,7 +1928,7 @@ function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
 end
 
 """
-    Hubbard(t::Real, u::Real, Lvec, nvec, basis_type::Symbol=:real; use_pbc::Bool=true, returnBasis::Bool=true, q_target::Union{Integer, Nothing}=nothing)
+    Hubbard(t::Real, u::Real, Lvec, nvec, basis_type::Symbol=:real; use_pbc::Bool=true, returnBasis::Bool=true, q_target::Union{Integer, Nothing}=nothing, basis_sector::Union{AbstractVector{<:Integer}, Nothing}=nothing, indexer=nothing)
 
 Build the Hubbard Hamiltonian in the specified basis:
 - `:real`: real-space (position) basis.
@@ -1918,10 +1943,12 @@ Returns:
 function Hubbard(t::Real, u::Real, Lvec, nvec, basis_type::Symbol=:real;
     use_pbc::Bool=true,
     returnBasis::Bool=true,
-    q_target::Union{Integer,Nothing}=nothing)
+    q_target::Union{Integer,Nothing}=nothing,
+    basis_sector::Union{AbstractVector{<:Integer},Nothing}=nothing,
+    indexer=nothing)
     if basis_type == :real
-        if q_target !== nothing
-            throw(ArgumentError("q_target is not supported for real-space basis"))
+        if q_target !== nothing || basis_sector !== nothing || indexer !== nothing
+            throw(ArgumentError("q_target, basis_sector, and indexer are not supported for real-space basis"))
         end
         return HubbardRealSpace(t, u, Lvec, nvec; use_pbc=use_pbc, returnBasis=returnBasis)
     elseif basis_type == :orbit
@@ -1929,7 +1956,7 @@ function Hubbard(t::Real, u::Real, Lvec, nvec, basis_type::Symbol=:real;
         return HubbardOrbitBasis(t, u, Lvec, nvec; q_target=q_target, returnBasis=returnBasis)
     elseif basis_type == :momentum
         @assert use_pbc == true
-        return HubbardMomentumBasis(t, u, Lvec, nvec; q_target=q_target, returnBasis=returnBasis)
+        return HubbardMomentumBasis(t, u, Lvec, nvec; q_target=q_target, basis_sector=basis_sector, indexer=indexer, returnBasis=returnBasis)
     else
         throw(ArgumentError("Unknown basis_type: $basis_type. Expected :real, :orbit, or :momentum"))
     end

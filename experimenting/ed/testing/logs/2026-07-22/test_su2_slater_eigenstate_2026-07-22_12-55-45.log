@@ -1,0 +1,289 @@
+================================================================================
+Timestamp: 2026-07-22T12:55:45.312
+Command run: julia testing/test_su2_slater_eigenstate.jl 
+================================================================================
+================================================================================
+           SU(2) Slater Reference State Eigenstate Verification Test            
+================================================================================
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x3
+  su2_symmetry: true
+  sign_convention: spin_first
+Caught expected error for dataset without doubly occupied Slater state: ErrorException("No momentum sector found with a doubly occupied Slater determinant ground state.")
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x3
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 792
+  Reference state norm = 1.0
+  <S²> expectation value: 2.0
+  Residual norm ||S² ψ - <S²> ψ||: 2.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 2.0
+  Without su2_symmetry: <S²> = 2.0, residual_norm = 2.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x3
+  su2_symmetry: true
+  sign_convention: coordinate_first
+Caught expected error for dataset without doubly occupied Slater state: ErrorException("No momentum sector found with a doubly occupied Slater determinant ground state.")
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x3
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 792
+  Reference state norm = 1.0
+  <S²> expectation value: 2.0
+  Residual norm ||S² ψ - <S²> ψ||: 2.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 2.0
+  Without su2_symmetry: <S²> = 2.0, residual_norm = 2.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(4, 4)_3x3
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (4, 4)
+  Hilbert space dimension H_dim = 1764
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(4, 4)_3x3
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (4, 4)
+  Hilbert space dimension H_dim = 1764
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(4, 4)_3x3
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (4, 4)
+  Hilbert space dimension H_dim = 1764
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(4, 4)_3x3
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (4, 4)
+  Hilbert space dimension H_dim = 1764
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+SUCCESS: All Slater reference state SU(2) eigenvector tests PASSED!
+================================================================================

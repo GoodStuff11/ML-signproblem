@@ -88,6 +88,15 @@ end
 # OVERLAP LOSS
 # ═══════════════════════════════════════════════════════════════════════
 
+"""
+A : coefficients stored
+gates : output of get_fermionic_gates
+tau_terms : (not used unless gradient is computed)
+ref :
+target :
+basis :
+N : number of sites
+"""
 function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false)
     ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
     return 1 - abs2(dot(target, ref_evolved))
@@ -137,11 +146,11 @@ end
 # ═══════════════════════════════════════════════════════════════════════
 
 """
-    find_multi_start_initialization(f, optf, M::Int; kwargs...) -> A_init
+    find_multi_start_initialization(f, optf, M::Int; kwargs...) -> (A_init, local_multistart_losses, local_best_start_idx, multistart_run)
 
 Perform multi-start initialization by sampling `initialization_samples` random configurations of size `M`.
 Evaluate the gradient of each configuration with function `f`, select the top `multi_start_samples` candidates based on gradient norm,
-run quick optimization sweeps of at most `multi_start_iters` with `optf`, and return the best overall parameter configuration.
+run quick optimization sweeps of at most `multi_start_iters` with `optf`, and return the best overall parameter configuration along with candidate loss trajectories.
 """
 function find_multi_start_initialization(f, optf, M::Int;
     initialization_samples::Int=20,
@@ -186,7 +195,8 @@ function find_multi_start_initialization(f, optf, M::Int;
 
     if top_n == 0
         println("No good samples found, falling back to random initialization.")
-        return (2 * rand(M) .- 1) * 0.01
+        fallback_A = (2 * rand(M) .- 1) * 0.01
+        return fallback_A, Vector{Float64}[], 0, false
     end
 
     println("Performing quick optimization on top $top_n candidates...")
@@ -199,15 +209,20 @@ function find_multi_start_initialization(f, optf, M::Int;
         curr_A = copy(candidate_A)
         curr_loss = Inf
         success = false
+        candidate_history = Float64[]
         for (idx, opt) in enumerate(optimizers)
             if idx > 1 && perturb_optimization > 1e-9
                 used_perturb = perturb_optimization^(1 + (idx - 1) / 3)
                 curr_A = curr_A * (1 - used_perturb) + used_perturb * mean(abs.(curr_A)) * (2 * rand(length(curr_A)) .- 1)
             end
             opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
+            cb = (state, loss_val) -> begin
+                push!(candidate_history, loss_val)
+                return false
+            end
             prob = Optimization.OptimizationProblem(optf, curr_A)
             try
-                sol = Optimization.solve(prob, opt_algo, maxiters=quick_maxiters)
+                sol = Optimization.solve(prob, opt_algo, maxiters=quick_maxiters, callback=cb)
                 curr_A = sol.u
                 curr_loss = sol.objective
                 success = true
@@ -216,7 +231,7 @@ function find_multi_start_initialization(f, optf, M::Int;
             end
         end
         if success
-            candidate_results[i] = (curr_loss, curr_A)
+            candidate_results[i] = (curr_loss, curr_A, candidate_history)
         else
             candidate_results[i] = nothing
         end
@@ -224,18 +239,25 @@ function find_multi_start_initialization(f, optf, M::Int;
 
     best_loss = Inf
     best_A = nothing
-    for res in candidate_results
-        if !isnothing(res) && res[1] < best_loss
-            best_loss = res[1]
-            best_A = res[2]
+    local_best_start_idx = 0
+    local_multistart_losses = Vector{Float64}[]
+    for (i, res) in enumerate(candidate_results)
+        if !isnothing(res)
+            push!(local_multistart_losses, res[3])
+            if res[1] < best_loss
+                best_loss = res[1]
+                best_A = res[2]
+                local_best_start_idx = i
+            end
         end
     end
 
     if isnothing(best_A)
-        return (2 * rand(M) .- 1) * 0.01
+        fallback_A = (2 * rand(M) .- 1) * 0.01
+        return fallback_A, Vector{Float64}[], 0, false
     else
         println("Selected best candidate with loss=$best_loss")
-        return best_A
+        return best_A, local_multistart_losses, local_best_start_idx, true
     end
 end
 
@@ -244,9 +266,12 @@ end
 
 Optimize the parameter vector A of length `num_exponentials * length(gates)` to minimize
 either overlap or energy loss. Supports multi-start initialization.
+Returns `(A_opt, final_loss, metrics)`.
 """
 function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{AbstractVector,AbstractMatrix}, basis, N::Int;
     loss_type::Symbol=:overlap,
+    H::Union{AbstractMatrix,Nothing}=nothing,
+    state2::Union{AbstractVector,Nothing}=nothing,
     num_exponentials::Int=1,
     maxiters::Int=100,
     optimizer=:LBFGS,
@@ -255,7 +280,8 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     multi_start_samples::Int=5,
     multi_start_iters::Int=30,
     initial_coefficients::Union{AbstractVector,Nothing}=nothing,
-    antihermitian::Bool=false)
+    antihermitian::Bool=false,
+    metric_functions::Dict{String,Function}=Dict{String,Function}())
 
     f = (A, p=nothing) -> begin
         if loss_type == :overlap
@@ -270,10 +296,49 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
     M = num_exponentials * length(gates)
 
+    state2_vec = target isa AbstractVector ? target : state2
+    H_mat = target isa AbstractMatrix ? target : H
+
+    initial_loss = if loss_type == :overlap
+        1.0 - abs2(dot(state2_vec, ref))
+    elseif loss_type == :energy
+        real(dot(ref, H_mat * ref))
+    else
+        error("Unknown loss_type: $loss_type")
+    end
+
+    metrics = Dict{String,Vector{Any}}()
+    metrics["loss"] = Float64[initial_loss]
+    metrics["other"] = []
+    metrics["loss_std"] = Float64[0.0]
+    metrics["optimization_losses"] = Vector{Float64}[]
+    metrics["multistart_losses"] = Vector{Vector{Float64}}[]
+    metrics["best_start_idx"] = Int[]
+    if loss_type == :overlap
+        metrics["energy"] = Float64[!isnothing(H_mat) ? real(dot(ref, H_mat * ref)) : NaN]
+    elseif loss_type == :energy
+        metrics["overlap"] = Float64[!isnothing(state2_vec) ? (1.0 - abs2(dot(state2_vec, ref))) : NaN]
+    end
+    for k in keys(metric_functions)
+        metrics[k] = Any[]
+    end
+
+    println("Initial loss ($loss_type): $initial_loss")
+
+    if loss_type == :overlap && initial_loss < 1e-15
+        println("States are already equal")
+        A_zero = zeros(Float64, M)
+        return A_zero, initial_loss, metrics
+    end
+
+    multistart_run = false
+    local_multistart_losses = Vector{Float64}[]
+    local_best_start_idx = 0
+
     if !isnothing(initial_coefficients) && length(initial_coefficients) == M
         A_init = copy(initial_coefficients)
     elseif initialization_samples > 0
-        A_init = find_multi_start_initialization(f, optf, M;
+        A_init, local_multistart_losses, local_best_start_idx, multistart_run = find_multi_start_initialization(f, optf, M;
             initialization_samples=initialization_samples,
             multi_start_samples=multi_start_samples,
             multi_start_iters=multi_start_iters,
@@ -286,8 +351,14 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
 
     optimizers = (optimizer isa AbstractVector) ? optimizer : [optimizer]
     curr_A = copy(A_init)
-    curr_loss = Inf
-    local sol
+    curr_loss = initial_loss
+    final_history = Float64[]
+
+    cb = (state, loss_val) -> begin
+        push!(final_history, loss_val)
+        return false
+    end
+
     for (idx, opt) in enumerate(optimizers)
         if idx > 1 && perturb_optimization > 1e-9
             used_perturb = perturb_optimization^(1 + (idx - 1) / 3)
@@ -296,11 +367,44 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
         prob = Optimization.OptimizationProblem(optf, curr_A)
         println("Running main optimization step $idx with $opt (maxiters=$maxiters)...")
-        sol = Optimization.solve(prob, opt_algo, maxiters=maxiters)
+        sol = Optimization.solve(prob, opt_algo, maxiters=maxiters, callback=cb)
         curr_A = sol.u
         curr_loss = sol.objective
     end
-    return curr_A, curr_loss
+
+    push!(metrics["loss"], curr_loss)
+    push!(metrics["optimization_losses"], final_history)
+    if multistart_run
+        push!(metrics["multistart_losses"], local_multistart_losses)
+        push!(metrics["best_start_idx"], local_best_start_idx)
+    else
+        push!(metrics["multistart_losses"], Vector{Float64}[])
+        push!(metrics["best_start_idx"], 0)
+    end
+
+    ref_evolved = apply_unitary(curr_A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
+    if loss_type == :overlap
+        final_energy = !isnothing(H_mat) ? real(dot(ref_evolved, H_mat * ref_evolved)) : NaN
+        push!(metrics["energy"], final_energy)
+    elseif loss_type == :energy
+        final_overlap = !isnothing(state2_vec) ? (1.0 - abs2(dot(state2_vec, ref_evolved))) : NaN
+        push!(metrics["overlap"], final_overlap)
+    end
+
+    for (k, func) in metric_functions
+        val = try
+            func(ref, target, curr_A, final_history)
+        catch
+            try
+                func(ref, target, gates, curr_A, final_history)
+            catch
+                NaN
+            end
+        end
+        push!(metrics[k], val)
+    end
+
+    return curr_A, curr_loss, metrics
 end
 
 function get_optimizer_algo(opt_sym::Symbol)
@@ -335,7 +439,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     initialization_samples::Int=20,
     multi_start_samples::Int=5,
     multi_start_iters::Int=30,
-    antihermitian::Bool=get(instructions, "antihermitian", false)
+    antihermitian::Bool=get(instructions, "antihermitian", false),
+    metric_functions::Dict{String,Function}=Dict{String,Function}()
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -399,9 +504,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         opt_target = (loss_type == :energy) ? H : state2
 
-        A_opt, final_loss = optimize_unitary(
+        A_opt, final_loss, metrics = optimize_unitary(
             gates, tau_terms, state1, opt_target, basis, N;
             loss_type=loss_type,
+            H=H,
+            state2=state2,
             num_exponentials=num_exponentials,
             maxiters=maxiters,
             optimizer=optimizer,
@@ -410,7 +517,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             multi_start_samples=multi_start_samples,
             multi_start_iters=multi_start_iters,
             initial_coefficients=current_coeffs,
-            antihermitian=antihermitian
+            antihermitian=antihermitian,
+            metric_functions=metric_functions
         )
 
         current_coeffs = A_opt
@@ -421,11 +529,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         push!(data_dict["coefficients"], A_opt)
         push!(data_dict["loss_metrics"], final_loss)
 
-        # Construct metrics dictionary
-        ref_evolved = apply_unitary(A_opt, gates, state1, basis, N, num_exponentials; antihermitian=antihermitian)
-        metrics = Dict{String,Any}("loss" => [final_loss])
-
         # Calculate comparison metrics
+        ref_evolved = apply_unitary(A_opt, gates, state1, basis, N, num_exponentials; antihermitian=antihermitian)
         H_eval = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
             H_hopping + target_u * H_interaction
         else
@@ -434,12 +539,6 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         ed_energy = !isnothing(H_eval) ? real(dot(state2, H_eval * state2)) : NaN
         trotter_energy = !isnothing(H_eval) ? real(dot(ref_evolved, H_eval * ref_evolved)) : NaN
         overlap = abs2(dot(state2, ref_evolved))
-
-        if loss_type == :overlap
-            metrics["energy"] = [trotter_energy]
-        elseif loss_type == :energy
-            metrics["overlap"] = [1.0 - overlap]
-        end
 
         println("  Optimization Complete:")
         println("    Final Loss ($loss_type): $final_loss")
@@ -472,6 +571,14 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 "norm2" => [norm(A_opt, 2)]
             )
             JLD2.jldsave(joinpath(save_folder, "$(save_name)_u_$u_idx.jld2"); dict=iter_dict)
+        end
+
+        for (k, val) in metrics
+            if k * "_metrics" ∉ keys(data_dict)
+                data_dict[k*"_metrics"] = [val]
+            else
+                push!(data_dict[k*"_metrics"], val)
+            end
         end
 
         push!(data_dict["labels"], Dict(

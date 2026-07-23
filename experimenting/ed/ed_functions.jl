@@ -602,7 +602,7 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
         kvecs = read(data, "metadata/kvecs")
 
         key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-        all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels] # Needed for energy selection
+        all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels] # Needed for energy selection
         k_min = find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry)
         if verbose
             println(all_E)
@@ -946,11 +946,10 @@ A tuple containing:
 function load_ED_data(folder; verbose=false, kwargs...)
     jld2_path = joinpath(folder, "meta_data_and_E.jld2")
     if !isfile(jld2_path)
-        args = load_h5_ED_data(folder; verbose=verbose, kwargs...)
+        return load_h5_ED_data(folder; verbose=verbose, kwargs...)
     else
-        args = load_jld2_ED_data(jld2_path; verbose=verbose, kwargs...)
+        return load_jld2_ED_data(jld2_path; verbose=verbose, kwargs...)
     end
-    return args
 end
 
 function reordered_electron_parity(conf1::Vector, conf2::Vector, mapping)
@@ -2911,5 +2910,92 @@ function reconstruct_subspace(indexer::CombinationIndexer, spin_conserved::Bool)
         return HubbardSubspace(N, lattice; k=indexer.k)
     end
 end
+
+"""
+    build_save_name_prefix(name::Union{Symbol, String};
+                           electrons=nothing,
+                           sites=nothing,
+                           N=nothing,
+                           use_symmetry::Bool=false,
+                           custom_ref_state_arg=nothing,
+                           antihermitian::Bool=false,
+                           loss_type::Symbol=:overlap,
+                           nn_strategy_file=nothing,
+                           suffix=nothing)
+
+Construct a standardized filename prefix string for optimization run results.
+
+# Arguments
+- `name`: Mode shortcut (`:exact`, `:exact_exponential`, `:trotter`, or `"exact"`, `"trotter"`)
+  or an arbitrary string prefix.
+  - `:exact` / `:exact_exponential` / `"exact"`: expands to `"unitary_map_energy_symmetry=\$(use_symmetry)_N=\$(electrons)"`.
+  - `:trotter` / `"trotter"`: expands to `"trotter_N=\$(sites)"`.
+  - Any arbitrary String (e.g. `"custom_prefix"`): used as base prefix.
+- `electrons`: Number of spin up and spin down electrons (e.g., `(2, 2)` or `(3, 3)`). Required for `:exact` mode (or fallback `N`).
+- `sites`: Number of lattice sites (e.g., `4` or `9`). Required for `:trotter` mode (or fallback `N`).
+- `N`: Fallback for `electrons` (for `:exact`) or `sites` (for `:trotter`).
+- `use_symmetry`: Boolean indicating whether symmetry was used (default `false`). Used when `name` is `:exact` / `"exact"`.
+- `custom_ref_state_arg`: Optional reference state identifier (e.g., `"slater"` or integer index). Appends `"_ref_\$(custom_ref_state_arg)"` if provided.
+- `antihermitian`: Whether antihermitian generators are used. Appends `"_antihermitian"` if `true`.
+- `loss_type`: Loss function type (`:overlap` or `:energy`). Appends `"_loss_energy"` if `:energy`.
+- `nn_strategy_file`: Optional path to a trained neural network file. Appends `"_nn_\$(nn_name)"` if provided.
+- `suffix`: Optional additional suffix string to append at the end (e.g., `"random_multistart"`).
+
+# Returns
+- A `String` containing the constructed prefix.
+"""
+function build_save_name_prefix(name::Union{Symbol, String};
+                                electrons=nothing,
+                                sites=nothing,
+                                N=nothing,
+                                use_symmetry::Bool=false,
+                                custom_ref_state_arg=nothing,
+                                antihermitian::Bool=false,
+                                loss_type::Symbol=:overlap,
+                                nn_strategy_file=nothing,
+                                suffix=nothing)
+    name_str = string(name)
+    if name_str in ("exact", "exact_exponential", ":exact", ":exact_exponential")
+        elec_val = electrons !== nothing ? electrons : N
+        if isnothing(elec_val)
+            error("electrons (or N) must be specified when using :exact or :exact_exponential mode in build_save_name_prefix")
+        end
+        prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$elec_val"
+    elseif name_str in ("trotter", ":trotter")
+        sites_val = sites !== nothing ? sites : N
+        if isnothing(sites_val)
+            error("sites (or N) must be specified when using :trotter mode in build_save_name_prefix")
+        end
+        prefix = "trotter_N=$sites_val"
+    else
+        prefix = name_str
+        if !isnothing(N) && !contains(prefix, "N=")
+            prefix *= "_N=$N"
+        elseif !isnothing(sites) && !contains(prefix, "N=")
+            prefix *= "_N=$sites"
+        elseif !isnothing(electrons) && !contains(prefix, "N=")
+            prefix *= "_N=$electrons"
+        end
+    end
+
+    if !isnothing(custom_ref_state_arg)
+        prefix *= "_ref_$(custom_ref_state_arg)"
+    end
+    if antihermitian
+        prefix *= "_antihermitian"
+    end
+    if loss_type == :energy
+        prefix *= "_loss_energy"
+    end
+    if !isnothing(nn_strategy_file)
+        nn_name = replace(basename(nn_strategy_file), "trained_neural_network_" => "", ".jld2" => "")
+        prefix *= "_nn_$(nn_name)"
+    end
+    if !isnothing(suffix)
+        prefix *= "_$(suffix)"
+    end
+    return prefix
+end
+
 
 

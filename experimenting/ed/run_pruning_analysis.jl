@@ -8,7 +8,7 @@ Usage:
   julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>]
 
 Arguments:
-  folder (optional): The path to the folder containing optimization files. Default: "data/N=(4, 4)_3x3_2".
+  folder (optional): The path to the folder containing optimization files. Default: "N=(4, 4)_3x3_2".
   --type (optional): Whether to use trotter or exact exponential coefficients. Default: "exact".
   --custom_ref_state (optional): The custom reference state to use (e.g. "slater" or an integer index). Default: nothing.
   --antihermitian (optional): Whether antihermitian generators were used. Default: false.
@@ -31,14 +31,11 @@ using Optimization, OptimizationOptimisers
 using OptimizationOptimJL
 using ExponentialUtilities
 using Dates
-
-include("utility_functions.jl")
-using .UtilityFunctions
+using HDF5
 
 include("trotter.jl")
 using .Trotter
-include("trotter_optimization.jl")
-using .TrotterOptimization
+import .Trotter: @safe_threads, load_saved_dict
 
 include("ed_objects.jl")
 include("ed_functions.jl")
@@ -131,7 +128,7 @@ end
 
 function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type)
     sign_convention = type == :trotter ? :spin_first : :coordinate_first
-    use_slater_ref = (type == :trotter && isnothing(custom_ref_state_arg)) || (custom_ref_state_arg == "slater")
+    use_slater_ref = custom_ref_state_arg == "slater"
     U_values, target_vecs, indexer, _, N, _, use_symmetry, sign_convention =
         load_ED_data(folder; verbose=true, use_slater_reference=use_slater_ref, sign_convention=sign_convention)
 
@@ -165,7 +162,7 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     if type == :trotter
         println("Reconstructing basis sector and gates for Trotter...")
         basis_ints = Trotter.get_basis_sector(indexer, dim_parsed, N_sites)
-        gates = Trotter.enumerate_ferm_excitations(2, dim_parsed; conserve_mom=true, conserve_sz=true, include_diagonal=true)
+        gates = Trotter.enumerate_ferm_excitations(2, dim_parsed; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
     else#if type == :exact
         coefficient_labels = shared_data["coefficient_labels"]
         param_mapping = shared_data["param_mapping"]
@@ -197,7 +194,7 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     @safe_threads for k in 1:num_maps
         iter_data = load_saved_dict(iter_files[k])
         ending_U_index = iter_data["u_idx"]
-        state2 = target_vecs[ending_U_index, :]
+        state2 = target_vecs[ending_U_index+(use_slater_ref ? 1 : 0), :]
 
         if type == :exact
             coeffs = iter_data["coefficients"]
@@ -274,14 +271,11 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
             for (l, threshold) in enumerate(thresholds)
                 # Apply threshold to coefficients
                 A_pruned = copy(A_base)
+
                 removed_mask = abs.(A_pruned) .< threshold
                 removed_count = sum(removed_mask)
 
-                for idx in eachindex(A_pruned)
-                    if removed_mask[idx]
-                        A_pruned[idx] = 0.0
-                    end
-                end
+                A_pruned[removed_mask] .= 0.0
 
                 # Apply unitary sequence
                 psi = TrotterOptimization.apply_unitary(
@@ -302,26 +296,32 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     save_path = joinpath(folder, "pruning_analysis_$(prefix).jld2")
     println("Saving results to: ", save_path)
     JLD2.jldsave(save_path; error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
-
-    display(error_data)
+    println(size(error_data))
+    display(error_data[1:50, 50])
     println("\n=== SUMMARY STATISTICS ===")
     println("Largest threshold applied: ", thresholds[end])
     println("Total optimizable parameters per mapped unitary sequence: ", total_params)
     println("Max parameters removed at max threshold: ", maximum(removed_terms[end, :]))
 
-    # Evaluate a generic baseline error for reference
-    u_idx_test = min(33, length(U_values))
-    ref_overlap = abs2(target_vecs[1, :]' * target_vecs[u_idx_test, :])
-    println("Unmapped (Baseline) Error between State U=$(round(U_values[1], digits=2)) and State U=$(round(U_values[u_idx_test], digits=2)): ", 1 - ref_overlap)
-    println("Mapped Error at max threshold (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[end, u_idx_test])
-    println("Mapped Error at zero threshold (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[1, u_idx_test])
+    # making sure that the printed output is actually meaningful.
+    computed_u_indices = Int[]
+    for f in iter_files
+        push!(computed_u_indices, load_saved_dict(f)["u_idx"])
+    end
+    sort!(computed_u_indices)
 
-    u_idx_mid = min(15, length(U_values))
-    println("Mapped Error at zero threshold (U=$(round(U_values[u_idx_mid], digits=2))): ", error_data[1, u_idx_mid])
+    if !isempty(computed_u_indices)
+        u_idx_test = computed_u_indices[end] # Largest U index computed
+        println("U=I Error at max threshold (max truncation) (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[end, u_idx_test])
+        println("U≠I Error at zero threshold (no truncation) (U=$(round(U_values[u_idx_test], digits=2))): ", error_data[1, u_idx_test])
+
+        u_idx_mid = computed_u_indices[1] # Smallest U index computed
+        println("U≠I Error at zero threshold (U=$(round(U_values[u_idx_mid], digits=2))): ", error_data[1, u_idx_mid])
+    end
     println("==========================\n")
 end
 
-function @main(ARGS)
+function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_pruning_analysis")
     with_logging(log_path) do
         folder, type, custom_ref_state_arg, antihermitian, loss_type = parse_arguments(ARGS)

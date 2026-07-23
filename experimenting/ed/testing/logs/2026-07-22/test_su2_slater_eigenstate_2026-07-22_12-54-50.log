@@ -1,0 +1,223 @@
+================================================================================
+Timestamp: 2026-07-22T12:54:50.638
+Command run: julia testing/test_su2_slater_eigenstate.jl 
+================================================================================
+================================================================================
+           SU(2) Slater Reference State Eigenstate Verification Test            
+================================================================================
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_2x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 12
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(2, 2)_3x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (2, 2)
+  Hilbert space dimension H_dim = 39
+  Reference state norm = 1.0
+  <S²> expectation value: 1.0
+  Residual norm ||S² ψ - <S²> ψ||: 1.0
+  ✗ FAILED: Reference state is NOT an eigenvector of S²! Residual norm = 1.0
+  Without su2_symmetry: <S²> = 1.0, residual_norm = 1.0, is_eigenstate = false
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: true
+  sign_convention: spin_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: false
+  sign_convention: spin_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: true
+  sign_convention: coordinate_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  ✓ CONFIRMED: Reference state has SU(2) symmetry (S² = 0.0 singlet).
+
+Comparing with SU(2) symmetry = false (sign_convention = coordinate_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x2
+  su2_symmetry: false
+  sign_convention: coordinate_first
+  Loaded electron count N = (3, 3)
+  Hilbert space dimension H_dim = 68
+  Reference state norm = 1.0
+  <S²> expectation value: 0.0
+  Residual norm ||S² ψ - <S²> ψ||: 0.0
+  ✓ CONFIRMED: Reference state IS an exact eigenvector of S².
+  Without su2_symmetry: <S²> = 0.0, residual_norm = 0.0, is_eigenstate = true
+
+================================================================================
+Testing SU(2) symmetry = true (sign_convention = spin_first)
+
+--------------------------------------------------------------------------------
+Testing dataset: /home/jek354/research/data/new_data/data/N=(3, 3)_3x3
+  su2_symmetry: true
+  sign_convention: spin_firstERROR: No momentum sector found with a doubly occupied Slater determinant ground state.
+
+Stacktrace:
+  [1] error(s::String)
+    @ Base ./error.jl:44
+  [2] find_best_energy_sector_su2(all_E::Vector{Any}, U_values::Vector{Float64}, data::Dict{String, Any}; labels::Nothing, verbose::Bool)
+    @ Main ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:85
+  [3] find_best_energy_sector_su2
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:46 [inlined]
+  [4] #find_best_energy_sector#36
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:161 [inlined]
+  [5] load_jld2_ED_data(file_path::String; verbose::Bool, kwargs::@Kwargs{su2_symmetry::Bool, use_slater_reference::Bool, sign_convention::Symbol})
+    @ Main ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:761
+  [6] load_jld2_ED_data
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:731 [inlined]
+  [7] #load_ED_data#134
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:951 [inlined]
+  [8] load_ED_data
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:946 [inlined]
+  [9] verify_slater_reference_su2(folder::String; su2_symmetry::Bool, sign_convention::Symbol, verbose::Bool)
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_su2_slater_eigenstate.jl:86
+ [10] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_su2_slater_eigenstate.jl:191
+ [11] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [12] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [13] open
+    @ ./io.jl:407 [inlined]
+ [14] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [15] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_su2_slater_eigenstate.jl:147
+ [16] _start()
+    @ Base ./client.jl:556

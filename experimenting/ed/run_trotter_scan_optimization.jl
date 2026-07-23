@@ -29,12 +29,12 @@ Arguments:
                      - [integer]: Use the Slater determinant at this specific 1-based basis index.
 
 Examples:
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" 25
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" 25 35
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" forward --num_exponentials=3
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" 25 --loss=energy --antihermitian
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" 25 --custom_ref_state=slater
-  julia --project=.. run_trotter_scan_optimization.jl "data/N=(2, 2)_2x2" 25 --custom_ref_state=1
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 35
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" forward --num_exponentials=3
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --loss=energy --antihermitian
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --custom_ref_state=slater
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --custom_ref_state=1
 =#
 
 using Lattices
@@ -72,7 +72,7 @@ Expected arguments:
 7. --custom_ref_state=<value> (String): Use a custom reference state as a Slater determinant.
 """
 function parse_arguments(args::Vector{String})
-    maxiters = 300
+    maxiters = 500
     loss_type = :overlap
     num_exponentials = 1
     antihermitian = false
@@ -125,7 +125,7 @@ function (@main)(ARGS)
 
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
-            load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=isnothing(custom_ref_state_arg))
+            load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=custom_ref_state_arg == "slater")
 
         n_up, n_dn = N_elec
 
@@ -142,19 +142,15 @@ function (@main)(ARGS)
         # 3. Find the Hamiltonian
         # Derive the momentum sector from the indexer (same convention as trotter_exp_testing.jl).
         # indexer.k is 1-based coordinate tuple; q_target is the C-order flat index (0-based).
-        q_target = nothing
-        if !isnothing(indexer.k) && !isnothing(indexer.lattice_dims)
-            q_target = Trotter.ravel_c(Tuple(k - 1 for k in indexer.k), Tuple(Lvec))
-        end
         @time H_hop_sector, basis_dict_sector, _ = Trotter.TamFermion.HubbardMomentumBasis(
-            1.0, 0.0, Lvec, (n_up, n_dn); q_target=q_target
+            1.0, 0.0, Lvec, (n_up, n_dn); indexer=indexer
         )
         @time H_int_sector, _, _ = Trotter.TamFermion.HubbardMomentumBasis(
-            0.0, 1.0, Lvec, (n_up, n_dn); q_target=q_target
+            0.0, 1.0, Lvec, (n_up, n_dn); indexer=indexer
         )
 
         # 4. Enumerate Trotter gates and tau terms
-        @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=true)
+        @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
         @time tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_sector; antihermitian=antihermitian)
 
         # 5. Set up scan range
@@ -165,16 +161,14 @@ function (@main)(ARGS)
             "antihermitian" => antihermitian
         )
 
-        save_name_prefix = "trotter_N=$N_sites"
-        if !isnothing(custom_ref_state_arg)
-            save_name_prefix *= "_ref_$(custom_ref_state_arg)"
-        end
-        if antihermitian
-            save_name_prefix *= "_antihermitian"
-        end
-        if loss_type == :energy
-            save_name_prefix *= "_loss_energy"
-        end
+        save_name_prefix = build_save_name_prefix(
+            :trotter;
+            sites=N_sites,
+            electrons=N_elec,
+            custom_ref_state_arg=custom_ref_state_arg,
+            antihermitian=antihermitian,
+            loss_type=loss_type
+        )
 
         v1 = parse(Int, u_start)
         v2 = parse(Int, u_end)
@@ -193,7 +187,7 @@ function (@main)(ARGS)
         # 6. Run scan optimization
         Trotter.interaction_scan_map_to_state(
             state_vecs, scan_instructions, gates, tau_terms, basis_sector, N_sites;
-            maxiters=10,
+            maxiters=maxiters,
             optimizer=[:LBFGS, :GradientDescent, :LBFGS],
             initialization_samples=10,
             H_hopping=H_hop_sector, H_interaction=H_int_sector,

@@ -50,7 +50,7 @@ using KrylovKit
 # Pre-scan ARGS for --use-gpu before loading CUDA
 _use_gpu = let val = nothing
     for arg in ARGS
-        if startswith(arg, "--use-gpu=")
+        if startswith(arg, "--use-gpu=") || startswith(arg, "--use_gpu=")
             val = parse(Bool, split(arg, "=", limit=2)[2])
         end
     end
@@ -262,20 +262,15 @@ function (@main)(ARGS)
             println("Using neural network found in $(nn_strategy_file)")
         end
 
-        save_name_prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$N"
-        if !isnothing(custom_ref_state_arg)
-            save_name_prefix *= "_ref_$(custom_ref_state_arg)"
-        end
-        if antihermitian
-            save_name_prefix *= "_antihermitian"
-        end
-        if loss_type == :energy
-            save_name_prefix *= "_loss_energy"
-        end
-        if nn_strategy_file !== nothing
-            nn_name = replace(basename(nn_strategy_file), "trained_neural_network_" => "", ".jld2" => "")
-            save_name_prefix *= "_nn_$(nn_name)"
-        end
+        save_name_prefix = build_save_name_prefix(
+            :exact;
+            electrons=N,
+            use_symmetry=use_symmetry,
+            custom_ref_state_arg=custom_ref_state_arg,
+            antihermitian=antihermitian,
+            loss_type=loss_type,
+            nn_strategy_file=nn_strategy_file
+        )
 
         if u_end === nothing
             v1 = tryparse(Int, u_start)
