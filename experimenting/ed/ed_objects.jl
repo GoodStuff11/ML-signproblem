@@ -29,7 +29,7 @@ import Base.Order: Ordering, lt
 struct RowSnake <: Ordering end
 struct ColSnake <: Ordering end
 
-function Base.isless(x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
+function Base.isless(x::Coordinate{N,I}, y::Coordinate{N,I}) where {N,I}
     for i in eachindex(x.coordinates)
         if x.coordinates[i] != y.coordinates[i]
             return x.coordinates[i] < y.coordinates[i]
@@ -38,7 +38,16 @@ function Base.isless(x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
     return false
 end
 
-function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
+function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N,I}
+    for i in reverse(eachindex(x.coordinates))
+        if x.coordinates[i] != y.coordinates[i]
+            return x.coordinates[i] < y.coordinates[i]
+        end
+    end
+    return false
+end
+
+function Base.Order.lt(::ColSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N,I}
     for i in eachindex(x.coordinates)
         if x.coordinates[i] != y.coordinates[i]
             return x.coordinates[i] < y.coordinates[i]
@@ -47,16 +56,7 @@ function Base.Order.lt(::RowSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where
     return false
 end
 
-function Base.Order.lt(::ColSnake, x::Coordinate{N,I}, y::Coordinate{N,I}) where {N, I}
-    for i in eachindex(x.coordinates)
-        if x.coordinates[i] != y.coordinates[i]
-            return x.coordinates[i] < y.coordinates[i]
-        end
-    end
-    return false
-end
-
-function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::Tuple, y::Tuple)
+function Base.Order.lt(o::Union{RowSnake,ColSnake}, x::Tuple, y::Tuple)
     for i in 1:min(length(x), length(y))
         if x[i] != y[i]
             return Base.Order.lt(o, x[i], y[i])
@@ -65,7 +65,7 @@ function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::Tuple, y::Tuple)
     return length(x) < length(y)
 end
 
-function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::AbstractVector, y::AbstractVector)
+function Base.Order.lt(o::Union{RowSnake,ColSnake}, x::AbstractVector, y::AbstractVector)
     for i in 1:min(length(x), length(y))
         if x[i] != y[i]
             return Base.Order.lt(o, x[i], y[i])
@@ -74,7 +74,7 @@ function Base.Order.lt(o::Union{RowSnake, ColSnake}, x::AbstractVector, y::Abstr
     return length(x) < length(y)
 end
 
-function Base.Order.lt(::Union{RowSnake, ColSnake}, x, y)
+function Base.Order.lt(::Union{RowSnake,ColSnake}, x, y)
     return isless(x, y)
 end
 struct HubbardSubspace
@@ -118,7 +118,7 @@ Uses a single pre-allocated index buffer — zero per-combination heap allocatio
 @inline function _each_comb(f::F, a::Vector{T}, b::Int) where {F,T}
     n = length(a)
     b == 0 && (f(T[]); return)  # empty combination
-    b > n  && return             # no combinations exist
+    b > n && return             # no combinations exist
     # indices[j] = current 1-based position in `a` for the j-th chosen element
     # Ordering: leftmost index is fastest-changing (increments first),
     # rightmost index is slowest-changing. Example b=3:
@@ -150,8 +150,8 @@ end
 
 function _combination_indexer!(a::Vector{T}, b::Int, c::Int, idx::Int, comb_dict, inv_comb_dict; k=nothing, lattice_dims=nothing) where T
     check_k = !isnothing(k) && !isnothing(lattice_dims)
-    ndims_k  = check_k ? length(lattice_dims) : 0
-    tot_k    = check_k ? zeros(Int, ndims_k) : Int[]  # one alloc, reused
+    ndims_k = check_k ? length(lattice_dims) : 0
+    tot_k = check_k ? zeros(Int, ndims_k) : Int[]  # one alloc, reused
     _each_comb(a, b) do comb1
         set1 = Set(comb1)
         _each_comb(a, c) do comb2
@@ -203,7 +203,7 @@ struct CombinationIndexer{T}
 
     function CombinationIndexer(a::Vector{T}, N::Integer) where T
         # Constructor for a fock space of exactly N fermions. Goes from N_up=0 N_down=N to N_up=N N_down=0
-        comb_dict, inv_comb_dict = _build_indexer(a, ((b, N - b) for b in 0:N))
+        comb_dict, inv_comb_dict = _build_indevecs_newxer(a, ((b, N - b) for b in 0:N))
         new{T}(a, comb_dict, inv_comb_dict, nothing, nothing)
     end
     function CombinationIndexer(a::Vector{T}, b, c) where T
@@ -212,7 +212,7 @@ struct CombinationIndexer{T}
         comb_dict, inv_comb_dict = _build_indexer(a, Iterators.product(b, c))
         new{T}(a, comb_dict, inv_comb_dict, nothing, nothing)
     end
-    function CombinationIndexer(Hs::HubbardSubspace; order::Ordering=RowSnake())
+    function CombinationIndexer(Hs::HubbardSubspace; order::Ordering=ColSnake())
         a = sort(reduce(vcat, collect(sites(Hs.lattice))), order=order) # sort to standardize the order of sites
         lattice_dims = size(Hs.lattice)
         k = Hs.k
@@ -247,13 +247,13 @@ function get_subspace_dimension(Hs::HubbardSubspace)
     total_dim = 0.0
     for r in CartesianIndices(dims)
         r_vec = Tuple(r) .- 1
-        m = isempty(dims) ? 1 : reduce(lcm, (dims[i] ÷ gcd(dims[i], r_vec[i]) for i in 1:length(dims)), init=1)
+        m = isempty(dims) ? 1 : reduce(lcm, (dims[i] ÷ gcd(dims[i], r_vec[i]) for i in eachindex(dims)), init=1)
         C = L ÷ m
         tr = sum(n_up % m == 0 && n_down % m == 0 ?
                  ((m % 2 == 0 ? (-1)^(n_up ÷ m + n_down ÷ m) : 1) * binomial(C, n_up ÷ m) * binomial(C, n_down ÷ m)) : 0
                  for (n_up, n_down) in iter_pairs)
 
-        phase = isempty(dims) ? 0.0 : sum(2 * π * (Hs.k[i] - 1) * r_vec[i] / dims[i] for i in 1:length(dims))
+        phase = isempty(dims) ? 0.0 : sum(2 * π * (Hs.k[i] - 1) * r_vec[i] / dims[i] for i in eachindex(dims))
         total_dim += tr * cos(phase)
     end
     return round(Int, total_dim / L)

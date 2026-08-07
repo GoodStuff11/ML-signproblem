@@ -1,0 +1,3 @@
+q_target from indexer.k (2, 1) is: 2
+MISMATCH! State 341 in basis_sector has qtot=1 but q_target=2
+Finished checking qtot for all states in basis_sector.

@@ -164,63 +164,6 @@ function parse_arguments(args::Vector{String})
 end
 
 
-"""
-    construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, H_dim::Int, U_values::Vector{Float64})
-
-Construct a custom Slater determinant reference state vector of length `H_dim` if requested by the command line argument.
-Returns a `Vector{ComplexF64}` or `nothing`.
-"""
-function construct_custom_ref_state(custom_ref_state_arg::Union{String,Nothing}, folder::String, H_dim::Int, U_values::Vector{Float64})
-    if isnothing(custom_ref_state_arg)
-        return nothing
-    end
-
-    local slater_idx
-    if custom_ref_state_arg == "slater"
-        jld2_path = joinpath(folder, "meta_data_and_E.jld2")
-        if isfile(jld2_path)
-            println("Finding Slater ground state index from JLD2 file...")
-            dic = load_saved_dict(jld2_path)
-            all_E = dic["E"]
-            U_values_for_sector = dic["meta_data"]["U_values"]
-            k_min = find_best_energy_sector(all_E, U_values_for_sector; data=dic)
-            slater_idx = get_slater_ground_state(dic, k_min)
-        else
-            println("Finding Slater ground state index from HDF5 file...")
-            valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
-            if isempty(valid_files)
-                error("No HubbardED HDF5 file found in folder: $folder")
-            end
-            h5_file = joinpath(folder, valid_files[1])
-            slater_idx = h5open(h5_file, "r") do data
-                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                all_E = [real.(read(data, "data/energies/$(k)"))[:, 1] for k in key_labels]
-                k_min = find_best_energy_sector(all_E, U_values; labels=key_labels)
-                return get_slater_ground_state(data, k_min)
-            end
-        end
-        println("Slater ground state index found: $slater_idx")
-    else
-        try
-            slater_idx = parse(Int, custom_ref_state_arg)
-        catch e
-            error("Invalid --custom_ref_state value: '$custom_ref_state_arg'. Must be 'slater' or an integer index.")
-        end
-        if slater_idx < 1 || slater_idx > H_dim
-            error("Parsed Slater index $slater_idx is out of bounds (1 to $H_dim).")
-        end
-        println("Using user-specified Slater index: $slater_idx")
-    end
-
-    if slater_idx == -1
-        error("No Slater ground state could be found in the current sector.")
-    end
-
-    custom_ref = zeros(ComplexF64, H_dim)
-    custom_ref[slater_idx] = 1.0
-    return custom_ref
-end
-
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_lanczos_scan_optimization")
     with_logging(log_path) do
@@ -237,13 +180,10 @@ function (@main)(ARGS)
             @warn "Could not parse electrons or dimensions from folder path, using defaults: (2, 2) and [2, 2]"
         end
 
-        if isnothing(custom_ref_state_arg)
-            U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention =
-                load_ED_data(folder; verbose=true)
-        else
-            U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention =
-                load_ED_data(folder; verbose=true, use_slater_reference=false)
-        end
+        use_slater_ref = isnothing(custom_ref_state_arg) ? false : (custom_ref_state_arg == "slater" ? true : (tryparse(Int, custom_ref_state_arg) !== nothing ? parse(Int, custom_ref_state_arg) : true))
+
+        U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention =
+            load_ED_data(folder; verbose=true, use_slater_reference=use_slater_ref)
 
         scan_instructions = Dict(
             "starting level" => 1,
@@ -305,9 +245,6 @@ function (@main)(ARGS)
             end
         end
 
-        H_dim = !isnothing(indexer) ? length(indexer.inv_comb_dict) : (size(target_vecs, 1) == length(U_values) ? size(target_vecs, 2) : size(target_vecs, 1))
-        custom_ref = construct_custom_ref_state(custom_ref_state_arg, folder, H_dim, U_values)
-
         interaction_scan_map_to_state(target_vecs, scan_instructions, indexer,
             spin_conserved;
             maxiters=maxiters, gradient=:adjoint_gradient,
@@ -322,8 +259,7 @@ function (@main)(ARGS)
             nn_U_values=U_values,
             U_values=U_values,
             loss_type=loss_type,
-            use_gpu=_use_gpu,
-            custom_ref_state=custom_ref)
+            use_gpu=_use_gpu)
 
         return 0
     end # with_logging

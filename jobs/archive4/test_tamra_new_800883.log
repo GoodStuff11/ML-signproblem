@@ -1,0 +1,34 @@
+Test Summary: | Pass  Total  Time
+TamLib Tests  |   14     14  0.9s
+Test Summary:    | Pass  Total   Time
+TamFermion Tests |   11     11  16.4s
+Python Interface Alignment Tests: Error During Test at /home/jek354/research/ML-signproblem/experimenting/ed/test_tamra.jl:68
+  Got exception outside of a @test
+  MethodError: no method matching singleSpinChannelCombos(::Int64, ::Int64, ::Int64, ::Bool, ::Vector{Int64})
+  The function `singleSpinChannelCombos` exists, but no method is defined for this combination of argument types.
+  
+  Closest candidates are:
+    singleSpinChannelCombos(::Integer, ::Integer, ::Integer, ::Bool, !Matched::Bool, !Matched::Any; allow_overlap, returnMomTransfer, Lvec, basis, returnBasis, returnSupport, returnMom, include_diagonal)
+     @ Main.TamFermion ~/research/ML-signproblem/experimenting/ed/TamFermion.jl:184
+    singleSpinChannelCombos(::Integer, ::Integer, ::Integer, ::Bool, !Matched::Bool; ...)
+     @ Main.TamFermion ~/research/ML-signproblem/experimenting/ed/TamFermion.jl:184
+    singleSpinChannelCombos(::Integer, ::Integer, ::Integer, ::Bool; ...)
+     @ Main.TamFermion ~/research/ML-signproblem/experimenting/ed/TamFermion.jl:184
+    ...
+  
+  Stacktrace:
+   [1] top-level scope
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:70
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [3] macro expansion
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:84 [inlined]
+   [4] include(mod::Module, _path::String)
+     @ Base ./Base.jl:306
+   [5] exec_options(opts::Base.JLOptions)
+     @ Base ./client.jl:317
+   [6] _start()
+     @ Base ./client.jl:550
+Test Summary:                    | Pass  Error  Total  Time
+Python Interface Alignment Tests |    7      1      8  1.8s
+RNG of the outermost testset: Random.Xoshiro(0xcbf74e3a85156d83, 0xb45f28fd983f1377, 0x5d1fb5f454914cc7, 0x94524914895f9e51, 0xc8f35688b6467c02)

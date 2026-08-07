@@ -1,0 +1,28 @@
+================================================================================
+Timestamp: 2026-08-07T13:25:18.708
+Command run: julia testing/debug_j_index_issue.jl 
+================================================================================
+=== Testing different U index j ===
+
+==================================================
+Sign Convention: spin_first
+==================================================
+j = 1, U = 0.25
+  Exact GS energy: -10.89106620417495 | gs_new' * H * gs_new: -10.891066204174916
+  Overlap with col 1 (GS of H): create=1.0, trotter=0.9999999999999994
+  Overlap with col j (index j): create=1.0, trotter=0.9999999999999994
+j = 2, U = 0.5
+  Exact GS energy: -10.786446540663004 | gs_new' * H * gs_new: -10.786446540662995
+  Overlap with col 1 (GS of H): create=0.9999999999999993, trotter=0.9999999999999999
+  Overlap with col j (index j): create=1.144465788414581e-13, trotter=1.141970148479992e-13
+j = 3, U = 0.75
+  Exact GS energy: -10.686069728879444 | gs_new' * H * gs_new: -10.686069728879472
+  Overlap with col 1 (GS of H): create=0.9999999999999993, trotter=0.9999999999999996
+  Overlap with col j (index j): create=7.49693818309638e-14, trotter=5.357989681927507e-14
+j = 4, U = 1.0
+  Exact GS energy: -10.589851434307269 | gs_new' * H * gs_new: -10.589851434307272
+  Overlap with col 1 (GS of H): create=0.9999999999999994, trotter=1.0000000000000002
+  Overlap with col j (index j): create=1.7932866563236116e-14, trotter=1.3898313815739339e-14
+
+==================================================
+Sign Convention: coordinate_first

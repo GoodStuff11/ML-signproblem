@@ -1,0 +1,40 @@
+=== Trotter experiment testing ===
+  folder         = data/N=(3, 3)_3x2
+  lvec           = [3, 2]
+  (n_up, n_dn)   = (3, 3)
+  trotter_orders = [1, 2, 4, 8]
+
+Loaded U_values: 61 entries, range 1.0e-5 to 100.0
+q_target = 0
+
+Building sector Hamiltonians...
+  3.178911 seconds (4.03 M allocations: 196.175 MiB, 15.88% gc time, 99.85% compilation time)
+  0.001198 seconds (11.77 k allocations: 738.359 KiB)
+Hilbert space sector dim = 68
+
+Enumerating Trotter gates...
+  0.537735 seconds (642.91 k allocations: 30.560 MiB, 99.79% compilation time)
+  0.642297 seconds (1.17 M allocations: 57.051 MiB, 99.80% compilation time)
+num_gates = 180
+
+Loaded exact-exp coefficients for 60 / 61 U values
+  First non-nothing: u_i=2, length=180
+  Operator keys loaded: 180. Reordering to 180 gate basis...
+
+Computing sector ground states (61 U values)...
+  Done
+
+Loading exact-exp energies from files...
+  Done (61 non-NaN values)
+
+Computing trotterized energies for orders P = [1, 2, 4, 8]...
+  P=1: 60 non-NaN values
+  P=2: 60 non-NaN values
+  P=4: 60 non-NaN values
+  P=8: 60 non-NaN values
+
+Loading trotter-optimized (energy-loss) results...
+  Loaded 59 values
+
+Building and saving plot...
+  Saved → data/N=(3, 3)_3x2/trotter_order_comparison.png

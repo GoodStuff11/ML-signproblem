@@ -5,7 +5,7 @@ Run Trotter optimization over a range of U interaction parameters using unitarie
 represented in the momentum basis.
 
 Usage:
-  julia --project=.. run_trotter_scan_optimization.jl [folder] [u_start] [u_end] [--maxiters=<number>] [--loss=<type>] [--num_exponentials=<number>] [--antihermitian] [--custom_ref_state=<value>]
+  julia --project=.. run_trotter_scan_optimization.jl [folder] [u_start] [u_end] [--maxiters=<number>] [--loss=<type>] [--num_exponentials=<number>] [--antihermitian] [--custom_ref_state=<value>] [--use_gpu=<bool>]
 
 Arguments:
   folder (required): Path to the ED data folder (e.g., "data/N=(2, 2)_2x2").
@@ -27,15 +27,33 @@ Arguments:
                      - "slater": The Slater determinant ground state of the tight-binding model
                                  (with the lowest kinetic energy and overlap > 0.1).
                      - [integer]: Use the Slater determinant at this specific 1-based basis index.
+  --use_gpu=<bool> (optional): Enable GPU acceleration for overlap loss and gradient calculations. Default: false.
+                     Valid options:
+                     - "--use_gpu" or "--use_gpu=true": Enable CUDA acceleration.
+                     - "--use_gpu=false": Disable GPU acceleration (CUDA is not loaded to preserve @safe_threads compatibility).
 
 Examples:
-  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25
   julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 35
   julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" forward --num_exponentials=3
-  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --loss=energy --antihermitian
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 40 --loss=energy --antihermitian
   julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --custom_ref_state=slater
-  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 --custom_ref_state=1
+  julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 35 --use_gpu
 =#
+
+# Pre-scan ARGS for GPU flag before loading CUDA package
+_use_gpu_prescan = let val = false
+    for arg in ARGS
+        if arg == "--use_gpu" || arg == "--use_gpu=true"
+            val = true
+        end
+    end
+    val
+end
+
+if _use_gpu_prescan
+    ENV["JULIA_CUDA_USE_COMPAT"] = "true"
+    using CUDA
+end
 
 using Lattices
 using LinearAlgebra
@@ -47,8 +65,8 @@ using JLD2
 using HDF5
 using Zygote
 
-# Include utility_functions.jl and trotter.jl
 include("data_path.jl")
+include("logging.jl")
 include("utility_functions.jl")
 using .UtilityFunctions
 include("trotter.jl")
@@ -56,7 +74,6 @@ using .Trotter
 
 include("ed_objects.jl")
 include("ed_functions.jl")
-include("logging.jl")
 
 """
     parse_arguments(args::Vector{String})
@@ -69,16 +86,27 @@ Expected arguments:
 4. --maxiters=<number> (Int): Optional maximum iterations parameter. Default: 200.
 5. --loss=<type> (String): The loss function to optimize ("overlap", "energy"). Default: "overlap".
 6. --num_exponentials=<number> (Int): Optional number of Trotter steps. Default: 1.
-7. --custom_ref_state=<value> (String): Use a custom reference state as a Slater determinant.
+7. --antihermitian (flag): Use real-antihermitian generators. Default: false.
+8. --custom_ref_state=<value> (String): Use a custom reference state as a Slater determinant.
+9. --use_gpu=<bool> (flag/bool): Enable GPU acceleration for Trotter optimization. Default: false.
 """
 function parse_arguments(args::Vector{String})
-    maxiters = 500
+    if isempty(args)
+        error("Usage: julia run_trotter_scan_optimization.jl <folder> <u_start> <u_end> [options]")
+    end
+
+    folder = data_folder(args[1])
+    u_start = args[2]
+    u_end = args[3]
+
+    maxiters = 100
     loss_type = :overlap
     num_exponentials = 1
     antihermitian = false
     custom_ref_state_arg = nothing
-    filtered_args = String[]
-    for arg in args
+    use_gpu = false
+
+    for arg in args[4:end]
         if startswith(arg, "--maxiters=")
             val = String(split(arg, "=", limit=2)[2])
             maxiters = parse(Int, val)
@@ -92,37 +120,29 @@ function parse_arguments(args::Vector{String})
                 error("Invalid --loss option: '$val'. Valid options are: 'overlap', 'energy'.")
             end
         elseif startswith(arg, "--num_exponentials=")
-            val = String(split(arg, "=", limit=2)[2])
-            num_exponentials = parse(Int, val)
-        elseif startswith(arg, "--antihermitian")
-            if occursin("=", arg)
-                antihermitian = parse(Bool, split(arg, "=", limit=2)[2])
-            else
-                antihermitian = true
-            end
+            num_exponentials = parse(Int, split(arg, "=", limit=2)[2])
+        elseif arg == "--antihermitian"
+            antihermitian = true
         elseif startswith(arg, "--custom_ref_state=")
-            custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
+            custom_ref_state_arg = split(arg, "=", limit=2)[2]
+        elseif arg == "--use_gpu" || arg == "--use_gpu=true"
+            use_gpu = true
+        elseif arg == "--use_gpu=false"
+            use_gpu = false
         else
-            push!(filtered_args, arg)
+            error("Unknown argument: $arg")
         end
     end
 
-    if length(filtered_args) < 1
-        error("Please input a folder. Ex: N=(2, 2)_2x2")
-    end
-    folder = data_folder(filtered_args[1])
-
-    u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
-    u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing
-
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg = parse_arguments(ARGS)
-
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu = parse_arguments(ARGS)
+        println("Number of threads: $(Threads.nthreads())")
+        println("Use GPU: $use_gpu")
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
             load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=custom_ref_state_arg == "slater")
@@ -134,14 +154,9 @@ function (@main)(ARGS)
         N_sites = prod(Lvec)
 
         # 2. Computing the basis
-        # Convert each (up_coords_set, dn_coords_set) entry in the indexer to a combined
-        # 2N-bit integer that fgateToTauSector expects: up bits in the low N bits, dn bits
-        # in the upper N bits (via combineSpinInts).
         basis_sector = Trotter.get_basis_sector(indexer, Lvec, N_sites)
 
         # 3. Find the Hamiltonian
-        # Derive the momentum sector from the indexer (same convention as trotter_exp_testing.jl).
-        # indexer.k is 1-based coordinate tuple; q_target is the C-order flat index (0-based).
         @time H_hop_sector, basis_dict_sector, _ = Trotter.TamFermion.HubbardMomentumBasis(
             1.0, 0.0, Lvec, (n_up, n_dn); indexer=indexer
         )
@@ -195,6 +210,7 @@ function (@main)(ARGS)
             loss_type=loss_type,
             U_values=U_values,
             antihermitian=antihermitian,
+            use_gpu=use_gpu
         )
 
         return 0

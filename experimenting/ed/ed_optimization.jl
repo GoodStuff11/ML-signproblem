@@ -240,7 +240,7 @@ function print_mem_usage(msg::String=""; verbose=false)
 end
 
 function ensure_operator_structure!(order::Int, operator_cache::Dict, indexer::CombinationIndexer,
-    spin_conserved::Bool, use_symmetry::Bool, momentum_basis::Bool, sign_convention::Symbol,
+    spin_conserved::Bool, use_symmetry::Bool, momentum_basis::Bool, sign_convention::Symbol, lattice_ordering::Ordering,
     precomputed_structures::Dict, antihermitian::Bool, init_mag::Number)
 
     if haskey(operator_cache, order)
@@ -257,7 +257,7 @@ function ensure_operator_structure!(order::Int, operator_cache::Dict, indexer::C
         print_mem_usage("Before create_randomized_nth_order_operator")
         t_dict, t_keys = create_randomized_nth_order_operator(order, indexer, true; magnitude=init_mag, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
         print_mem_usage("After create_randomized_nth_order_operator")
-        rows, cols, signs, ops_list = build_n_body_structure_from_keys(t_keys, indexer, typeof(t_dict[t_keys[1]]); sign_convention=sign_convention)
+        rows, cols, signs, ops_list = build_n_body_structure_from_keys(t_keys, indexer, typeof(t_dict[t_keys[1]]); sign_convention=sign_convention, lattice_ordering=lattice_ordering)
         print_mem_usage("After build_n_body_structure_from_keys")
         param_index_map = build_param_index_map(ops_list, t_keys)
     end
@@ -629,6 +629,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     momentum_basis::Bool=false, multi_start_samples::Int=5, multi_start_iters::Int=30,
     precomputed_structures::Dict=Dict(),
     sign_convention::Symbol=:spin_first,
+    lattice_ordering::Ordering=ColSnake(),
     time_tracker::Dict{Symbol,Vector{Float64}}=Dict{Symbol,Vector{Float64}}(),
     max_time_ratio::Union{Float64,Nothing}=nothing,
     nn_strategy_file::Union{AbstractString,Nothing}=nothing,
@@ -719,7 +720,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 continue
             end
 
-            struct_data = ensure_operator_structure!(order_idx, operator_cache, indexer, spin_conserved, use_symmetry, momentum_basis, sign_convention, precomputed_structures, antihermitian, (loss_type == :energy ? 0.01 + 0im : loss * 100))
+            struct_data = ensure_operator_structure!(order_idx, operator_cache, indexer, spin_conserved, use_symmetry, momentum_basis, sign_convention, lattice_ordering, precomputed_structures, antihermitian, (loss_type == :energy ? 0.01 + 0im : loss * 100))
 
             # Assign labels and mappings
             coefficient_labels[order_idx] = struct_data[:t_keys]
@@ -750,7 +751,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
     # 2. Main Optimization Scheme Loop
     for order ∈ optimization_scheme
-        struct_data = ensure_operator_structure!(order, operator_cache, indexer, spin_conserved, use_symmetry, momentum_basis, sign_convention, precomputed_structures, antihermitian, (loss_type == :energy ? 0.01 + 0im : loss * 100))
+        struct_data = ensure_operator_structure!(order, operator_cache, indexer, spin_conserved, use_symmetry, momentum_basis, sign_convention, lattice_ordering, precomputed_structures, antihermitian, (loss_type == :energy ? 0.01 + 0im : loss * 100))
         multistart_run = false
         local_multistart_losses = Vector{Float64}[]
         local_best_start_idx = 0
@@ -936,7 +937,9 @@ function test_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instruction
                 initial_coefficients=initial_coefficients, perturb_optimization=perturb_optimization,
                 initialization_samples=get!(instructions, "initialization_samples", 50),
                 multi_start_iters=get!(instructions, "multi_start_iters", 30), multi_start_samples=get!(instructions, "multi_start_samples", 5),
-                precomputed_structures=precomputed_structures, sign_convention=get!(instructions, "sign_convention", :spin_first),
+                precomputed_structures=precomputed_structures,
+                sign_convention=get!(instructions, "sign_convention", :spin_first),
+                lattice_ordering=get!(instructions, "lattice_ordering", :ColSnake),
                 time_tracker=time_tracker, max_time_ratio=max_time_ratio,
                 num_exponentials=num_exponentials)
             computed_matrices, coefficient_labels, coefficient_values, param_mapping, parities, metrics, _ = args
@@ -1018,7 +1021,10 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     H_hopping, H_interaction = try
         subspace = reconstruct_subspace(indexer, spin_conserved)
-        create_hubbard_matrices(subspace; indexer=indexer, get_indexer=false, sign_convention=get(instructions, "sign_convention", :spin_first))
+        create_hubbard_matrices(subspace; indexer=indexer, get_indexer=false,
+            sign_convention=get(instructions, "sign_convention", :spin_first),
+            lattice_ordering=get(instructions, "lattice_ordering", ColSnake())
+        )
     catch e
         @warn "Failed to reconstruct Hamiltonian: $e"
         nothing, nothing
@@ -1026,12 +1032,15 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     num_exponentials = get(instructions, "num_exponentials", 1)
 
+    has_prepended_ref = !isnothing(u_vals) && (degen_rm_U isa AbstractMatrix) && (size(degen_rm_U, 1) == length(u_vals) + 1)
+    target_state_idx(idx) = has_prepended_ref ? idx + 1 : idx
+
     for u_idx in u_indices
         u_val_str = isnothing(u_vals) ? "" : " (U = $(u_vals[u_idx]))"
         println("\n--- Scanning U index: $u_idx$u_val_str ---")
 
         state1 = isnothing(custom_ref_state) ? degen_rm_U[ref_u_idx, :] : custom_ref_state
-        state2 = degen_rm_U[u_idx, :]
+        state2 = degen_rm_U[target_state_idx(u_idx), :]
 
         target_u = isnothing(u_vals) ? nothing : u_vals[u_idx]
 
@@ -1048,7 +1057,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             initial_coefficients=current_coeffs, perturb_optimization=perturb_optimization,
             initialization_samples=get!(instructions, "initialization_samples", 50),
             multi_start_iters=get!(instructions, "multi_start_iters", 30), multi_start_samples=get!(instructions, "multi_start_samples", 5),
-            precomputed_structures=precomputed_structures, sign_convention=get!(instructions, "sign_convention", :spin_first),
+            precomputed_structures=precomputed_structures,
+            sign_convention=get!(instructions, "sign_convention", :spin_first),
+            lattice_ordering=get!(instructions, "lattice_ordering", ColSnake()),
             time_tracker=time_tracker, max_time_ratio=max_time_ratio,
             nn_strategy_file=nn_strategy_file,
             nn_ctx_u=target_u,

@@ -1,0 +1,5 @@
+================================================================================
+Timestamp: 2026-08-07T11:53:14.322
+Command run: julia testing/test_h5_sign_convention_overlap.jl 
+================================================================================
+=== Running HDF5 Sign Convention Overlap Test ===

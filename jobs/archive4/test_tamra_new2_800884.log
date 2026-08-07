@@ -1,0 +1,37 @@
+Test Summary: | Pass  Total  Time
+TamLib Tests  |   14     14  0.9s
+Test Summary:    | Pass  Total   Time
+TamFermion Tests |   11     11  16.4s
+Python Interface Alignment Tests: Error During Test at /home/jek354/research/ML-signproblem/experimenting/ed/test_tamra.jl:138
+  Test threw exception
+  Expression: op_diag isa LinearMap
+  UndefVarError: `LinearMap` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Hint: a global variable of this name also exists in LinearMaps.
+  Stacktrace:
+   [1] top-level scope
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:70
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [3] macro expansion
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:138 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:677 [inlined]
+Python Interface Alignment Tests: Error During Test at /home/jek354/research/ML-signproblem/experimenting/ed/test_tamra.jl:152
+  Test threw exception
+  Expression: exp_ops[1] isa LinearMap
+  UndefVarError: `LinearMap` not defined in `Main`
+  Suggestion: check for spelling errors or missing imports.
+  Hint: a global variable of this name also exists in LinearMaps.
+  Stacktrace:
+   [1] top-level scope
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:70
+   [2] macro expansion
+     @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:1776 [inlined]
+   [3] macro expansion
+     @ ~/research/ML-signproblem/experimenting/ed/test_tamra.jl:152 [inlined]
+   [4] macro expansion
+     @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/Test/src/Test.jl:677 [inlined]
+Test Summary:                    | Pass  Error  Total   Time
+Python Interface Alignment Tests |   27      2     29  12.6s
+RNG of the outermost testset: Random.Xoshiro(0x9b12a3a23fa8abdf, 0x3c9a0c6fd95144c4, 0xd93c426227d04a1f, 0xb791f2ecc6e657ba, 0x940bb95602fa52dc)

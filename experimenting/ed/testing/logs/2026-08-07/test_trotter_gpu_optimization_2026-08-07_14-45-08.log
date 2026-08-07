@@ -1,0 +1,71 @@
+================================================================================
+Timestamp: 2026-08-07T14:45:08.387
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+Threads available: 2
+
+--- Setting up test system (2x2 lattice) ---
+Basis dimension: 256
+Number of gates: 58, total parameters M: 116
+
+--- Test 3: CPU vs GPU Adjoint Loss Value Match ---
+CPU Loss: 0.5013041039613871
+GPU Loss: 0.5013041039613871
+Loss Absolute Difference: 0.0
+PASSED: CPU and GPU loss values match to machine precision.
+
+--- Test 4: CPU vs GPU Gradient (Zygote rrule) Match ---
+loss: 0.5013041039613871
+loss: 0.5013041039613871
+Max Gradient Difference: 0.0
+Relative Gradient Difference: 0.0
+PASSED: CPU and GPU gradients match to high precision.
+
+--- Test 5: Full optimize_unitary Run (CPU vs GPU) ---
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=false)...
+loss: 0.5013041039613871
+loss: 0.6739272448254074
+loss: 0.4395315008417505
+loss: 0.4395315008417505
+loss: 0.41392928992899214
+loss: 0.4010778775046129
+loss: 0.39413143224947145
+loss: 0.3918947872040779
+loss: 0.3897381705834728
+loss: 0.38824809772016766
+loss: 0.3851259758789395
+loss: 0.38202139709713456
+loss: 0.3737741303685599
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.03019686345265693)
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.5013041039613871
+loss: 0.6739272448254074
+loss: 0.4395315008417505
+loss: 0.4395315008417505
+loss: 0.41392928992899214
+loss: 0.4010778775046129
+loss: 0.39413143224947145
+loss: 0.3918947872040779
+loss: 0.3897381705834728
+loss: 0.38824809772016766
+loss: 0.3851259758789395
+loss: 0.38202139709713456
+loss: 0.3737741303685599
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.03019686345265693)
+Final CPU Loss: 0.3737741303685599
+Final GPU Loss: 0.3737741303685599
+Optimization Loss Difference: 0.0
+Parameter Max Difference: 0.0
+PASSED: Full optimize_unitary converges identically on CPU and GPU.
+
+==========================================================
+ALL VERIFICATION TESTS PASSED SUCCESSFULLY!
+==========================================================

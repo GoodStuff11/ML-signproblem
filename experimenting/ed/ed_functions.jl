@@ -43,125 +43,145 @@ function permutation_parity(a::Vector)
     return parity % 2
 end
 
-function find_best_energy_sector_su2(
-    all_E::Vector,
-    U_values::Vector,
-    data;
-    labels=nothing,
-    verbose=false
-)
-    # 1. Determine electron count and check if odd/polarized
-    total_electrons, n_up, n_dn = if data isa Dict
-        N = data["meta_data"]["electron count"]
-        if N isa Tuple || N isa Vector || N isa AbstractVector
-            N[1] + N[2], N[1], N[2]
-        else
-            N, N, 0
-        end
-    else
-        Ne_up = read(data, "metadata/nup")
-        Ne_dn = read(data, "metadata/ndown")
-        Ne_up + Ne_dn, Ne_up, Ne_dn
-    end
+"""
+    find_best_energy_sector(all_E::Vector, U_values=nothing; labels=nothing, verbose=false, data=nothing, su2_symmetry=false, atol=1e-6)
 
-    if total_electrons % 2 != 0
-        error("Odd number of electrons ($total_electrons), cannot have SU(2) symmetry with doubly occupied sites.")
-    end
-    if n_up != n_dn
-        error("Unequal spin-up and spin-down electron counts (n_up=$n_up, n_dn=$n_dn), cannot have SU(2) symmetry with doubly occupied sites.")
-    end
+Identify the momentum sector (or file) that most consistently yields the lowest ground state energy
+across interaction strength parameters (U_values).
 
-    # 2. Filter sectors that have doubly occupied electrons in their Slater ground state
-    valid_indices = Int[]
-    for k in 1:length(all_E)
-        sector_label = (labels === nothing) ? k : labels[k]
-        slater_idx = get_slater_ground_state(data, sector_label)
-        if slater_idx != -1 && is_doubly_occupied(data, sector_label, slater_idx)
-            push!(valid_indices, k)
-        end
-    end
+# Arguments
+- `all_E::Vector`: Vector of ground state energy vectors, one per candidate sector/file.
+- `U_values`: Optional vector of U values corresponding to each energy entry.
 
-    if isempty(valid_indices)
-        error("No momentum sector found with a doubly occupied Slater determinant ground state.")
-    end
+# Keyword Arguments
+- `labels`: Optional sector/file identifiers corresponding to elements of `all_E`.
+- `verbose::Bool=false`: If true, print energy rankings per U value and final selection.
+- `data`: HDF5 file handle or dictionary metadata, required if `su2_symmetry=true` or for tie-breaking.
+- `su2_symmetry::Bool=false`: If true, filter candidate sectors to those possessing doubly-occupied SU(2) singlet ground states.
+- `atol::Real=1e-6`: Absolute energy tolerance for tallying approximately degenerate ground states.
 
-    # 3. Find the best sector among the valid ones
-    counts = Dict{Int,Int}()
-    for u_idx in eachindex(all_E[1])
-        energies = [real.(all_E[k])[u_idx] for k in valid_indices]
-        sorted_local_indices = sortperm(energies)
-        best_local_idx = sorted_local_indices[1]
-        best_global_idx = valid_indices[best_local_idx]
-        counts[best_global_idx] = get(counts, best_global_idx, 0) + 1
-    end
-
-    k_min = argmax(counts)
-    if verbose
-        println("Selected ground state symmetry sector (SU(2) filtered): $k_min")
-    end
-
-    if labels === nothing
-        return k_min
-    else
-        return labels[k_min]
-    end
-end
-
-function find_best_energy_sector_normal(
-    all_E::Vector,
-    U_values::Vector;
-    labels=nothing,
-    verbose=false
-)
-    if length(all_E) == 1
-        if labels === nothing
-            return 1
-        else
-            return labels[1]
-        end
-    end
-    if verbose
-        println("Finding best energy sector")
-    end
-    counts = Dict()
-    for u_idx in eachindex(all_E[1])
-        energies = [real.(all_E[k])[u_idx] for k in eachindex(all_E)]
-        indices = sortperm(energies)
-        print_indices = min(2, length(energies))
-        if verbose
-            println("U=$(U_values[u_idx]) k=$(indices[1:print_indices]) $(energies[1:print_indices])")
-        end
-        counts[indices[1]] = get(counts, indices[1], 0) + 1
-    end
-
-    # pick the k value which is most frequently the ground state
-    k_min = argmax(counts)
-    if verbose
-        println("Selected ground state symmetry sector: $k_min")
-    end
-    if labels === nothing
-        return k_min
-    else
-        return labels[k_min]
-    end
-end
-
+# Returns
+- The label (or 1-based index) of the selected optimal sector/file.
+"""
 function find_best_energy_sector(
     all_E::Vector,
-    U_values::Vector;
+    U_values=nothing;
     labels=nothing,
     verbose=false,
     data=nothing,
-    su2_symmetry=false
+    su2_symmetry=false,
+    atol=1e-6
 )
-    if su2_symmetry
+    # 1. Handle flexible argument ordering if data was passed as second positional argument
+    if !(U_values isa AbstractVector) && U_values !== nothing && data === nothing
+        data = U_values
+        U_values = nothing
+    end
+
+    # 2. Fast path for single sector / file datasets
+    if length(all_E) == 1
+        return (labels === nothing) ? 1 : labels[1]
+    end
+
+    # 3. Determine candidate sector indices (apply SU(2) singlet filtering if requested)
+    valid_indices = if su2_symmetry
         if data === nothing
             error("data must be provided to find_best_energy_sector when su2_symmetry=true")
         end
-        return find_best_energy_sector_su2(all_E, U_values, data; labels=labels, verbose=verbose)
+
+        # Verify electron counts for SU(2) singlet compatibility
+        total_electrons, n_up, n_dn = if data isa Dict
+            N = data["meta_data"]["electron count"]
+            (N isa Tuple || N isa Vector) ? (N[1] + N[2], N[1], N[2]) : (N, N, 0)
+        else
+            Ne_up = read(data, "metadata/nup")
+            Ne_dn = read(data, "metadata/ndown")
+            (Ne_up + Ne_dn, Ne_up, Ne_dn)
+        end
+
+        if total_electrons % 2 != 0 || n_up != n_dn
+            error("Electron counts (total=$total_electrons, up=$n_up, dn=$n_dn) are incompatible with SU(2) singlet symmetry.")
+        end
+
+        # Keep only sectors with a doubly occupied Slater ground state
+        su2_idxs = Int[]
+        for k in 1:length(all_E)
+            sector_label = (labels === nothing) ? k : labels[k]
+            slater_idx = get_slater_ground_state(data, sector_label)
+            if slater_idx != -1 && is_doubly_occupied(data, sector_label, slater_idx)
+                push!(su2_idxs, k)
+            end
+        end
+
+        if isempty(su2_idxs)
+            error("No momentum sector found with a doubly occupied Slater determinant ground state.")
+        end
+        su2_idxs
     else
-        return find_best_energy_sector_normal(all_E, U_values; labels=labels, verbose=verbose)
+        collect(1:length(all_E))
     end
+
+    if verbose
+        println(su2_symmetry ? "Finding best energy sector (SU(2) filtered)" : "Finding best energy sector")
+    end
+
+    # 4. Tally ground state (and degenerate ground state) wins across all U values
+    counts = Dict{Int,Int}()
+    for u_idx in eachindex(all_E[1])
+        energies = [real(all_E[k][u_idx]) for k in valid_indices]
+        sorted_perm = sortperm(energies)
+
+        if verbose
+            u_prefix = (U_values !== nothing) ? "U=$(U_values[u_idx])" : "u_idx=$u_idx"
+            num_to_print = min(2, length(valid_indices))
+            top_local_perm = sorted_perm[1:num_to_print]
+            sectors_to_print = (labels !== nothing) ? labels[valid_indices[top_local_perm]] : valid_indices[top_local_perm]
+            println("$u_prefix k=$sectors_to_print $(energies[top_local_perm])")
+        end
+
+        # Tally all sectors within energy tolerance `atol` of lowest ground state energy
+        min_energy = energies[sorted_perm[1]]
+        for local_idx in sorted_perm
+            if isapprox(energies[local_idx], min_energy; atol=atol)
+                global_idx = valid_indices[local_idx]
+                counts[global_idx] = get(counts, global_idx, 0) + 1
+            else
+                break  # Sorted array: remaining elements strictly exceed min_energy + atol
+            end
+        end
+    end
+
+    # 5. Select sector with maximum ground state tally (picks arbitrarily in case of ties)
+    if verbose
+        println("k-value counts: $counts")
+    end
+    k_min = argmax(counts)
+
+    if verbose
+        println("Selected ground state symmetry sector: $k_min")
+    end
+
+    return (labels === nothing) ? k_min : labels[k_min]
+end
+
+"""
+    find_best_energy_sector_normal(all_E::Vector, U_values=nothing; kwargs...)
+
+Alias for `find_best_energy_sector` without SU(2) symmetry filtering.
+"""
+function find_best_energy_sector_normal(all_E::Vector, U_values=nothing; kwargs...)
+    return find_best_energy_sector(all_E, U_values; su2_symmetry=false, kwargs...)
+end
+
+"""
+    find_best_energy_sector_su2(all_E::Vector, [U_values], data; kwargs...)
+
+Alias for `find_best_energy_sector` with SU(2) singlet symmetry filtering enabled.
+"""
+function find_best_energy_sector_su2(all_E::Vector, arg2=nothing, data=nothing; U_values=nothing, kwargs...)
+    actual_data = data !== nothing ? data : (arg2 isa Vector ? data : arg2)
+    actual_U = U_values !== nothing ? U_values : (arg2 isa Vector ? arg2 : nothing)
+    return find_best_energy_sector(all_E, actual_U; su2_symmetry=true, data=actual_data, kwargs...)
 end
 
 """
@@ -175,10 +195,80 @@ with the interacting ground state.
 Note: Unlike `get_su2_ground_state` (which can return a linear combination of Slater determinants),
 this function returns a single Slater determinant state index.
 
-Supports both HDF5 files (`data` is an open HDF5 file object) and JLD2 data dictionaries 
-(`data` is a loaded dictionary from a `.jld2` file containing the `"indexer"` and `"all_full_eig_vecs"`).
+Supports both HDF5 files (`data` is an open HDF5 file object) and JLD2 data dictionaries.
 """
-function get_slater_ground_state_jld2(data::Dict, sector::Int)
+
+"""
+    parse_custom_ref(custom_ref)
+
+Parse custom reference state specification. Returns an `Int` index or `nothing`.
+"""
+function parse_custom_ref(custom_ref)
+    if custom_ref isa Integer && !(custom_ref isa Bool)
+        return Int(custom_ref)
+    elseif custom_ref isa String && tryparse(Int, custom_ref) !== nothing
+        return parse(Int, custom_ref)
+    end
+    return nothing
+end
+
+"""
+    compute_single_spin_energies(L::AbstractVector{<:Integer})
+
+Compute tight-binding model kinetic dispersion energies -2*(cos(kx) + cos(ky)) for single-particle momentum modes.
+"""
+function compute_single_spin_energies(L::AbstractVector{<:Integer})
+    N_sites = L[1] * L[2]
+    energies = Vector{Float64}(undef, N_sites)
+    k_idx = 1
+    for j in 0:L[2]-1, i in 0:L[1]-1
+        energies[k_idx] = -2.0 * (cos(2 * pi * i / L[1]) + cos(2 * pi * j / L[2]))
+        k_idx += 1
+    end
+    return energies
+end
+
+"""
+    find_best_slater_index(energies, state_prob, H_dim, get_E_func; threshold=0.1)
+
+Find the Slater determinant index that minimizes tight-binding kinetic energy among high-overlap basis states,
+breaking kinetic energy ties by picking the Slater determinant with maximum ground-state probability.
+"""
+function find_best_slater_index(energies::Vector{Float64}, state_prob::Vector{Float64}, H_dim::Int, get_E_func::Function; threshold::Float64=0.1)
+    indices_of_interest = findall(state_prob .> threshold * maximum(state_prob))
+    best_idx = -1
+    min_E = Inf
+    max_prob = -1.0
+
+    for idx in 1:H_dim
+        if idx in indices_of_interest
+            E = get_E_func(idx, energies)
+            prob = state_prob[idx]
+            if E < min_E - 1e-5
+                min_E = E
+                max_prob = prob
+                best_idx = idx
+            elseif abs(E - min_E) <= 1e-5
+                if prob > max_prob
+                    max_prob = prob
+                    best_idx = idx
+                end
+            end
+        end
+    end
+    return best_idx
+end
+
+"""
+    get_slater_ground_state_jld2(data::Dict, sector::Int; custom_ref=true)
+
+Find the index corresponding to a single Slater determinant ground state of the tight-binding
+model for the given momentum sector in a JLD2 data dictionary.
+"""
+function get_slater_ground_state_jld2(data::Dict, sector::Int; custom_ref=true)
+    parsed = parse_custom_ref(custom_ref)
+    !isnothing(parsed) && return parsed
+
     meta_data = data["meta_data"]
     sites_list = meta_data["sites"]
     clean_coord(c) = Coordinate(c.coordinates...)
@@ -199,109 +289,75 @@ function get_slater_ground_state_jld2(data::Dict, sector::Int)
 
     all_full_eig_vecs = data["all_full_eig_vecs"]
     target_vecs = all_full_eig_vecs[sector]
-    if size(target_vecs, 1) == H_dim
-        state_prob = abs.(target_vecs[:, 1])
-    else
-        state_prob = abs.(target_vecs[1, :])
-    end
-    indices_of_interest = findall(state_prob .> 0.5 * maximum(state_prob))
+    state_prob = (size(target_vecs, 1) == H_dim) ? abs.(target_vecs[:, 1]) : abs.(target_vecs[1, :])
 
-    single_spin_energies = zeros(Float64, L[1] * L[2])
-    momenta = [[i, j] for j in 0:L[2]-1 for i in 0:L[1]-1]
-    for (k_idx, k) in enumerate(momenta)
-        i = k[1]
-        j = k[2]
-        single_spin_energies[k_idx] = -2 * (cos(2 * pi * i / L[1]) + cos(2 * pi * j / L[2]))
-    end
+    single_spin_energies = compute_single_spin_energies(L)
 
-    best_idx = -1
-    min_E = Inf
-
-    for idx in 1:H_dim
+    return find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
         up_set_raw, dn_set_raw = idxr.inv_comb_dict[idx]
-        E_up = sum(single_spin_energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in up_set_raw)
-        E_dn = sum(single_spin_energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in dn_set_raw)
-
-        E = E_up + E_dn
-        if E < min_E + 1e-5 && idx in indices_of_interest
-            min_E = E
-            best_idx = idx
-        end
-    end
-    return best_idx
+        E_up = sum(energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in up_set_raw)
+        E_dn = sum(energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in dn_set_raw)
+        return E_up + E_dn
+    end)
 end
 
-function get_slater_ground_state_h5(data, sector::Int)
+"""
+    get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
+
+Find the index corresponding to a single Slater determinant ground state of the tight-binding
+model for the given momentum sector in an open HDF5 file object.
+"""
+function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
+    parsed = parse_custom_ref(custom_ref)
+    !isnothing(parsed) && return parsed
+
     println("Computing slater ground state for sector $sector")
 
-    # expects data to be an h5 open file object
-    # get momentum sector, a vector of two elements [kx, ky] (starting at zero)
-    mom_sector = read(data, "metadata/kvecs")[:, sector+1]
     L = read(data, "metadata/Lvec")
-    Ne = read(data, "metadata/nup"), read(data, "metadata/ndown")
-    state_prob = abs.(read(data, "data/evecs/$sector")[:, 1, 1])
-    indices_of_interest = findall(state_prob .> 0.5 * maximum(state_prob))
+    evecs_sec = read(data, "data/evecs/$sector")
+    gs_slice = 1
+    state_prob = abs.(evecs_sec[:, gs_slice, 1])
 
-    separate_spins_stored = (read(data, "metadata/slater_labels/$sector") isa Dict)
+    labels_path = haskey(data, "metadata/basis_labels/$sector") ? "metadata/basis_labels/$sector" : "metadata/slater_labels/$sector"
+    separate_spins_stored = (read(data, labels_path) isa Dict)
     if !separate_spins_stored
-        # slater labels contain indices which can be obtained from coordinates via ind2sub
-        slater_labels = read(data, "metadata/slater_labels/$sector") # dim (Ne_up,H_dim,2)
+        slater_labels = read(data, labels_path) # dim (Ne_up,H_dim,2)
         H_dim = size(slater_labels, 2)
     else
-        slater_labels_up = read(data, "metadata/slater_labels/$sector/up") # dim (Ne_up,H_dim)
-        slater_labels_down = read(data, "metadata/slater_labels/$sector/dn") # dim (Ne_down,H_dim)
+        slater_labels_up = read(data, "$labels_path/up") # dim (Ne_up,H_dim)
+        slater_labels_down = read(data, "$labels_path/dn") # dim (Ne_down,H_dim)
         H_dim = size(slater_labels_up, 2)
     end
 
-    # find occupation of the tight-binding model ground state in momentum coordinates
-    L = read(data, "metadata/Lvec")
-    single_spin_energies = zeros(Float64, L[1] * L[2])
-    momenta = [[i, j] for j in 0:L[2]-1 for i in 0:L[1]-1]
-    for (k_idx, k) in enumerate(momenta)
-        i = k[1]
-        j = k[2]
-        single_spin_energies[k_idx] = -2 * (cos(2 * pi * i / L[1]) + cos(2 * pi * j / L[2]))
+    single_spin_energies = if haskey(data, "metadata/kvecs")
+        kvecs = read(data, "metadata/kvecs")
+        [-2.0 * (cos(2 * pi * kvecs[1, o+1] / L[1]) + cos(2 * pi * kvecs[2, o+1] / L[2])) for o in 0:(size(kvecs, 2)-1)]
+    else
+        compute_single_spin_energies(L)
     end
 
-    best_idx = -1
-    min_E = Inf
-
-    # computes the energy of each slater determinant state, keeping track of the first occurrings lowest energy one
-    for idx in 1:H_dim
+    return find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
         if !separate_spins_stored
-            # println(slater_labels[:, idx, 1])
-            # println(slater_labels[:, idx, 2])
             if slater_labels[1] isa UInt
-                # convert slater_labels[spin, idx] to binary
-                E_up = sum(Float64.(digits(slater_labels[1, idx], base=2, pad=prod(L))) .* single_spin_energies)
-                E_dn = sum(Float64.(digits(slater_labels[2, idx], base=2, pad=prod(L))) .* single_spin_energies)
-                # println(digits(slater_labels[2, idx], base=2, pad=prod(L)))
-                # println(E_dn)
-                # error("")
+                E_up = sum(Float64.(digits(slater_labels[1, idx], base=2, pad=prod(L))) .* energies)
+                E_dn = sum(Float64.(digits(slater_labels[2, idx], base=2, pad=prod(L))) .* energies)
             else
-                E_up = sum(single_spin_energies[k+1] for k in slater_labels[:, idx, 1])
-                E_dn = sum(single_spin_energies[k+1] for k in slater_labels[:, idx, 2])
+                E_up = sum(energies[k+1] for k in slater_labels[:, idx, 1])
+                E_dn = sum(energies[k+1] for k in slater_labels[:, idx, 2])
             end
         else
-            E_up = sum(single_spin_energies[k+1] for k in slater_labels_up[:, idx])
-            E_dn = sum(single_spin_energies[k+1] for k in slater_labels_down[:, idx])
+            E_up = sum(energies[k+1] for k in slater_labels_up[:, idx])
+            E_dn = sum(energies[k+1] for k in slater_labels_down[:, idx])
         end
-
-        E = E_up + E_dn
-        if E < min_E + 1e-5 && idx in indices_of_interest
-            min_E = E
-            best_idx = idx
-        end
-    end
-
-    return best_idx
+        return E_up + E_dn
+    end)
 end
 
-function get_slater_ground_state(data, sector::Int)
+function get_slater_ground_state(data, sector::Int; custom_ref=true)
     if data isa Dict
-        return get_slater_ground_state_jld2(data, sector)
+        return get_slater_ground_state_jld2(data, sector; custom_ref=custom_ref)
     else
-        return get_slater_ground_state_h5(data, sector)
+        return get_slater_ground_state_h5(data, sector; custom_ref=custom_ref)
     end
 end
 
@@ -578,7 +634,6 @@ Load exact diagonalization (ED) data from HDF5 files in the specified `folder`.
 """
 function load_h5_ED_data(folder; verbose=false, kwargs...)
     omit_indexer = get(kwargs, :omit_indexer, false)
-    sign_convention = get(kwargs, :sign_convention, :spin_first)
     use_slater_reference = get(kwargs, :use_slater_reference, true)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
 
@@ -587,120 +642,90 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
         error("No meta_data_and_E.jld2 file, and no HubbardED HDF5 files found in folder: $folder")
     end
 
-    file_path = joinpath(folder, valid_files[1])
-    if verbose
-        println("Loading hdf5 data: $file_path with sign convention: $sign_convention")
+    # Select the file with the lowest ground state energy across U values if multiple valid files exist
+    best_file = if length(valid_files) > 1
+        all_file_E = Vector{Vector{Float64}}()
+        local U_val_ref = nothing
+        for f in valid_files
+            h5open(joinpath(folder, f), "r") do data
+                U_val_ref = Float64.(read(data, "data/uvec"))
+                key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
+                valid_keys = su2_symmetry ? [k for k in key_labels if (s_idx = get_slater_ground_state(data, k); s_idx != -1 && is_doubly_occupied(data, k, s_idx))] : key_labels
+                if isempty(valid_keys)
+                    push!(all_file_E, fill(Inf, length(U_val_ref)))
+                else
+                    file_E = [minimum(real.(read(data, "data/energies/$(k)"))[1, u_idx] for k in valid_keys) for u_idx in eachindex(U_val_ref)]
+                    push!(all_file_E, file_E)
+                end
+            end
+        end
+        find_best_energy_sector(all_file_E, U_val_ref; labels=valid_files, verbose=verbose)
+    else
+        valid_files[1]
     end
 
-    h5open(file_path, "r") do data
-        N = (read(data, "metadata/nup"), read(data, "metadata/ndown"))
+    file_path = joinpath(folder, best_file)
+    if verbose
+        println("Loading hdf5 data: $file_path")
+    end
+
+    return h5open(file_path, "r") do data
+        N = Tuple(convert.(Int, [read(data, "metadata/nu"), read(data, "metadata/nd")]))
         spin_conserved = true
         use_symmetry = false
 
-        Lvec = read(data, "metadata/Lvec")
-        U_values = read(data, "data/uvec")
-        kvecs = read(data, "metadata/kvecs")
+        Lvec = convert.(Int, read(data, "metadata/Lvec"))
+        U_values = Float64.(read(data, "data/uvec"))
+        kvecs = convert.(Int, read(data, "metadata/qvecs"))
 
         key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-        all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels] # Needed for energy selection
+        all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels]
         k_min = find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry)
-        if verbose
-            println(all_E)
-        end
-        target_vecs = read(data, "data/evecs/$(k_min)")[:, 1, :] # shape (length(U_values), dim)
 
-        if use_slater_reference
-            # using the highest overlap slater determinant state as reference. 
-            slater_index = get_slater_ground_state(data, k_min)
-            reference_state = zeros(ComplexF64, size(target_vecs, 1))
-            reference_state[slater_index] = 1.0
-            target_vecs = transpose(hcat(reference_state, target_vecs))
-        else
-            target_vecs = transpose(target_vecs)
+        if verbose
+            println([
+                let E = real.(read(data, "data/energies/$(k)"))
+                    E[1:min(2, size(E, 1)), 1]
+                end for k in key_labels
+            ])
         end
+
+        evecs_dataset = read(data, "data/evecs/$(k_min)")
+        H_dim = size(evecs_dataset, 1)
+        raw_evecs = evecs_dataset[:, 1, :] # shape (H_dim, n_U)
+        target_vecs = Matrix(transpose(raw_evecs)) # shape (n_U, H_dim)
+
+        use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
+        if use_slater_ref
+            slater_index = get_slater_ground_state(data, k_min; custom_ref=use_slater_reference)
+            if slater_index == -1
+                error("No Slater ground state could be found in sector $k_min.")
+            end
+            reference_state = zeros(ComplexF64, H_dim)
+            reference_state[slater_index] = 1.0
+            target_vecs = vcat(transpose(reference_state), target_vecs) # shape (n_U + 1, H_dim)
+            pushfirst!(U_values, 0.0)
+        end
+
+        native_sign = :spin_first
+        order_native = ColSnake()
 
         if omit_indexer
-            indexer = nothing
-        else
-            lattice = Square(tuple(Lvec...), Periodic())
-            subspace = HubbardSubspace(N..., lattice; k=tuple((kvecs[:, k_min+1] .+ 1)...))
-            if verbose
-                println("Computing indexer")
-            end
-            order = (sign_convention == :spin_first) ? ColSnake() : RowSnake()
-            indexer = CombinationIndexer(subspace; order=order)
-
-            separate_spins = (read(data, "metadata/slater_labels/$k_min") isa Dict)
-            if separate_spins
-                sl_up = read(data, "metadata/slater_labels/$k_min/up")
-                sl_dn = read(data, "metadata/slater_labels/$k_min/dn")
-                H_dim = size(sl_up, 2)
-            else
-                sl_all = read(data, "metadata/slater_labels/$k_min")
-                H_dim = size(sl_all, 2)
-            end
-
-            # Build mapping from H5 orbital index (0-based) → Coordinate
-            h5_orbital_to_coord = Dict{Int,Coordinate}()
-            for o in 0:(prod(Lvec)-1)
-                h5_orbital_to_coord[o] = Coordinate(o % Lvec[1] + 1, div(o, Lvec[1]) + 1)
-            end
-
-            sorted_sites = sort(indexer.a, order=order)
-            coord_to_idx = Dict(c => i for (i, c) in enumerate(sorted_sites))
-
-            perm = Vector{Int}(undef, H_dim)
-            for h5_idx in 1:H_dim
-                if separate_spins
-                    up_orbs = sl_up[:, h5_idx]
-                    dn_orbs = sl_dn[:, h5_idx]
-                else
-                    up_orbs = sl_all[:, h5_idx, 1]
-                    dn_orbs = sl_all[:, h5_idx, 2]
-                end
-                up_set = Set([h5_orbital_to_coord[o] for o in up_orbs])
-                dn_set = Set([h5_orbital_to_coord[o] for o in dn_orbs])
-                perm[h5_idx] = index(indexer, up_set, dn_set)
-            end
-
-            # target_vecs is (n_U+1, H_dim). Permute columns and apply signs:
-            reordered = similar(target_vecs)
-            N_sites = prod(Lvec)
-            for h5_idx in 1:H_dim
-                if separate_spins
-                    up_orbs = sl_up[:, h5_idx]
-                    dn_orbs = sl_dn[:, h5_idx]
-                else
-                    up_orbs = sl_all[:, h5_idx, 1]
-                    dn_orbs = sl_all[:, h5_idx, 2]
-                end
-
-                # Combine up and dn spin orbitals with their spin labels
-                # initial_modes are ordered as all ups first, then all downs
-                initial_modes = vcat([(o, 1) for o in up_orbs], [(o, 2) for o in dn_orbs])
-
-                # Map each mode to its Jordan-Wigner index in the target convention
-                target_jw = Vector{Int}(undef, length(initial_modes))
-                for (idx, (o, spin)) in enumerate(initial_modes)
-                    site_idx = coord_to_idx[h5_orbital_to_coord[o]]
-                    if sign_convention == :spin_first
-                        target_jw[idx] = (spin == 1) ? site_idx : N_sites + site_idx
-                    else # :coordinate_first
-                        target_jw[idx] = (spin == 1) ? 2 * site_idx - 1 : 2 * site_idx
-                    end
-                end
-
-                # The Jordan-Wigner sign is the parity of the permutation sorting target_jw
-                sgn = 1 - 2 * permutation_parity(target_jw)
-
-                reordered[:, perm[h5_idx]] = target_vecs[:, h5_idx] .* sgn
-            end
-            target_vecs = reordered
+            return U_values, target_vecs, nothing, Dict(), N, spin_conserved, use_symmetry, native_sign, Lvec, order_native
         end
 
-        precomputed_structures = Dict()
+        selected_k_idx = findall(key_labels .== k_min)[1]
+        k_sector = Tuple(kvecs[:, selected_k_idx] .+ 1)
 
-        return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, sign_convention
+        lattice = Square(tuple(Lvec...), Periodic())
+        subspace = HubbardSubspace(N..., lattice; k=k_sector)
+
+        if verbose
+            println("Computing native indexer for sector k = $k_sector")
+        end
+        indexer = CombinationIndexer(subspace; order=order_native)
+
+        return U_values, target_vecs, indexer, Dict(), N, spin_conserved, use_symmetry, native_sign, Lvec, order_native
     end
 end
 
@@ -732,15 +757,15 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     dic = load_saved_dict(file_path)
 
     meta_data = dic["meta_data"]
-    file_sign_convention = get(meta_data, "sign_convention", :coordinate_first)
+    file_sign_convention = get(meta_data, "sign_convention", :spin_first)
     if file_sign_convention isa String
         file_sign_convention = Symbol(file_sign_convention)
     end
-    requested_sign_convention = get(kwargs, :sign_convention, file_sign_convention)
     use_slater_reference = get(kwargs, :use_slater_reference, false)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
+    omit_indexer = get(kwargs, :omit_indexer, false)
 
-    U_values = meta_data["U_values"]
+    U_values = Float64.(meta_data["U_values"])
     all_full_eig_vecs = dic["all_full_eig_vecs"]
     all_E = dic["E"] # Needed for energy selection
 
@@ -761,124 +786,41 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     k_min = find_best_energy_sector(all_E, U_values; verbose=verbose, data=dic, su2_symmetry=su2_symmetry)
 
     # Select the eigenvectors for this sector
-    # all_full_eig_vecs is a list of sectors. each sector is a list of vectors (per U).
     target_vecs = all_full_eig_vecs[k_min]
     if indexer isa Vector
         indexer = indexer[k_min]
     end
 
-    if use_slater_reference
-        slater_index = get_slater_ground_state(dic, k_min)
+    if indexer !== nothing
+        Lvec_native = [indexer.lattice_dims...]
         H_dim = length(indexer.inv_comb_dict)
-        if size(target_vecs, 1) == H_dim
-            reference_state = zeros(ComplexF64, H_dim)
-            reference_state[slater_index] = 1.0
-            target_vecs = hcat(reference_state, target_vecs)
-        else
-            reference_state = zeros(ComplexF64, H_dim)
-            reference_state[slater_index] = 1.0
-            target_vecs = vcat(transpose(reference_state), target_vecs)
-        end
+    else
+        Lvec_native = get(meta_data, "Lvec", [1, 1]) # Fallback
+        H_dim = size(target_vecs, 1)
+    end
+    order_native = file_sign_convention == :spin_first ? ColSnake() : RowSnake()
+
+    if size(target_vecs, 1) == H_dim
+        target_vecs = Matrix(transpose(target_vecs))
     end
 
-    # convert the ordering/sign convention.
-    if requested_sign_convention != file_sign_convention
-        if verbose
-            println("Converting JLD2 data from $file_sign_convention to $requested_sign_convention...")
+    use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
+    if use_slater_ref
+        slater_index = get_slater_ground_state(dic, k_min; custom_ref=use_slater_reference)
+        if slater_index == -1
+            error("No Slater ground state could be found in sector $k_min.")
         end
-
-        # Helper to convert reconstructed coordinates to clean Coordinate objects
-        clean_coord(c) = Coordinate(c.coordinates...)
-
-        # 1. Determine lattice dimensions Lvec from the metadata sites
-        sites_list = meta_data["sites"]
-        Lvec = if isa(sites_list, AbstractString)
-            parsed_dim = parse_lattice_dimension(sites_list)
-            if !isnothing(parsed_dim)
-                parsed_dim
-            else
-                error("Could not parse lattice dimensions from sites string: '$sites_list'")
-            end
-        else
-            [maximum(clean_coord(c).coordinates[a] for c in sites_list) for a in 1:length(clean_coord(sites_list[1]).coordinates)]
-        end
-
-        # 2. Reconstruct the subspace and target indexer
-        lattice = Square(tuple(Lvec...), Periodic())
-        n_up, n_dn = N
-
-        k_val = try
-            indexer.k
-        catch
-            nothing
-        end
-
-        subspace = HubbardSubspace(n_up, n_dn, lattice; k=k_val)
-        order_new = (requested_sign_convention == :spin_first) ? ColSnake() : RowSnake()
-        indexer_new = CombinationIndexer(subspace; order=order_new)
-
-        # 3. Setup coordinate-to-index dictionaries for both orderings
-        sorted_sites_old = sort(reduce(vcat, collect(sites(lattice))), order=(file_sign_convention == :spin_first ? ColSnake() : RowSnake()))
-        coord_to_idx_old = Dict(c => i for (i, c) in enumerate(sorted_sites_old))
-
-        sorted_sites_new = sort(indexer_new.a, order=order_new)
-        coord_to_idx_new = Dict(c => i for (i, c) in enumerate(sorted_sites_new))
-
-        N_sites = prod(Lvec)
-        H_dim = length(indexer.inv_comb_dict)
-
-        # Determine the shape and dimension of target_vecs to permute
-        dim_to_permute = size(target_vecs, 1) == H_dim ? 1 : (size(target_vecs, 2) == H_dim ? 2 : 0)
-        if dim_to_permute == 0
-            error("Could not determine dimension of target_vecs matching H_dim ($H_dim). Shape: $(size(target_vecs))")
-        end
-
-        reordered_target_vecs = similar(target_vecs)
-
-        for idx_old in 1:H_dim
-            old_up, old_dn = indexer.inv_comb_dict[idx_old]
-            up_set = Set(clean_coord(c) for c in old_up)
-            dn_set = Set(clean_coord(c) for c in old_dn)
-
-            idx_new = index(indexer_new, up_set, dn_set)
-
-            # Sort the occupied sites according to the old ordering
-            sorted_up_old = sort(collect(up_set), order=(file_sign_convention == :spin_first ? ColSnake() : RowSnake()))
-            sorted_dn_old = sort(collect(dn_set), order=(file_sign_convention == :spin_first ? ColSnake() : RowSnake()))
-
-            # The operator sequence in the old representation
-            if file_sign_convention == :spin_first
-                src_modes = vcat([(s, 1) for s in sorted_up_old], [(s, 2) for s in sorted_dn_old])
-            else # :coordinate_first
-                all_modes = vcat([(s, 1) for s in up_set], [(s, 2) for s in dn_set])
-                src_modes = sort(all_modes, by=m -> (spin = m[2]; site_idx = coord_to_idx_old[m[1]]; (spin == 1) ? 2 * site_idx - 1 : 2 * site_idx))
-            end
-
-            # Map each mode to its JW index in the new representation
-            target_jw = Vector{Int}(undef, length(src_modes))
-            for (idx, (s, spin)) in enumerate(src_modes)
-                site_idx_new = coord_to_idx_new[s]
-                if requested_sign_convention == :spin_first
-                    target_jw[idx] = (spin == 1) ? site_idx_new : N_sites + site_idx_new
-                else # :coordinate_first
-                    target_jw[idx] = (spin == 1) ? 2 * site_idx_new - 1 : 2 * site_idx_new
-                end
-            end
-
-            sgn = 1 - 2 * permutation_parity(target_jw)
-
-            if dim_to_permute == 1
-                reordered_target_vecs[idx_new, :] = target_vecs[idx_old, :] .* sgn
-            else
-                reordered_target_vecs[:, idx_new] = target_vecs[:, idx_old] .* sgn
-            end
-        end
-
-        target_vecs = reordered_target_vecs
-        indexer = indexer_new
+        reference_state = zeros(ComplexF64, H_dim)
+        reference_state[slater_index] = 1.0
+        target_vecs = vcat(transpose(reference_state), target_vecs) # shape (n_U + 1, H_dim)
+        pushfirst!(U_values, 0.0)
     end
 
-    return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, requested_sign_convention
+    if omit_indexer
+        indexer = nothing
+    end
+
+    return U_values, target_vecs, indexer, precomputed_structures, N, spin_conserved, use_symmetry, file_sign_convention, Lvec_native, order_native
 end
 
 """
@@ -915,6 +857,70 @@ function parse_lattice_dimension(path::AbstractString; default=:crash)
     return nothing
 end
 
+"""
+transform_basis(target_vecs::Matrix{ComplexF64}, native_indexer::CombinationIndexer, target_indexer::CombinationIndexer, native_sign::Symbol, target_sign::Symbol)
+
+Transforms target vectors of shape (U_num, H_dim) from the basis defined by native_indexer and native_sign
+to a basis with target_indexer and target_sign. This will change the ordering and sign convention.
+"""
+function transform_basis(target_vecs::Matrix{Float64},
+    native_indexer::CombinationIndexer,
+    target_indexer::CombinationIndexer,
+    native_sign::Symbol,
+    target_sign::Symbol)
+    # If indexers are identical and signs are identical, do nothing
+    if native_indexer === target_indexer && native_sign == target_sign
+        return target_vecs
+    end
+
+    native_order = native_sign == :spin_first ? ColSnake() : RowSnake()
+    target_order = target_sign == :spin_first ? ColSnake() : RowSnake()
+
+    sorted_native = sort(native_indexer.a, order=native_order)
+    sorted_target = sort(target_indexer.a, order=target_order)
+
+    # Construct the full jw_order for native
+    if native_sign == :spin_first
+        native_jw_order = [(s, σ) for σ in (1, 2) for s in sorted_native]
+    else
+        native_jw_order = [(s, σ) for s in sorted_native for σ in (1, 2)]
+    end
+
+    # Construct the full jw_order for target
+    if target_sign == :spin_first
+        target_jw_order = [(s, σ) for σ in (1, 2) for s in sorted_target]
+    else
+        target_jw_order = [(s, σ) for s in sorted_target for σ in (1, 2)]
+    end
+
+    global_map = [findfirst(==(m), target_jw_order) for m in native_jw_order]
+
+    new_vecs = zeros(eltype(target_vecs), size(target_vecs, 1), size(target_vecs, 2))
+
+    for (native_idx, conf) in enumerate(native_indexer.inv_comb_dict)
+        target_up, target_dn = conf
+
+        if !haskey(target_indexer.comb_dict, (target_up, target_dn))
+            error("Target indexer does not contain combination for native index $native_idx")
+        end
+        target_idx = target_indexer.comb_dict[(target_up, target_dn)]
+
+        # Construct the permutation for this specific state
+        perm = Int[]
+        for i in eachindex(native_jw_order)
+            s, σ = native_jw_order[i]
+            if (σ == 1 && s ∈ target_up) || (σ == 2 && s ∈ target_dn)
+                push!(perm, global_map[i])
+            end
+        end
+
+        sgn = 1 - 2 * permutation_parity(perm)
+        new_vecs[:, target_idx] .= target_vecs[:, native_idx] .* sgn
+    end
+
+    return new_vecs
+end
+
 
 """
     load_ED_data(folder; verbose=false, kwargs...)
@@ -923,12 +929,15 @@ Load exact diagonalization (ED) data from the specified `folder`. Automatically 
 if the data is stored in JLD2 format (`meta_data_and_E.jld2`) or HDF5 format (`*.h5`)
 and delegates to the appropriate loader.
 
+Note that you cannot omit the indexer and transform the basis. If the indexer is to be omitted
+the basis will not be transformed to change conventions.
+
 # Arguments
 - `folder::String`: Path to the folder containing the ED data.
 - `verbose::Bool=false`: If true, print progress and details of the loading process.
 
 # Keyword Arguments (via `kwargs...`)
-- `sign_convention::Symbol`: The desired Jordan-Wigner sign convention (`:spin_first` or `:coordinate_first`). Defaults to `:spin_first` for H5 and the convention stored in the file for JLD2.
+- `sign_convention::Symbol`: The desired Jordan-Wigner sign convention (`:spin_first` or `:coordinate_first`). Defaults to `:spin_first`.
 - `use_slater_reference::Bool`: Prepend a pure Slater determinant reference state as the first row of `target_vecs`. Defaults to `true` for HDF5 and `false` for JLD2.
 - `su2_symmetry::Bool=false`: If true, filter momentum sectors to only those that possess a Slater ground state with doubly occupied sites (SU(2) singlet).
 
@@ -945,11 +954,33 @@ A tuple containing:
 """
 function load_ED_data(folder; verbose=false, kwargs...)
     jld2_path = joinpath(folder, "meta_data_and_E.jld2")
+
     if !isfile(jld2_path)
-        return load_h5_ED_data(folder; verbose=verbose, kwargs...)
+        U_values, native_vecs, native_indexer, precomputed_structures, N, spin_conserved, use_symmetry, native_sign, native_Lvec, native_order = load_h5_ED_data(folder; verbose=verbose, kwargs...)
     else
-        return load_jld2_ED_data(jld2_path; verbose=verbose, kwargs...)
+        U_values, native_vecs, native_indexer, precomputed_structures, N, spin_conserved, use_symmetry, native_sign, native_Lvec, native_order = load_jld2_ED_data(jld2_path; verbose=verbose, kwargs...)
     end
+
+    target_sign = get(kwargs, :sign_convention, native_sign)
+    target_order = target_sign == :spin_first ? ColSnake() : RowSnake()
+    omit_indexer = get(kwargs, :omit_indexer, false)
+
+    if omit_indexer || native_indexer === nothing || (target_sign == native_sign && target_order == native_order)
+        return U_values, native_vecs, native_indexer, precomputed_structures, N, spin_conserved, use_symmetry, native_sign
+    end
+
+    if verbose
+        println("Transforming basis from native (sign: $native_sign, order: $native_order)")
+        println("                  to target (sign: $target_sign, order: $target_order)")
+    end
+
+    lattice = Square(tuple(native_Lvec...), Periodic())
+    subspace = HubbardSubspace(N..., lattice; k=native_indexer.k)
+    target_indexer = CombinationIndexer(subspace; order=target_order)
+
+    target_vecs = transform_basis(native_vecs, native_indexer, target_indexer, native_sign, target_sign)
+
+    return U_values, target_vecs, target_indexer, precomputed_structures, N, spin_conserved, use_symmetry, target_sign
 end
 
 function reordered_electron_parity(conf1::Vector, conf2::Vector, mapping)
@@ -1072,10 +1103,11 @@ function count_in_range(s::Set{T}, a::T, b::T; lower_eq::Bool=true, upper_eq::Bo
     return count
 end
 
-function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     # create_Sx! in momentum basis is exactly the same as position space,
     # since S^x = \frac{1}{2} \sum_k (c^\dagger_{k\uparrow} c_{k\downarrow} + c^\dagger_{k\downarrow} c_{k\uparrow})
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
@@ -1127,7 +1159,8 @@ function create_SziSzj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float
         push!(vals, total / 4 * magnitude)
     end
 end
-function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    NN::Union{Missing,AbstractLattice}=missing, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     if momentum_basis
         @warn "SiSj in momentum basis not fully implemented yet"
         return
@@ -1135,7 +1168,7 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
     # This is for i!=j
     # We want 0.5 * (S_i^+ S_j^- + S_i^- S_j^+)
     # This swaps spins: i_up j_down -> i_down j_up   OR   i_down j_up -> i_up j_down
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2] # σ is the spin starting at site_index1
             for site_index1 ∈ setdiff(conf[σ], conf[3-σ])
@@ -1167,11 +1200,12 @@ function create_SiSj!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64
     end
     create_SziSzj!(rows, cols, vals, magnitude, indexer; iequalsj=false, NN=NN, momentum_basis=momentum_basis)
 end
-function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_S2!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     # The algebraic form of total S^2 is invariant under any unitary single-particle basis transformation 
     # (such as Fourier transform to momentum space) because it is a global SU(2) Casimir invariant. 
     # Thus, the exact same configuration loop works perfectly for both position and momentum bases!
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         sz = (length(conf[1]) - length(conf[2])) / 2.0
         diagonal_val = sz * (sz + 1.0)
@@ -1227,9 +1261,10 @@ function general_single_body!(
     vals::Vector{Float64},
     t::Dict,
     indexer::CombinationIndexer;
-    sign_convention::Symbol=:spin_firstS
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering::Ordering=ColSnake()
 )
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for (σ1, σ2) ∈ Iterators.product(1:2, 1:2) # 1=up 2=down
             for site_index1 ∈ conf[σ1]
@@ -1269,9 +1304,10 @@ function build_n_body_structure_from_keys(
     indexer::CombinationIndexer{T},
     ::Type{U}=Float64;
     skip_lower_triangular::Bool=false,
-    sign_convention::Symbol=:spin_first
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering::Ordering=ColSnake()
 ) where {T,U<:Number}
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     # println(sorted_sites)
     inv_comb_dict = indexer.inv_comb_dict
     n_states = length(inv_comb_dict)
@@ -1409,11 +1445,12 @@ function general_n_body!(
     vals::Vector{U},
     t::Dict{Vector{Tuple{T,Int,Symbol}},U},
     indexer::CombinationIndexer;
-    sign_convention::Symbol=:spin_first
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering::Ordering=ColSnake()
 ) where {T,U<:Number}
     # requires applying Hermitian to the resulting sparse matrix
     _rows, _cols, signs, ops_list = build_n_body_structure(t, indexer; skip_lower_triangular=false, sign_convention=sign_convention)
-    t_keys = sort!(collect(keys(t)), order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    t_keys = sort!(collect(keys(t)), order=lattice_ordering)
     _vals = update_values(signs, ops_list, t_keys, [t[k] for k in t_keys])
     append!(rows, _rows)
     append!(cols, _cols)
@@ -1480,13 +1517,14 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
     return val < 1e-10
 end
 function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer, return_keys::Bool=false;
-    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false, conserve_momentum::Bool=false, sign_convention::Symbol=:spin_first) where T
+    magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false,
+    conserve_momentum::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake()) where T
     # function creates a dictionary of free parameters in the form of a dictionary. 
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
 
     t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}},T}()
-    site_list = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake()) #ensuring normal ordering
+    site_list = sort(indexer.a, order=lattice_ordering) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ, label) for s in site_list for σ in 1:2], n)
     equal_spin(create, annihilate) = sum((σ * 2 - 3) for (s, σ, _) in create) == sum((σ * 2 - 3) for (s, σ, _) in annihilate)
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] <= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
@@ -1553,7 +1591,7 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
         end
     end
     if return_keys
-        sorted_keys = sort!(collect(keys(t_dict)), order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+        sorted_keys = sort!(collect(keys(t_dict)), order=lattice_ordering)
         return t_dict, sorted_keys
     end
     return t_dict
@@ -1927,7 +1965,8 @@ function reflect_y(config, Lx)
 end
 
 
-function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, t::Union{Float64,AbstractArray{Float64}}, lattice::AbstractLattice, indexer::CombinationIndexer;
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     if isa(t, Number)
         t = [t]
     end
@@ -1991,7 +2030,7 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
                             #                      conf[2]
                             #                  end, site_index1, site_index2; lower_eq=false, upper_eq=true) +
                             #              (site_index1 > site_index2))
-                            sign = compute_jw_sign(conf, sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake()),
+                            sign = compute_jw_sign(conf, sort(indexer.a, order=lattice_ordering),
                                 [(site_index2, σ, :create), (site_index1, σ, :annihilate)]; sign_convention=sign_convention)
                             push!(rows, i1)
                             push!(cols, i2)
@@ -2004,13 +2043,14 @@ function create_nn_hopping!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{F
     end
 end
 
-function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_hubbard_interaction!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, U::Float64, half_filling::Bool, indexer::CombinationIndexer;
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     if momentum_basis
         # H_U = (U/N) \sum_{k,k',q} c^\dagger_{k-q,\uparrow} c_{k,\uparrow} c^\dagger_{k'+q,\downarrow} c_{k',\downarrow}
         # N is the number of sites.
         N = isnothing(indexer.lattice_dims) ? length(indexer.a) : prod(indexer.lattice_dims)
         V = U / N
-        sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+        sorted_sites = sort(indexer.a, order=lattice_ordering)
 
         for (i1, conf) in enumerate(indexer.inv_comb_dict)
             for k_up_annihilate ∈ conf[1]
@@ -2078,8 +2118,9 @@ function create_chemical_potential!(rows::Vector{Int}, cols::Vector{Int}, vals::
         push!(vals, μ * (length(conf[1]) + length(conf[2]))) #+ 1e-7*sum(conf[1]) + 43e-7*sum(conf[2]) 
     end
 end
-function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+function create_∏σx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         i2 = index(indexer, conf[2], conf[1])
 
@@ -2116,8 +2157,9 @@ function create_Sz!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
         push!(vals, magnitude * (length(conf[1]) - length(conf[2])))
     end
 end
-function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer; sign_convention::Symbol=:spin_first)
-    sorted_sites = sort(indexer.a, order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
     for (i1, conf) in enumerate(indexer.inv_comb_dict)
         for σ ∈ [1, 2]
             for site_index ∈ setdiff(conf[σ], conf[3-σ])
@@ -2155,9 +2197,9 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
     end
 end
 
-function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    indexer = CombinationIndexer(Hs; order=lattice_ordering)
     rows = Int[]
     cols = Int[]
     vals = Float64[]
@@ -2199,11 +2241,13 @@ function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=f
     return H
 end
 
-function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
+function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace;
+    get_indexer::Bool=false, indexer::Union{CombinationIndexer,Nothing}=nothing,
+    momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     # specify the subspace
     dim = get_subspace_dimension(Hs)
     if isnothing(indexer)
-        indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+        indexer = CombinationIndexer(Hs; order=lattice_ordering)
     end
     rows = Int[]
     cols = Int[]
@@ -2211,16 +2255,16 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool
 
     if !(Hs.k === nothing)
         momentum_basis = true
-    else
-        momentum_basis = false
     end
 
     #Constructs the sparse hopping Hamiltonian matrix \sum_{<i,j>} c^\dagger_i c_j.
     if Hm.t > 0 || (Hm.t isa AbstractArray)
-        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
+        create_nn_hopping!(rows, cols, vals, Hm.t, Hs.lattice, indexer;
+            momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
     end
     if Hm.U > 0
-        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
+        create_hubbard_interaction!(rows, cols, vals, Hm.U, Hm.half_filling, indexer;
+            momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
     end
     if Hm.μ > 0
         create_chemical_potential!(rows, cols, vals, Hm.μ, indexer)
@@ -2238,10 +2282,10 @@ function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace; get_indexer::Bool
 end
 
 
-function create_Heisenberg(t, J, Hs::HubbardSubspace; sign_convention::Symbol=:spin_first)
+function create_Heisenberg(t, J, Hs::HubbardSubspace; sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     # specify the subspace
     dim = get_subspace_dimension(Hs)
-    indexer = CombinationIndexer(Hs; order=sign_convention == :spin_first ? ColSnake() : RowSnake())
+    indexer = CombinationIndexer(Hs; order=lattice_ordering)
 
     rows = Int[]
     cols = Int[]
@@ -2740,15 +2784,15 @@ end
 Constructs the hopping and interaction Hubbard Hamiltonians as sparse matrices for the given subspace.
 Returns a tuple (H_hopping, H_interaction). If `get_indexer` is true, returns (H_hopping, H_interaction, indexer).
 """
-function create_hubbard_matrices(subspace::HubbardSubspace; indexer::Union{CombinationIndexer,Nothing}=nothing, get_indexer=false, sign_convention=:coordinate_first)
+function create_hubbard_matrices(subspace::HubbardSubspace; indexer::Union{CombinationIndexer,Nothing}=nothing, get_indexer=false, sign_convention=:coordinate_first, lattice_ordering=ColSnake())
     hopping_model = HubbardModel(1.0, 0.0, 0.0, false)
     interaction_model = HubbardModel(0.0, 1.0, 0.0, false)
 
     # Check if k-vector constraint is active to set momentum basis
     momentum_basis = !(subspace.k === nothing)
 
-    H_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, indexer=indexer, momentum_basis=momentum_basis, sign_convention=sign_convention)
-    H_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=momentum_basis, sign_convention=sign_convention)
+    H_hopping, indexer = create_Hubbard(hopping_model, subspace; get_indexer=true, indexer=indexer, momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+    H_interaction = create_Hubbard(interaction_model, subspace; indexer=indexer, momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
     if get_indexer
         return H_hopping, H_interaction, indexer
     end
@@ -2944,16 +2988,16 @@ Construct a standardized filename prefix string for optimization run results.
 # Returns
 - A `String` containing the constructed prefix.
 """
-function build_save_name_prefix(name::Union{Symbol, String};
-                                electrons=nothing,
-                                sites=nothing,
-                                N=nothing,
-                                use_symmetry::Bool=false,
-                                custom_ref_state_arg=nothing,
-                                antihermitian::Bool=false,
-                                loss_type::Symbol=:overlap,
-                                nn_strategy_file=nothing,
-                                suffix=nothing)
+function build_save_name_prefix(name::Union{Symbol,String};
+    electrons=nothing,
+    sites=nothing,
+    N=nothing,
+    use_symmetry::Bool=false,
+    custom_ref_state_arg=nothing,
+    antihermitian::Bool=false,
+    loss_type::Symbol=:overlap,
+    nn_strategy_file=nothing,
+    suffix=nothing)
     name_str = string(name)
     if name_str in ("exact", "exact_exponential", ":exact", ":exact_exponential")
         elec_val = electrons !== nothing ? electrons : N

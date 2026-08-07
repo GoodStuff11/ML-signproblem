@@ -1,0 +1,6 @@
+Test Summary: | Pass  Total  Time
+TamLib Tests  |   14     14  0.9s
+Test Summary:    | Pass  Total   Time
+TamFermion Tests |   11     11  16.3s
+Test Summary:                    | Pass  Total   Time
+Python Interface Alignment Tests |   29     29  10.9s

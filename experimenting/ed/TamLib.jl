@@ -11,6 +11,8 @@ using Random
 
 # C-order helpers
 export ravel_c, unravel_c, reshape_c, flatten_c
+# F-order helpers
+export ravel_f, unravel_f
 # Permutations
 export perm_parity_cyc, cycle_decomp, parity_sort, num_inversions
 # General utility
@@ -92,6 +94,58 @@ function unravel_c(idx::AbstractArray{<:Integer}, dims)
     result = [similar(idx, Int) for _ in 1:nd]
     rem = Int.(idx)
     for k in nd:-1:1
+        result[k] .= rem .% dims[k]
+        rem .= div.(rem, dims[k])
+    end
+    return Tuple(result)
+end
+
+"""
+    ravel_f(coords, dims; mode=:raise) → 0-based linear index
+
+Fortran-order (column-major) multi-index → linear index.
+`coords`: tuple of coordinate values/arrays (each 0-based).
+`dims`:   tuple of dimension sizes.
+`mode`:   `:raise` (default) or `:wrap` for periodic wrapping.
+"""
+function ravel_f(coords, dims; mode=:raise)
+    nd = length(dims)
+    @assert length(coords) == nd
+    # F-order strides: stride[k] = ∏ dims[1 : k-1]
+    strides = Vector{Int}(undef, nd)
+    strides[1] = 1
+    for k in 2:nd
+        strides[k] = strides[k-1] * dims[k-1]
+    end
+    if mode == :wrap
+        return sum(mod.(coords[k], dims[k]) .* strides[k] for k in 1:nd)
+    else
+        return sum(coords[k] .* strides[k] for k in 1:nd)
+    end
+end
+
+"""
+    unravel_f(idx, dims) → tuple of 0-based coordinates
+
+Fortran-order (column-major) linear index → tuple of coordinates.
+Works on both scalar and array `idx`.
+"""
+function unravel_f(idx::Integer, dims)
+    nd = length(dims)
+    coords = Vector{Int}(undef, nd)
+    rem = idx
+    for k in 1:nd
+        coords[k] = rem % dims[k]
+        rem = div(rem, dims[k])
+    end
+    return Tuple(coords)
+end
+
+function unravel_f(idx::AbstractArray{<:Integer}, dims)
+    nd = length(dims)
+    result = [similar(idx, Int) for _ in 1:nd]
+    rem = Int.(idx)
+    for k in 1:nd
         result[k] .= rem .% dims[k]
         rem .= div.(rem, dims[k])
     end

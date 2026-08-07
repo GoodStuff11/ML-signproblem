@@ -1,0 +1,24 @@
+Checking convergence for U_value[25] = 0.8886238162743403
+GS Energy = -10.75768589909418
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 219.661 MB | MaxRSS: 1.301 GB
+  0.497280 seconds (613.46 k allocations: 30.055 MiB, 97.73% compilation time)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 253.048 MB | MaxRSS: 1.301 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.687611 seconds (821.27 k allocations: 52.069 MiB, 97.01% compilation time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 305.12 MB | MaxRSS: 1.301 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 353.405 MB | MaxRSS: 1.301 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 202.223 MB | MaxRSS: 1.301 GB
+  0.010436 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 206.883 MB | MaxRSS: 1.301 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.628091 seconds (173.79 k allocations: 19.536 MiB, 97.26% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 70.461 MB | MaxRSS: 1.301 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 71.233 MB | MaxRSS: 1.301 GB
+Exact exp Energy = -10.667007742095846
+  P = 1: Trotter Energy = -10.53060408895146 (Diff from Exact = 0.13640365314438618)
+  P = 2: Trotter Energy = -10.646469067590168 (Diff from Exact = 0.020538674505678145)
+  P = 4: Trotter Energy = -10.662431898881099 (Diff from Exact = 0.004575843214746911)
+  P = 8: Trotter Energy = -10.665891277004953 (Diff from Exact = 0.0011164650908934703)
+  P = 16: Trotter Energy = -10.666728085294675 (Diff from Exact = 0.00027965680117070235)
+  P = 32: Trotter Energy = -10.666936683903971 (Diff from Exact = 7.105819187458451e-5)
+  P = 64: Trotter Energy = -10.666989351028995 (Diff from Exact = 1.8391066850753646e-5)

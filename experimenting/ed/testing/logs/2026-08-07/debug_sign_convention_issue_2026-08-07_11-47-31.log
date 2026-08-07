@@ -1,0 +1,161 @@
+================================================================================
+Timestamp: 2026-08-07T11:47:31.751
+Command run: julia testing/debug_sign_convention_issue.jl 
+================================================================================
+=== Debugging Sign Convention Conversion ===
+
+--------------------------------------------------
+Testing sign_convention = :spin_first
+--------------------------------------------------
+Finding best energy sector
+U=0.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.891066204174932, -10.891066204174928]
+U=0.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-10.786446540663016, -10.786446540663013]
+U=0.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-10.686069728879499, -10.686069728879495]
+U=1.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-10.589851434307288, -10.589851434307281]
+U=1.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.4976956380307, -10.497695638030697]
+U=1.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.409496122237776, -10.409496122237773]
+U=1.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.325138022731375, -10.325138022731371]
+U=2.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-10.244499401772607, -10.244499401772604]
+U=2.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.167452798970658, -10.167452798970654]
+U=2.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-10.093866723847627, -10.093866723847624]
+U=2.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-10.023607060536014, -10.02360706053601]
+U=3.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.956538362235756, -9.956538362235756]
+U=3.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-9.892525020075595, -9.892525020075595]
+U=3.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.831432297509652, -9.831432297509645]
+U=3.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.773127227072292, -9.773127227072292]
+U=4.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-9.717479371064359, -9.717479371064359]
+U=4.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.66436145150103, -9.664361451501026]
+U=4.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.613649857442823, -9.61364985744282]
+U=4.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.56522503973647, -9.565225039736463]
+U=5.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.518971804326576, -9.518971804326569]
+U=5.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.474779515793205, -9.474779515793198]
+U=5.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.432542222755316, -9.432542222755316]
+U=5.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.392158716383364, -9.39215871638336]
+U=6.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.353532532595201, -9.353532532595201]
+U=6.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.316571907665328, -9.316571907665328]
+U=6.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.281189696033186, -9.281189696033186]
+U=6.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.247303258116125, -9.247303258116125]
+U=7.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.214834324958044, -9.214834324958044]
+U=7.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.183708845611742, -9.183708845611742]
+U=7.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.153856822280842, -9.153856822280842]
+U=7.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.12521213744992, -9.12521213744992]
+U=8.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.097712376514778, -9.097712376514778]
+U=8.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.071298648790581, -9.071298648790581]
+U=8.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.045915409221145, -9.045915409221145]
+U=8.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.02151028263406, -9.02151028263406]
+U=9.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.998033891977295, -8.998033891977295]
+U=9.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.975439691627134, -8.975439691627132]
+U=9.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.953683806567641, -8.953683806567641]
+U=9.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.932724878001785, -8.932724878001785]
+U=10.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.91252391575716, -8.91252391575716]
+U=10.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.89304415768927, -8.89304415768927]
+U=10.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.87425093615686, -8.87425093615686]
+U=10.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.856111551542053, -8.856111551542053]
+U=11.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.838595152708843, -8.838595152708843]
+U=11.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.82167262423298, -8.82167262423298]
+U=11.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.80531648019118, -8.805316480191179]
+U=11.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.78950076426527, -8.78950076426527]
+U=12.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.774200955894822, -8.77420095589482]
+U=12.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.759393882198124, -8.759393882198124]
+U=12.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.745057635374348, -8.745057635374348]
+U=12.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.731171495297879, -8.731171495297879]
+U=13.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.717715857018163, -8.717715857018163]
+U=13.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.704672162883837, -8.704672162883837]
+U=13.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.69202283901767, -8.692022839017667]
+U=13.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.679751235878348, -8.679751235878348]
+U=14.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.667841572655872, -8.66784157265587]
+U=14.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.656278885258677, -8.656278885258677]
+U=14.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.645048977662638, -8.645048977662636]
+U=14.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.634138376404096, -8.634138376404094]
+U=15.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.623534288011175, -8.623534288011175]
+k-value counts: Dict(4 => 60, 7 => 60, 2 => 60, 3 => 60)
+Selected ground state symmetry sector: 4
+Loading hdf5 data: /home/jek354/research/data/new_data/data_h5_fixed/N=(3, 2)_3x3/HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5
+[[-10.891066204174924, -10.86520892032805]]
+Computing native indexer for sector k = (2, 1)
+U = 0.25
+Loaded sign convention: spin_first
+Trotter E[1:4] = [-10.891066204174946, -10.865208920328017, -10.810429022406565, -10.782333378313185]
+create_Hubbard E[1:4] = [-10.891066204174939, -10.865208920328048, -10.810429022406565, -10.782333378313162]
+Overlap v_create[:, 1] ' * gs_new: 1.0 (raw: -1.0)
+Overlap V_trotter[:, 1]' * gs_new: 0.9999999999999994 (raw: 0.9999999999999994 + 0.0im)
+Predicted energy gs_new' * H_create * gs_new: -10.891066204174916
+
+--------------------------------------------------
+Testing sign_convention = :coordinate_first
+--------------------------------------------------
+Finding best energy sector
+U=0.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.891066204174932, -10.891066204174928]
+U=0.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-10.786446540663016, -10.786446540663013]
+U=0.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-10.686069728879499, -10.686069728879495]
+U=1.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-10.589851434307288, -10.589851434307281]
+U=1.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.4976956380307, -10.497695638030697]
+U=1.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.409496122237776, -10.409496122237773]
+U=1.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.325138022731375, -10.325138022731371]
+U=2.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-10.244499401772607, -10.244499401772604]
+U=2.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-10.167452798970658, -10.167452798970654]
+U=2.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-10.093866723847627, -10.093866723847624]
+U=2.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-10.023607060536014, -10.02360706053601]
+U=3.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.956538362235756, -9.956538362235756]
+U=3.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-9.892525020075595, -9.892525020075595]
+U=3.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.831432297509652, -9.831432297509645]
+U=3.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.773127227072292, -9.773127227072292]
+U=4.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-9.717479371064359, -9.717479371064359]
+U=4.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.66436145150103, -9.664361451501026]
+U=4.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.613649857442823, -9.61364985744282]
+U=4.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.56522503973647, -9.565225039736463]
+U=5.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.518971804326576, -9.518971804326569]
+U=5.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.474779515793205, -9.474779515793198]
+U=5.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.432542222755316, -9.432542222755316]
+U=5.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-9.392158716383364, -9.39215871638336]
+U=6.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.353532532595201, -9.353532532595201]
+U=6.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.316571907665328, -9.316571907665328]
+U=6.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.281189696033186, -9.281189696033186]
+U=6.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.247303258116125, -9.247303258116125]
+U=7.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.214834324958044, -9.214834324958044]
+U=7.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.183708845611742, -9.183708845611742]
+U=7.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.153856822280842, -9.153856822280842]
+U=7.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.12521213744992, -9.12521213744992]
+U=8.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-9.097712376514778, -9.097712376514778]
+U=8.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.071298648790581, -9.071298648790581]
+U=8.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.045915409221145, -9.045915409221145]
+U=8.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-9.02151028263406, -9.02151028263406]
+U=9.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.998033891977295, -8.998033891977295]
+U=9.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.975439691627134, -8.975439691627132]
+U=9.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.953683806567641, -8.953683806567641]
+U=9.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.932724878001785, -8.932724878001785]
+U=10.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.91252391575716, -8.91252391575716]
+U=10.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.89304415768927, -8.89304415768927]
+U=10.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.87425093615686, -8.87425093615686]
+U=10.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.856111551542053, -8.856111551542053]
+U=11.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.838595152708843, -8.838595152708843]
+U=11.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.82167262423298, -8.82167262423298]
+U=11.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.80531648019118, -8.805316480191179]
+U=11.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.78950076426527, -8.78950076426527]
+U=12.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.774200955894822, -8.77420095589482]
+U=12.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.759393882198124, -8.759393882198124]
+U=12.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.745057635374348, -8.745057635374348]
+U=12.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.731171495297879, -8.731171495297879]
+U=13.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5"] [-8.717715857018163, -8.717715857018163]
+U=13.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.704672162883837, -8.704672162883837]
+U=13.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.69202283901767, -8.692022839017667]
+U=13.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.679751235878348, -8.679751235878348]
+U=14.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5"] [-8.667841572655872, -8.66784157265587]
+U=14.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.656278885258677, -8.656278885258677]
+U=14.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.645048977662638, -8.645048977662636]
+U=14.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(1).h5"] [-8.634138376404096, -8.634138376404094]
+U=15.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(6).h5"] [-8.623534288011175, -8.623534288011175]
+k-value counts: Dict(4 => 60, 7 => 60, 2 => 60, 3 => 60)
+Selected ground state symmetry sector: 4
+Loading hdf5 data: /home/jek354/research/data/new_data/data_h5_fixed/N=(3, 2)_3x3/HubbardED_XDiag_momSlater_3x3_nu_3_nd_2_t_1_m_2_sectors_(3).h5
+[[-10.891066204174924, -10.86520892032805]]
+Computing native indexer for sector k = (2, 1)
+Transforming basis from native (sign: spin_first, order: ColSnake())
+                  to target (sign: coordinate_first, order: RowSnake())
+U = 0.25
+Loaded sign convention: coordinate_first
+Trotter E[1:4] = [-10.891066204174932, -10.865208920328039, -10.810429022406547, -10.782333378313188]
+create_Hubbard E[1:4] = [-10.891066204174932, -10.865208920328024, -10.810429022406572, -10.78233337831318]
+Overlap v_create[:, 1] ' * gs_new: 1.0 (raw: -1.0)
+Overlap V_trotter[:, 1]' * gs_new: 0.33319394824899523 (raw: -0.33319394824899523 + 0.0im)
+Predicted energy gs_new' * H_create * gs_new: -10.891066204174916

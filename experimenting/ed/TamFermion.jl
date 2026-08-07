@@ -1300,104 +1300,197 @@ function SlaterCOB_RtoK_nparticle(Lvec, n::Integer)
     return F_n, basis
 end
 
-"""
-    sectorTotMom(Lvec, n) → (qt_sorted, sort_order, unique_q, counts)
+# Helper function to determine snake site ordering (:col_snake vs :row_snake)
+function _normalize_snake(lattice_ordering, sign_convention::Symbol)
+    # If no explicit lattice ordering is supplied, infer default from sign convention:
+    # :spin_first defaults to :col_snake (ColSnake), :coordinate_first defaults to :row_snake (RowSnake).
+    if lattice_ordering === nothing
+        return sign_convention == :coordinate_first ? :row_snake : :col_snake
+    end
+    ordering_str = lowercase(string(lattice_ordering))
+    if contains(ordering_str, "row")
+        return :row_snake
+    elseif contains(ordering_str, "col")
+        return :col_snake
+    else
+        return sign_convention == :coordinate_first ? :row_snake : :col_snake
+    end
+end
 
-Sort the n-particle basis by total momentum on a lattice with dimensions `Lvec`.
+# Helper function to generate single-channel reduced Hilbert space basis (ints, occ)
+function _get_single_channel_basis(N_sites::Int, n::Int, snake_type::Symbol, dims::Tuple)
+    if snake_type == :col_snake
+        # Column-major site ordering (ColSnake): Gosper's hack directly produces ColSnake site combinations
+        return getReducedHilSpace(N_sites, n; returnOcc=true)
+    else # :row_snake
+        # Row-major site ordering (RowSnake): Gosper's hack produces RowSnake site combinations,
+        # which are converted to ColSnake bitmasks and 1-based site indices
+        ints_raw, occ_row = getReducedHilSpace(N_sites, n; returnOcc=true)
+        dim_H = length(ints_raw)
+        ints = Vector{DtMb}(undef, dim_H)
+        occ = Matrix{Int}(undef, dim_H, n)
+        for i in 1:dim_H
+            col_sites = Vector{Int}(undef, n)
+            site_mask = zero(DtMb)
+            for k in 1:n
+                row_site_0based = occ_row[i, k] - 1
+                col_site_0based = ravel_c(unravel_f(row_site_0based, dims), dims)
+                col_sites[k] = col_site_0based + 1
+                site_mask |= (DtMb(1) << col_site_0based)
+            end
+            Base.sort!(col_sites)
+            ints[i] = site_mask
+            occ[i, :] = col_sites
+        end
+        return ints, occ
+    end
+end
+
+# Helper function to compute sort order and unique momentum sector summaries
+function _format_momentum_sort(qtot::Vector{Int}, sort_by_momentum::Bool)
+    if sort_by_momentum
+        sort_order = sortperm(qtot)
+        qtot_sorted = qtot[sort_order]
+    else
+        sort_order = collect(1:length(qtot))
+        qtot_sorted = Base.sort(qtot)
+    end
+    qtot_unique, sector_counts = unique_in_sorted(qtot_sorted, true)
+    return sort_order, (sort_by_momentum ? qtot_sorted : qtot), qtot_unique, sector_counts
+end
+
 """
-function sectorTotMom(Lvec, n::Integer, pos_coords=nothing, pos_sort_flag::Bool=true;
-    coords=pos_coords, sort_flag::Bool=pos_sort_flag, sort::Bool=pos_sort_flag)
-    actual_sort = sort_flag && sort
-    N = prod(Lvec)
+    sectorTotMom(Lvec, n, permute_basis=true; coords=nothing, sort_by_momentum=true, sign_convention=:spin_first, lattice_ordering=nothing) → Dict{String, Any}
+
+Enumerates and calculates total momentum for the `n`-particle basis on an `Lvec` lattice.
+
+# Arguments
+- `Lvec`: Lattice dimensions, e.g. `[Lx, Ly]`.
+- `n::Integer`: Particle number.
+- `permute_basis::Bool` (default `true`): If `true`, the returned basis states (`ints` and `occ`) are physically permuted/reordered.
+  If `false`, `ints` and `occ` remain in raw site enumeration order, but `sortOrder` gives the momentum permutation.
+
+# Keyword Arguments
+- `coords`: Lattice coordinates matrix `(N × ndim)`. Inferred from `Lvec` if `nothing`.
+- `sort_by_momentum::Bool` (default `true`): 
+  - `true`: Sorts basis states by total momentum `qtot` (standard momentum sectoring).
+  - `false`: Preserves `create_hubbard` site combination ordering (ColSnake or RowSnake).
+- `sign_convention::Symbol` (default `:spin_first`): `:spin_first` or `:coordinate_first`.
+- `lattice_ordering` (default `nothing`): `:col_snake` (ColSnake) or `:row_snake` (RowSnake). Defaults to `:col_snake` for `:spin_first` and `:row_snake` for `:coordinate_first`.
+
+# Returns
+A `Dict{String, Any}` with keys:
+- `"ints"`: Vector of integer bitmasks representing occupied basis states.
+- `"occ"`: `(dim × n)` matrix of 1-based occupied site indices.
+- `"qtot"`: Total momentum index (`0:N-1`) for each basis state.
+- `"sortOrder"`: Permutation index array.
+- `"qtot_unique"`: Vector of unique total momentum indices in the basis.
+- `"counts"`: Number of basis states in each total momentum sector.
+"""
+function sectorTotMom(Lvec, n::Integer, permute_basis::Bool=true;
+    coords=nothing,
+    sort_by_momentum::Bool=true,
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering=nothing)
+
+    N_sites = prod(Lvec)
     dims = Tuple(Lvec)
     ndim = length(Lvec)
-    if coords === nothing
-        coords = getLatticeCoord(Lvec)
-    end
-    ints, occ = getReducedHilSpace(N, n; returnOcc=true)
+    coords = coords === nothing ? getLatticeCoord(Lvec) : coords
+    snake_type = _normalize_snake(lattice_ordering, sign_convention)
+
+    # Step 1: Enumerate single-channel Hilbert space basis
+    ints, occ = _get_single_channel_basis(N_sites, n, snake_type, dims)
     dim_H = length(ints)
 
-    qtotvecs = Matrix{Int}(undef, dim_H, ndim)
-    for i in 1:dim_H
-        for a in 1:ndim
-            qtotvecs[i, a] = mod(sum(coords[occ[i, k], a] for k in 1:n), Lvec[a])
-        end
+    # Step 2: Compute total momentum for each basis state
+    qtot_matrix = Matrix{Int}(undef, dim_H, ndim)
+    for i in 1:dim_H, a in 1:ndim
+        qtot_matrix[i, a] = mod(sum(coords[occ[i, k], a] for k in 1:n), Lvec[a])
     end
+    qtot = [ravel_c(Tuple(qtot_matrix[i, :]), dims) for i in 1:dim_H]
 
-    qtot = [ravel_c(Tuple(qtotvecs[i, :]), dims) for i in 1:dim_H]
-    sortOrder = sortperm(qtot)
-    qtot_sorted = qtot[sortOrder]
-    qtot_unique, counts = unique_in_sorted(qtot_sorted, true)
+    # Step 3: Compute momentum permutation and sector summary
+    sort_order, qtot_out, qtot_unique, sector_counts = _format_momentum_sort(qtot, sort_by_momentum)
 
-    if actual_sort
-        ints = ints[sortOrder]
-        occ = occ[sortOrder, :]
-        qtot = qtot_sorted
+    # Step 4: Permute basis arrays if requested
+    if permute_basis && sort_by_momentum
+        ints = ints[sort_order]
+        occ = occ[sort_order, :]
     end
 
     return Dict{String,Any}(
         "ints" => ints,
         "occ" => occ,
-        "qtot" => qtot,
-        "sortOrder" => sortOrder,
+        "qtot" => qtot_out,
+        "sortOrder" => sort_order,
         "qtot_unique" => qtot_unique,
-        "counts" => counts
+        "counts" => sector_counts
     )
 end
 
 """
-    fullSlaterMomBasis(Lvec, n_up, n_dn) → Dict{String, Any}
+    fullSlaterMomBasis(Lvec, n_up, n_dn; sort_by_momentum=true, sign_convention=:spin_first, lattice_ordering=nothing) → Dict{String, Any}
 
 Full two-channel Slater momentum basis for `n_up` spin-up and `n_dn`
-spin-down particles on a lattice with dimensions `Lvec`.
+spin-down particles on an `Lvec` lattice.
+
+# Options
+- `sort_by_momentum::Bool` (default `true`): If `true`, sorts two-spin basis states by total momentum.
+  If `false`, preserves 2-spin `create_hubbard` product basis ordering (up outer loop, down inner loop).
+- `sign_convention::Symbol` (default `:spin_first`): `:spin_first` or `:coordinate_first`.
+- `lattice_ordering` (default `nothing`): `:col_snake` (ColSnake) or `:row_snake` (RowSnake).
 """
-function fullSlaterMomBasis(Lvec, n_up::Integer, n_dn::Integer)
+function fullSlaterMomBasis(Lvec, n_up::Integer, n_dn::Integer;
+    sort_by_momentum::Bool=true,
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering=nothing)
+
     Lvec = collect(Int, Lvec)
-    N = prod(Lvec)
-    ndim = length(Lvec)
+    N_sites = prod(Lvec)
     dims = Tuple(Lvec)
     coords = getLatticeCoord(Lvec)
 
-    up = sectorTotMom(Lvec, n_up, coords, true)
-    dn = sectorTotMom(Lvec, n_dn, coords, true)
+    # Step 1: Generate single-channel bases for spin-up and spin-down
+    up_sector = sectorTotMom(Lvec, n_up, true; coords=coords, sort_by_momentum=sort_by_momentum, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+    dn_sector = sectorTotMom(Lvec, n_dn, true; coords=coords, sort_by_momentum=sort_by_momentum, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
 
-    qu = Vector{Int}()
-    for (q, cnt) in zip(up["qtot_unique"], up["counts"])
-        append!(qu, fill(q, cnt))
-    end
-    qd = Vector{Int}()
-    for (q, cnt) in zip(dn["qtot_unique"], dn["counts"])
-        append!(qd, fill(q, cnt))
-    end
+    # Step 2: Combine single-channel momenta and integer bitmasks
+    qtot_up = repeat(up_sector["qtot"], inner=length(dn_sector["qtot"]))
+    qtot_dn = repeat(dn_sector["qtot"], length(up_sector["qtot"]))
 
-    qtot_up, qtot_dn = cartesian_prod(qu, qd)
-    ints_up, ints_dn = cartesian_prod(up["ints"], dn["ints"])
+    ints_up, ints_dn = cartesian_prod(up_sector["ints"], dn_sector["ints"])
+    combined_ints = combineSpinInts(ints_up, ints_dn, N_sites)
 
-    ints = combineSpinInts(ints_up, ints_dn, N)
-
-    addmom = Matrix{Int}(undef, N, N)
-    for qu_idx in 0:N-1
-        for qd_idx in 0:N-1
-            cu = unravel_c(qu_idx, dims)
-            cd = unravel_c(qd_idx, dims)
-            ctot = mod.(cu .+ cd, Lvec)
-            addmom[qu_idx+1, qd_idx+1] = ravel_c(ctot, dims)
-        end
+    # Step 3: Precompute momentum addition matrix modulo Lvec
+    momentum_add_table = Matrix{Int}(undef, N_sites, N_sites)
+    for qu_idx in 0:N_sites-1, qd_idx in 0:N_sites-1
+        ctot = mod.(unravel_c(qu_idx, dims) .+ unravel_c(qd_idx, dims), Lvec)
+        momentum_add_table[qu_idx+1, qd_idx+1] = ravel_c(ctot, dims)
     end
 
-    qtot = [addmom[qtot_up[i]+1, qtot_dn[i]+1] for i in eachindex(qtot_up)]
+    # Compute total momentum for each combined two-spin basis state
+    qtot = [momentum_add_table[qtot_up[i]+1, qtot_dn[i]+1] for i in eachindex(qtot_up)]
 
-    order = sortperm(qtot)
-    qtot_unique, counts = unique_in_sorted(qtot[order], true)
+    # Step 4: Compute momentum permutation and sector summary
+    sort_order, qtot_out, qtot_unique, sector_counts = _format_momentum_sort(qtot, sort_by_momentum)
+
+    if sort_by_momentum
+        combined_ints = combined_ints[sort_order]
+        qtot_up = qtot_up[sort_order]
+        qtot_dn = qtot_dn[sort_order]
+    end
 
     return Dict{String,Any}(
-        "ints" => ints[order],
-        "qtot_up" => qtot_up[order],
-        "qtot_dn" => qtot_dn[order],
-        "qtot" => qtot[order],
+        "ints" => combined_ints,
+        "qtot_up" => qtot_up,
+        "qtot_dn" => qtot_dn,
+        "qtot" => qtot_out,
         "qtot_unique" => qtot_unique,
-        "counts" => counts,
-        "sortOrder" => order
+        "counts" => sector_counts,
+        "sortOrder" => sort_order,
+        "ints_up" => up_sector["ints"],
+        "ints_dn" => dn_sector["ints"]
     )
 end
 
@@ -1776,7 +1869,10 @@ function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
     q_target::Union{Integer,Nothing}=nothing,
     basis_sector::Union{AbstractVector{<:Integer},Nothing}=nothing,
     indexer=nothing,
-    returnBasis::Bool=true)
+    returnBasis::Bool=true,
+    sort_by_momentum::Bool=true,
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering=nothing)
     Lvec = collect(Int, Lvec)
     N = prod(Lvec)
     n_up, n_dn = nvec
@@ -1790,17 +1886,30 @@ function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
         if q_target === nothing && !isnothing(indexer.k) && !isnothing(indexer.lattice_dims)
             q_target = ravel_c(Tuple(k - 1 for k in indexer.k), Tuple(Lvec))
         end
+        if lattice_ordering === nothing
+            if hasproperty(indexer, :order)
+                lattice_ordering = indexer.order
+            elseif !isnothing(indexer.a) && length(indexer.a) >= 2 && hasproperty(indexer.a[1], :coordinates)
+                if indexer.a[2].coordinates[1] > indexer.a[1].coordinates[1]
+                    lattice_ordering = :row_snake
+                else
+                    lattice_ordering = :col_snake
+                end
+            else
+                lattice_ordering = sign_convention == :spin_first ? :col_snake : :row_snake
+            end
+        end
+        if lattice_ordering !== nothing && contains(lowercase(string(lattice_ordering)), "row") && sign_convention == :spin_first
+            sign_convention = :coordinate_first
+        end
     end
 
     # 1. Get Slater momentum basis & total momentum info
-    basis_dict = fullSlaterMomBasis(Lvec, n_up, n_dn)
+    basis_dict = fullSlaterMomBasis(Lvec, n_up, n_dn; sort_by_momentum=sort_by_momentum, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
 
-    # 2. Single-spin bases from sectorTotMom
-    coords = getLatticeCoord(Lvec)
-    up = sectorTotMom(Lvec, n_up, coords, true)
-    dn = sectorTotMom(Lvec, n_dn, coords, true)
-    basis_up = up["ints"]
-    basis_dn = dn["ints"]
+    # 2. Single-spin bases retrieved from basis_dict
+    basis_up = basis_dict["ints_up"]
+    basis_dn = basis_dict["ints_dn"]
     d_up = length(basis_up)
     d_dn = length(basis_dn)
 
@@ -1905,6 +2014,60 @@ function HubbardMomentumBasis(t::Real, u::Real, Lvec, nvec;
 
     H_int = sparse(rows, cols, vals, d_sub, d_sub)
     H_int *= (u / N)
+
+    if sign_convention == :coordinate_first
+        # not working right now
+        snake_type = _normalize_snake(lattice_ordering, sign_convention)
+        state_signs = Vector{Float64}(undef, d_sub)
+
+        if snake_type == :col_snake
+            for i in 1:d_sub
+                s = subspace_ints[i]
+                s_up = UInt(s & ((one(s) << N) - one(s)))
+                s_dn = UInt(s >> N)
+                swaps = 0
+                for d in 0:N-1
+                    if ((s_dn >> d) & 1) == 1
+                        swaps += count_ones(s_up >> (d + 1))
+                    end
+                end
+                state_signs[i] = iseven(swaps) ? 1.0 : -1.0
+            end
+        else # :row_snake
+            col_sites_by_row_order = [ravel_c(unravel_f(r, dims), dims) for r in 0:N-1]
+            for i in 1:d_sub
+                s = subspace_ints[i]
+                s_up = UInt(s & ((one(s) << N) - one(s)))
+                s_dn = UInt(s >> N)
+                swaps = 0
+                for r_dn_idx in 0:N-1
+                    c_dn_idx = col_sites_by_row_order[r_dn_idx+1]
+                    if ((s_dn >> c_dn_idx) & 1) == 1
+                        for r_up_idx in r_dn_idx+1:N-1
+                            c_up_idx = col_sites_by_row_order[r_up_idx+1]
+                            if ((s_up >> c_up_idx) & 1) == 1
+                                swaps += 1
+                            end
+                        end
+                    end
+                end
+                state_signs[i] = iseven(swaps) ? 1.0 : -1.0
+            end
+        end
+
+        # Transform both H_hop and H_int by the sign convention transformation diagonal matrix S
+        rows_h, cols_h, vals_h = findnz(H_int)
+        for k in 1:length(vals_h)
+            vals_h[k] *= state_signs[rows_h[k]] * state_signs[cols_h[k]]
+        end
+        H_int = sparse(rows_h, cols_h, vals_h, d_sub, d_sub)
+
+        rows_hop, cols_hop, vals_hop = findnz(H_hop)
+        for k in 1:length(vals_hop)
+            vals_hop[k] *= state_signs[rows_hop[k]] * state_signs[cols_hop[k]]
+        end
+        H_hop = sparse(rows_hop, cols_hop, vals_hop, d_sub, d_sub)
+    end
 
     H_mom_sorted = H_hop + H_int
 

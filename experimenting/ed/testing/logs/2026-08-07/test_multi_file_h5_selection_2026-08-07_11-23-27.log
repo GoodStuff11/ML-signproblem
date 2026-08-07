@@ -1,0 +1,16 @@
+================================================================================
+Timestamp: 2026-08-07T11:23:27.355
+Command run: julia testing/test_multi_file_h5_selection.jl 
+================================================================================
+=== Running Multi-File HDF5 Energy Selection Test ===
+Test 2: Creating mock multi-file dataset in /tmp/jl_DF49n9
+Testing load_h5_ED_data on multi-file directory...
+Finding best energy sector
+U=1.0 k=["HubbardED_sector_2.h5", "HubbardED_sector_1.h5"] [-5.0, 10.0]
+U=2.0 k=["HubbardED_sector_2.h5", "HubbardED_sector_1.h5"] [-5.0, 10.0]
+U=4.0 k=["HubbardED_sector_2.h5", "HubbardED_sector_1.h5"] [-5.0, 10.0]
+Selected ground state symmetry sector: 2
+Loading hdf5 data: /tmp/jl_DF49n9/HubbardED_sector_2.h5
+[[-5.0]]
+Multi-file selection selected lower energy file successfully!
+=== All Tests Passed ===

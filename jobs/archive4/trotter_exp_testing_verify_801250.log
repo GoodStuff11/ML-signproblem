@@ -1,0 +1,471 @@
+=== Trotter experiment testing ===
+  folder         = data/N=(3, 3)_3x2
+  lvec           = [3, 2]
+  (n_up, n_dn)   = (3, 3)
+  trotter_orders = [1, 2, 4, 8]
+
+Loaded U_values: 61 entries, range 1.0e-5 to 100.0
+q_target = 0
+
+Building sector Hamiltonians...
+  3.558606 seconds (3.85 M allocations: 187.430 MiB, 8.44% gc time, 99.83% compilation time)
+  0.001862 seconds (11.77 k allocations: 738.359 KiB)
+Hilbert space sector dim = 68
+
+Enumerating Trotter gates...
+  0.693539 seconds (642.89 k allocations: 30.554 MiB, 99.78% compilation time)
+  1.155323 seconds (1.74 M allocations: 84.500 MiB, 99.84% compilation time)
+num_gates = 180
+
+Loaded exact-exp coefficients for 60 / 61 U values
+  First non-nothing: u_i=2, length=180
+  Operator keys loaded: 180. Reordering to 180 gate basis...
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 444.477 MB | MaxRSS: 1.389 GB
+  0.490242 seconds (613.45 k allocations: 30.114 MiB, 97.74% compilation time)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 474.775 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.701717 seconds (819.90 k allocations: 53.979 MiB, 96.74% compilation time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 528.938 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 102.415 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 249.171 MB | MaxRSS: 1.389 GB
+  0.007729 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 253.957 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014039 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 275.658 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 276.548 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 144.234 MB | MaxRSS: 1.389 GB
+  0.007418 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 149.02 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.033885 seconds (173.89 k allocations: 21.517 MiB, 53.48% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 77.823 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 78.713 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 88.223 MB | MaxRSS: 1.389 GB
+  0.010019 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 93.009 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014428 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 114.71 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 115.6 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 117.898 MB | MaxRSS: 1.389 GB
+  0.010150 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 122.683 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.019775 seconds (173.89 k allocations: 21.517 MiB, 26.00% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 88.008 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 88.898 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 101.622 MB | MaxRSS: 1.389 GB
+  0.009613 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 106.408 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.020594 seconds (173.89 k allocations: 21.517 MiB, 24.87% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 92.164 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 93.054 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 96.031 MB | MaxRSS: 1.389 GB
+  0.009950 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 100.816 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.017516 seconds (173.89 k allocations: 21.517 MiB, 21.98% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 93.032 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 93.922 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 121.618 MB | MaxRSS: 1.389 GB
+  0.009829 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 126.403 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.020535 seconds (173.89 k allocations: 21.517 MiB, 25.34% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 112.484 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 113.374 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 113.831 MB | MaxRSS: 1.389 GB
+  0.008991 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 118.617 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.132453 seconds (173.89 k allocations: 21.517 MiB, 88.68% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 109.105 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 109.995 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 126.577 MB | MaxRSS: 1.389 GB
+  0.010812 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 131.363 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013433 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 153.063 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 153.953 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 226.515 MB | MaxRSS: 1.389 GB
+  0.011589 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 231.301 MB | MaxRSS: 1.389 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.023454 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 253.002 MB | MaxRSS: 1.389 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 253.891 MB | MaxRSS: 1.389 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 326.453 MB | MaxRSS: 1.399 GB
+  0.012801 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 331.239 MB | MaxRSS: 1.403 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.021916 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 352.94 MB | MaxRSS: 1.422 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 353.829 MB | MaxRSS: 1.422 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 138.55 MB | MaxRSS: 1.432 GB
+  0.007354 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 143.336 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011753 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 165.036 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 165.926 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 121.821 MB | MaxRSS: 1.432 GB
+  0.007375 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 126.607 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011785 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 148.307 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 149.197 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 125.232 MB | MaxRSS: 1.432 GB
+  0.010353 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 130.018 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013432 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 151.719 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 152.609 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 95.163 MB | MaxRSS: 1.432 GB
+  0.009236 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 99.949 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014419 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 121.649 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 122.539 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 104.824 MB | MaxRSS: 1.432 GB
+  0.010361 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 109.609 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.020557 seconds (173.89 k allocations: 21.517 MiB, 25.66% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 87.622 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 88.512 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 115.723 MB | MaxRSS: 1.432 GB
+  0.010283 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 120.509 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.017216 seconds (173.89 k allocations: 21.517 MiB, 30.42% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 107.061 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 107.951 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 109.151 MB | MaxRSS: 1.432 GB
+  0.011164 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 113.936 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.018466 seconds (173.89 k allocations: 21.517 MiB, 21.84% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 104.852 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 105.742 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 131.754 MB | MaxRSS: 1.432 GB
+  0.010388 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 136.54 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.017176 seconds (173.89 k allocations: 21.517 MiB, 30.34% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 122.393 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 123.283 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 122.295 MB | MaxRSS: 1.432 GB
+  0.007404 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 127.08 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.107899 seconds (173.89 k allocations: 21.517 MiB, 86.40% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 117.081 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 117.97 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 125.559 MB | MaxRSS: 1.432 GB
+  0.009467 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 130.345 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.015424 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 152.046 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 152.936 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 225.497 MB | MaxRSS: 1.432 GB
+  0.012357 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 230.283 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.024432 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 251.984 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 252.874 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 325.436 MB | MaxRSS: 1.432 GB
+  0.012166 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 330.221 MB | MaxRSS: 1.432 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.023540 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 351.922 MB | MaxRSS: 1.432 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 352.812 MB | MaxRSS: 1.432 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 90.778 MB | MaxRSS: 1.488 GB
+  0.009572 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 95.563 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013440 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 117.264 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 118.154 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 190.716 MB | MaxRSS: 1.488 GB
+  0.010716 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 195.502 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.017542 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 217.202 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 218.092 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 104.607 MB | MaxRSS: 1.488 GB
+  0.009848 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 109.393 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014465 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 131.093 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 131.983 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 204.545 MB | MaxRSS: 1.488 GB
+  0.010333 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 209.331 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.031198 seconds (173.89 k allocations: 21.517 MiB, 39.38% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 80.513 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 81.403 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 153.965 MB | MaxRSS: 1.488 GB
+  0.010351 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 158.75 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013453 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 180.451 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 181.341 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 142.734 MB | MaxRSS: 1.488 GB
+  0.010339 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 147.52 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.022145 seconds (173.89 k allocations: 21.517 MiB, 28.34% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 77.816 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 78.706 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 92.074 MB | MaxRSS: 1.488 GB
+  0.010655 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 96.859 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014399 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 118.56 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 119.45 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 122.3 MB | MaxRSS: 1.488 GB
+  0.011058 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 127.086 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.019904 seconds (173.89 k allocations: 21.517 MiB, 22.21% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 92.583 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 93.473 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 100.934 MB | MaxRSS: 1.488 GB
+  0.011275 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 105.72 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.021544 seconds (173.89 k allocations: 21.517 MiB, 25.41% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 85.762 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 86.652 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 111.279 MB | MaxRSS: 1.488 GB
+  0.010982 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 116.065 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.017558 seconds (173.89 k allocations: 21.517 MiB, 30.91% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 101.299 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 102.188 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 102.264 MB | MaxRSS: 1.488 GB
+  0.007390 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 107.05 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.019381 seconds (173.89 k allocations: 21.517 MiB, 21.58% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 97.315 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 98.205 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 120.89 MB | MaxRSS: 1.488 GB
+  0.011219 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 125.676 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.581044 seconds (173.89 k allocations: 21.517 MiB, 97.29% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 81.691 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 82.58 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 155.142 MB | MaxRSS: 1.488 GB
+  0.008330 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 159.928 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011794 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 181.629 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 182.519 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 255.08 MB | MaxRSS: 1.488 GB
+  0.009189 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 259.866 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.021371 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 281.567 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 282.457 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 355.018 MB | MaxRSS: 1.488 GB
+  0.009256 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 359.804 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.024579 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 381.505 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 382.395 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 119.124 MB | MaxRSS: 1.488 GB
+  0.011074 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 123.909 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014443 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 145.61 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 146.5 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 219.062 MB | MaxRSS: 1.488 GB
+  0.010232 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 223.847 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.024421 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 245.548 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 246.438 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 319.0 MB | MaxRSS: 1.488 GB
+  0.012197 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 323.785 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.024422 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 345.486 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 346.376 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 140.423 MB | MaxRSS: 1.488 GB
+  0.008764 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 145.209 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013527 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 166.91 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 167.8 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 240.361 MB | MaxRSS: 1.488 GB
+  0.012585 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 245.147 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.040122 seconds (173.89 k allocations: 21.517 MiB, 38.83% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 76.806 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 77.696 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 150.257 MB | MaxRSS: 1.488 GB
+  0.010563 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 155.043 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011690 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 176.744 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 177.634 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 109.14 MB | MaxRSS: 1.488 GB
+  0.010874 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 113.926 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014443 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 135.627 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 136.517 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 92.315 MB | MaxRSS: 1.488 GB
+  0.010841 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 97.101 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.013448 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 118.802 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 119.692 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 93.832 MB | MaxRSS: 1.488 GB
+  0.010758 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 98.618 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014546 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 120.319 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 121.208 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 109.749 MB | MaxRSS: 1.488 GB
+  0.010381 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 114.535 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.012431 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 136.236 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 137.126 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 96.969 MB | MaxRSS: 1.488 GB
+  0.010529 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 101.755 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.015397 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 123.456 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 124.346 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 107.424 MB | MaxRSS: 1.488 GB
+  0.010001 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 112.21 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011731 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 133.911 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 85.548 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 127.739 MB | MaxRSS: 1.488 GB
+  0.007626 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 89.462 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014181 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 111.163 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 112.053 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 125.087 MB | MaxRSS: 1.488 GB
+  0.007369 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 129.873 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.110192 seconds (173.89 k allocations: 21.517 MiB, 85.94% gc time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 106.27 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 107.16 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 130.781 MB | MaxRSS: 1.488 GB
+  0.010999 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 135.567 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011629 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 157.268 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 158.158 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 230.72 MB | MaxRSS: 1.488 GB
+  0.012539 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 235.505 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.022534 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 257.206 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 258.096 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 330.658 MB | MaxRSS: 1.488 GB
+  0.009232 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 335.443 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.021390 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 357.144 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 358.034 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 98.628 MB | MaxRSS: 1.488 GB
+  0.007357 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 103.414 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.014502 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 125.115 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 126.005 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 198.567 MB | MaxRSS: 1.488 GB
+  0.008881 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 203.352 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.019443 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 225.053 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 225.943 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 298.505 MB | MaxRSS: 1.488 GB
+  0.009260 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 303.291 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.021415 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 324.991 MB | MaxRSS: 1.488 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 325.881 MB | MaxRSS: 1.488 GB
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 398.443 MB | MaxRSS: 1.488 GB
+  0.009246 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 403.228 MB | MaxRSS: 1.488 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.024874 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 424.929 MB | MaxRSS: 1.502 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 425.819 MB | MaxRSS: 1.502 GB
+
+Computing sector ground states (61 U values)...
+  Done
+
+Computing exact-exp energies...
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 237.525 MB | MaxRSS: 1.532 GB
+  0.010326 seconds (95.14 k allocations: 4.657 MiB)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 242.311 MB | MaxRSS: 1.532 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.011915 seconds (173.89 k allocations: 21.517 MiB)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 264.012 MB | MaxRSS: 1.532 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 264.902 MB | MaxRSS: 1.532 GB
+  Done (61 non-NaN values)
+
+Computing trotterized energies for orders P = [1, 2, 4, 8]...
+  P=1: 60 non-NaN values
+  P=2: 60 non-NaN values
+  P=4: 60 non-NaN values
+  P=8: 60 non-NaN values
+
+Loading trotter-optimized (energy-loss) results...
+  Loaded 59 values
+
+Building and saving plot...
+trotter order 1
+trotter order 2
+trotter order 3
+trotter order 4
+  Saved → data/N=(3, 3)_3x2/trotter_order_comparison.png

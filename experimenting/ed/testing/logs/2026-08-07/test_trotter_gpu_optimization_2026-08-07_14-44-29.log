@@ -1,0 +1,32 @@
+================================================================================
+Timestamp: 2026-08-07T14:44:29.998
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+Threads available: 2
+
+--- Setting up test system (2x2 lattice, N_elec=(1,1)) ---
+ERROR: UndefVarError: `SectorIndexer` not defined in `Main.Trotter.TamFermion`
+Suggestion: check for spelling errors or missing imports.
+Stacktrace:
+ [1] getproperty
+   @ ./Base_compiler.jl:47 [inlined]
+ [2] (::var"#main##0#main##1"{Vector{String}})()
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:99
+ [3] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+   @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [4] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+   @ Base ./io.jl:410
+ [5] open
+   @ ./io.jl:407 [inlined]
+ [6] with_logging
+   @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [7] main(ARGS::Vector{String})
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:67
+ [8] _start()
+   @ Base ./client.jl:556

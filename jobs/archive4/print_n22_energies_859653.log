@@ -1,0 +1,68 @@
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 320.236 MB | MaxRSS: 1.144 GB
+  0.461286 seconds (613.46 k allocations: 30.048 MiB, 97.22% compilation time)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 354.474 MB | MaxRSS: 1.173 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  0.773750 seconds (863.56 k allocations: 48.358 MiB, 98.18% compilation time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 402.836 MB | MaxRSS: 1.191 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 443.139 MB | MaxRSS: 1.2 GB
+U_val 	 GS_energy 	 ExactExp_energy 	 TrotterOpt_energy
+0.0 	 -9.999995 	 -9.999995 	 NaN
+0.001 	 -9.9995 	 -9.824167 	 -9.754945
+0.002 	 -9.998788 	 -9.811347 	 -9.414437
+0.011 	 -9.994699 	 -9.714225 	 -8.910707
+0.203 	 -9.899542 	 -9.52861 	 -8.118744
+2.463 	 -8.925969 	 -8.119956 	 -7.555928
+5.223 	 -8.06136 	 -6.108899 	 -7.154116
+8.274 	 -7.417896 	 -3.587502 	 -6.861221
+74.438 	 -5.594172 	 48.379949 	 -6.641996
+=== Trotter experiment testing ===
+  folder         = data/N=(2, 2)_3x2
+  lvec           = [3, 3]
+  (n_up, n_dn)   = (4, 4)
+  trotter_orders = [1, 2, 4, 8]
+
+Loaded U_values: 61 entries, range 1.0e-5 to 100.0
+ERROR: ArgumentError: No file exists at given path: data/N=(2, 2)_3x2/trotter_N=9_shared.jld2
+Stacktrace:
+  [1] checkpath_load
+    @ ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:167 [inlined]
+  [2] load(::String; options::@Kwargs{})
+    @ FileIO ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:110
+  [3] load
+    @ ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:109 [inlined]
+  [4] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/trotter_exp_testing.jl:756
+  [5] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+  [6] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+  [7] open
+    @ ./io.jl:407 [inlined]
+  [8] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+  [9] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/trotter_exp_testing.jl:710
+ [10] _start()
+    @ Base ./client.jl:556
+ERROR: ArgumentError: No file exists at given path: data/N=(2, 2)_3x2/trotter_N=9_shared.jld2
+Stacktrace:
+  [1] checkpath_load
+    @ ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:167 [inlined]
+  [2] load(::String; options::@Kwargs{})
+    @ FileIO ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:110
+  [3] load
+    @ ~/.julia/packages/FileIO/9lYsu/src/loadsave.jl:109 [inlined]
+  [4] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/trotter_exp_testing.jl:756
+  [5] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+  [6] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+  [7] open
+    @ ./io.jl:407 [inlined]
+  [8] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+  [9] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/trotter_exp_testing.jl:710
+ [10] _start()
+    @ Base ./client.jl:556

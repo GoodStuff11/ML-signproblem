@@ -1,0 +1,17 @@
+================================================================================
+Timestamp: 2026-08-07T12:58:43.892
+Command run: julia testing/test_h5_sign_convention_overlap.jl 
+================================================================================
+=== Running HDF5 Sign Convention Overlap Test ===
+
+Testing sign_convention = :spin_first
+  j=1 (U=0.25): create_Hubbard overlap = 1.0 | GS energy = -10.891066204174916
+  j=2 (U=0.5): create_Hubbard overlap = 0.9999999999999993 | GS energy = -10.786446540662995
+  j=3 (U=0.75): create_Hubbard overlap = 0.9999999999999993 | GS energy = -10.686069728879472
+
+Testing sign_convention = :coordinate_first
+  j=1 (U=0.25): create_Hubbard overlap = 1.0 | GS energy = -10.891066204174916
+  j=2 (U=0.5): create_Hubbard overlap = 0.9999999999999997 | GS energy = -10.786446540662993
+  j=3 (U=0.75): create_Hubbard overlap = 0.9999999999999999 | GS energy = -10.686069728879474
+
+=== All Tests Passed ===

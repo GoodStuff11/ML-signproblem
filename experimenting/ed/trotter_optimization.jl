@@ -5,36 +5,138 @@ using LinearAlgebra
 using Zygote
 using Optimization
 using OptimizationOptimJL
+using Optim
 using OptimizationOptimisers
 import ..TamFermion
 using ..Trotter: @safe_threads
 using JLD2
 using Statistics
 
-export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state
+export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state, extract_convergence_info
+
+"""
+    extract_convergence_info(sol) -> Dict{String, Any}
+
+Extract detailed convergence metrics and stopping criteria from an `OptimizationResult` (`sol`).
+Returns a dictionary containing:
+- `"retcode"`: String representation of the SciML return code.
+- `"primary_reason"`: Human-readable explanation of why optimization stopped.
+- `"g_converged"`: Bool, whether gradient norm tolerance was met (|g| <= g_tol).
+- `"f_converged"`: Bool, whether function value change tolerance was met (|Δf| <= f_tol).
+- `"x_converged"`: Bool, whether parameter step tolerance met (|Δx| <= x_tol).
+- `"iteration_limit_reached"`: Bool, whether maxiters limit was reached.
+- `"f_increased"`: Bool, whether line search failed or objective increased.
+- `"g_residual"`: Float64, final gradient norm (or NaN if unavailable).
+- `"iterations"`: Int, number of iterations performed.
+"""
+function extract_convergence_info(sol)
+    retcode_str = string(sol.retcode)
+    reasons = String[]
+
+    g_conv = false
+    f_conv = false
+    x_conv = false
+    iter_limit = false
+    f_inc = false
+    g_res = NaN
+    iters = 0
+
+    if hasproperty(sol, :original) && sol.original isa Optim.MultivariateOptimizationResults
+        orig = sol.original
+        g_conv = Optim.g_converged(orig)
+        f_conv = Optim.f_converged(orig)
+        x_conv = Optim.x_converged(orig)
+        iter_limit = Optim.iteration_limit_reached(orig)
+        f_inc = Optim.f_increased(orig)
+        g_res = Optim.g_residual(orig)
+        iters = Optim.iterations(orig)
+
+        if g_conv
+            push!(reasons, "Gradient tolerance met (|g| <= g_tol)")
+        end
+        if f_conv
+            push!(reasons, "Function tolerance met (|Δf| <= f_tol)")
+        end
+        if x_conv
+            push!(reasons, "Step size tolerance met (|Δx| <= x_tol)")
+        end
+        if iter_limit
+            push!(reasons, "Maximum iterations reached (maxiters)")
+        end
+        if f_inc
+            push!(reasons, "Objective increased / line search failure")
+        end
+    end
+
+    if isempty(reasons)
+        push!(reasons, "ReturnCode: $retcode_str")
+    end
+
+    primary_reason = join(reasons, "; ")
+
+    return Dict{String, Any}(
+        "retcode" => retcode_str,
+        "primary_reason" => primary_reason,
+        "g_converged" => g_conv,
+        "f_converged" => f_conv,
+        "x_converged" => x_conv,
+        "iteration_limit_reached" => iter_limit,
+        "f_increased" => f_inc,
+        "g_residual" => g_res,
+        "iterations" => iters
+    )
+end
 
 # ═══════════════════════════════════════════════════════════════════════
-# SHARED HELPERS FOR FORWARD AND BACKWARD SWEEPS
+# SHARED HELPERS FOR FORWARD AND BACKWARD SWEEPS & DEVICE CONVERSION
 # ═══════════════════════════════════════════════════════════════════════
+
+"""
+    to_device_vector(v, use_gpu::Bool)
+
+Convert vector `v` to a GPU `CuVector` if `use_gpu` is true and CUDA is loaded/functional,
+otherwise return `v`.
+"""
+function to_device_vector(v::AbstractVector, use_gpu::Bool)
+    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
+        return CUDA.CuArray(v)
+    end
+    return v
+end
+
+"""
+    to_device_ops(ops, use_gpu::Bool)
+
+Convert a collection of operators (e.g. `LinearMap`s) to GPU sparse matrices `CuSparseMatrixCSC`
+if `use_gpu` is true and CUDA is loaded/functional, otherwise return `ops` unchanged.
+"""
+function to_device_ops(ops::AbstractVector, use_gpu::Bool)
+    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
+        return [CUDA.CUSPARSE.CuSparseMatrixCSC(sparse(op)) for op in ops]
+    end
+    return ops
+end
 
 """
     apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials) -> phis
 
 Evolves the state `ref` forward through all parameters `A` and returns a list
 of intermediate state checkpoints `phis`, where `phis[1]` is `ref` and `phis[end]`
-is the fully evolved state.
+is the fully evolved state. Supports GPU execution via `use_gpu=true`.
 """
-function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false)
+function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates
-    phis = Vector{typeof(ref)}(undef, M + 1)
-    phis[1] = ref
+    ref_dev = to_device_vector(ref, use_gpu)
+    phis = Vector{typeof(ref_dev)}(undef, M + 1)
+    phis[1] = ref_dev
     curr = 1
     for l in 1:P
         coefs = A[((l-1)*num_gates+1):(l*num_gates)]
         ops = TamFermion.fgateToExpSector(gates, coefs, N, basis; antihermitian=antihermitian)
-        for op in ops
+        ops_dev = to_device_ops(ops, use_gpu)
+        for op in ops_dev
             phis[curr+1] = op * phis[curr]
             curr += 1
         end
@@ -47,28 +149,33 @@ end
 
 Propagates the `adjoint_state` backward starting from `init_adjoint_state`,
 computing the gradient of the parameters at each step using the forward state checkpoints `phis`.
+Supports GPU execution via `use_gpu=true`.
 """
-function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::Vector, init_adjoint_state::AbstractVector, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false)
+function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::Vector, init_adjoint_state::AbstractVector, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates
 
     grad_A = Vector{Float64}(undef, M)
     adjoint_state = copy(init_adjoint_state)
+    tau_terms_dev = to_device_ops(tau_terms, use_gpu)
 
     curr = M
     for l in P:-1:1
         coefs = A[((l-1)*num_gates+1):(l*num_gates)]
         ops_inv = TamFermion.fgateToExpSector(gates, -coefs, N, basis; antihermitian=antihermitian)
+        ops_inv_dev = to_device_ops(ops_inv, use_gpu)
 
         for param_idx in num_gates:-1:1
-            op_inv = ops_inv[param_idx]
+            op_inv = ops_inv_dev[param_idx]
+            tau_term = tau_terms_dev[param_idx]
 
             # Compute gradient contribution for parameter at index curr
+            dot_val = dot(adjoint_state, tau_term * phis[curr+1])
             if antihermitian
-                grad_A[curr] = -real(dot(adjoint_state, tau_terms[param_idx] * phis[curr+1]))
+                grad_A[curr] = -real(dot_val)
             else
-                grad_A[curr] = imag(dot(adjoint_state, tau_terms[param_idx] * phis[curr+1]))
+                grad_A[curr] = imag(dot_val)
             end
 
             # Propagate adjoint state backward
@@ -76,11 +183,16 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
             curr -= 1
         end
     end
+
+    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
+        CUDA.synchronize()
+    end
+
     return grad_A
 end
 
-function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false)
-    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
+function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
+    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
     return phis[end]
 end
 
@@ -97,21 +209,23 @@ target :
 basis :
 N : number of sites
 """
-function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false)
-    ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
-    return 1 - abs2(dot(target, ref_evolved))
+function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false)
+    ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
+    target_dev = to_device_vector(target, use_gpu)
+    return 1 - abs2(dot(target_dev, ref_evolved))
 end
 
-function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false)
-    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
+function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false)
+    target_dev = to_device_vector(target, use_gpu)
+    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
     evolved_ref = phis[end]
-    overlap = dot(target, evolved_ref)
+    overlap = dot(target_dev, evolved_ref)
     loss = 1 - abs2(overlap)
     println("loss: $loss")
 
     function adjoint_loss_pullback(y)
-        init_adjoint_state = (2 * overlap * conj(y)) * target
-        grad_A = backward_adjoint_propagation(A, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials; antihermitian=antihermitian)
+        init_adjoint_state = (2 * overlap * conj(y)) * target_dev
+        grad_A = backward_adjoint_propagation(A, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
         return NoTangent(), grad_A, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
     end
 
@@ -158,7 +272,8 @@ function find_multi_start_initialization(f, optf, M::Int;
     multi_start_iters::Int=30,
     maxiters::Int=100,
     optimizer=:LBFGS,
-    perturb_optimization::Float64=0.0)
+    perturb_optimization::Float64=0.0,
+    use_gpu::Bool=false)
 
     println("Sampling $initialization_samples initial configurations for multi-start...")
     samples_raw = Vector{Any}(undef, initialization_samples)
@@ -265,7 +380,7 @@ end
     optimize_unitary(gates, tau_terms, ref, target, basis, N; kwargs...)
 
 Optimize the parameter vector A of length `num_exponentials * length(gates)` to minimize
-either overlap or energy loss. Supports multi-start initialization.
+either overlap or energy loss. Supports multi-start initialization and GPU execution (`use_gpu=true`).
 Returns `(A_opt, final_loss, metrics)`.
 """
 function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{AbstractVector,AbstractMatrix}, basis, N::Int;
@@ -281,11 +396,12 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     multi_start_iters::Int=30,
     initial_coefficients::Union{AbstractVector,Nothing}=nothing,
     antihermitian::Bool=false,
+    use_gpu::Bool=false,
     metric_functions::Dict{String,Function}=Dict{String,Function}())
 
     f = (A, p=nothing) -> begin
         if loss_type == :overlap
-            return adjoint_loss(A, gates, tau_terms, ref, target, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian)
+            return adjoint_loss(A, gates, tau_terms, ref, target, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu)
         elseif loss_type == :energy
             return energy_loss(A, gates, tau_terms, target, ref, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian)
         else
@@ -314,6 +430,8 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     metrics["optimization_losses"] = Vector{Float64}[]
     metrics["multistart_losses"] = Vector{Vector{Float64}}[]
     metrics["best_start_idx"] = Int[]
+    metrics["convergence_info"] = Vector{Dict{String, Any}}[]
+    metrics["stopping_reasons"] = Vector{String}[]
     if loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H_mat) ? real(dot(ref, H_mat * ref)) : NaN]
     elseif loss_type == :energy
@@ -344,7 +462,8 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
             multi_start_iters=multi_start_iters,
             maxiters=maxiters,
             optimizer=optimizer,
-            perturb_optimization=perturb_optimization)
+            perturb_optimization=perturb_optimization,
+            use_gpu=use_gpu)
     else
         A_init = (2 * rand(M) .- 1) * 0.01
     end
@@ -353,6 +472,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     curr_A = copy(A_init)
     curr_loss = initial_loss
     final_history = Float64[]
+    stage_convergence_info = Dict{String, Any}[]
 
     cb = (state, loss_val) -> begin
         push!(final_history, loss_val)
@@ -366,14 +486,22 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         end
         opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
         prob = Optimization.OptimizationProblem(optf, curr_A)
-        println("Running main optimization step $idx with $opt (maxiters=$maxiters)...")
+        println("Running main optimization step $idx with $opt (maxiters=$maxiters, use_gpu=$use_gpu)...")
         sol = Optimization.solve(prob, opt_algo, maxiters=maxiters, callback=cb)
         curr_A = sol.u
         curr_loss = sol.objective
+
+        conv_info = extract_convergence_info(sol)
+        conv_info["optimizer"] = string(opt)
+        conv_info["stage"] = idx
+        push!(stage_convergence_info, conv_info)
+        println("    Step $idx ($opt) stopped by: $(conv_info["primary_reason"]) (Iterations: $(conv_info["iterations"]), Final |g|: $(conv_info["g_residual"]))")
     end
 
     push!(metrics["loss"], curr_loss)
     push!(metrics["optimization_losses"], final_history)
+    push!(metrics["convergence_info"], stage_convergence_info)
+    push!(metrics["stopping_reasons"], [info["primary_reason"] for info in stage_convergence_info])
     if multistart_run
         push!(metrics["multistart_losses"], local_multistart_losses)
         push!(metrics["best_start_idx"], local_best_start_idx)
@@ -382,7 +510,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         push!(metrics["best_start_idx"], 0)
     end
 
-    ref_evolved = apply_unitary(curr_A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian)
+    ref_evolved = apply_unitary(curr_A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
     if loss_type == :overlap
         final_energy = !isnothing(H_mat) ? real(dot(ref_evolved, H_mat * ref_evolved)) : NaN
         push!(metrics["energy"], final_energy)
@@ -440,6 +568,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     multi_start_samples::Int=5,
     multi_start_iters::Int=30,
     antihermitian::Bool=get(instructions, "antihermitian", false),
+    use_gpu::Bool=false,
     metric_functions::Dict{String,Function}=Dict{String,Function}()
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
@@ -472,6 +601,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     num_exponentials = get(instructions, "num_exponentials", 1)
 
+    has_prepended_ref = !isnothing(u_vals) && (degen_rm_U isa AbstractMatrix) && (size(degen_rm_U, 1) == length(u_vals) + 1)
+    target_state_idx(idx) = has_prepended_ref ? idx + 1 : idx
+
     for u_idx in u_indices
         u_val_str = isnothing(u_vals) ? "" : " (U = $(u_vals[u_idx]))"
         println("\n--- Scanning U index: $u_idx$u_val_str ---")
@@ -485,9 +617,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         end
 
         state2 = if degen_rm_U isa AbstractMatrix
-            degen_rm_U[u_idx, :]
+            degen_rm_U[target_state_idx(u_idx), :]
         else
-            degen_rm_U[u_idx]
+            degen_rm_U[target_state_idx(u_idx)]
         end
 
         target_u = isnothing(u_vals) ? nothing : u_vals[u_idx]
@@ -518,6 +650,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             multi_start_iters=multi_start_iters,
             initial_coefficients=current_coeffs,
             antihermitian=antihermitian,
+            use_gpu=use_gpu,
             metric_functions=metric_functions
         )
 
@@ -530,7 +663,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         push!(data_dict["loss_metrics"], final_loss)
 
         # Calculate comparison metrics
-        ref_evolved = apply_unitary(A_opt, gates, state1, basis, N, num_exponentials; antihermitian=antihermitian)
+        ref_evolved = apply_unitary(A_opt, gates, state1, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
         H_eval = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
             H_hopping + target_u * H_interaction
         else
@@ -542,6 +675,12 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         println("  Optimization Complete:")
         println("    Final Loss ($loss_type): $final_loss")
+        if haskey(metrics, "convergence_info") && !isempty(metrics["convergence_info"])
+            latest_stages = metrics["convergence_info"][end]
+            for info in latest_stages
+                println("    Stopping Reason (Stage $(info["stage"]) - $(info["optimizer"])): $(info["primary_reason"]) (Iterations: $(info["iterations"]), Final |g|: $(info["g_residual"]))")
+            end
+        end
         if !isnothing(H_eval)
             println("    Exact ED Ground Energy: $ed_energy")
             println("    Trotter Evolved Energy: $trotter_energy")

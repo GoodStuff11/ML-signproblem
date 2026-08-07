@@ -1,0 +1,32 @@
+================================================================================
+Timestamp: 2026-08-07T13:54:20.359
+Command run: julia testing/test_sign_debug.jl 
+================================================================================
+ERROR: DimensionMismatch: arrays could not be broadcast to a common size: a has axes Base.OneTo(0) and b has axes Base.OneTo(6)
+Stacktrace:
+  [1] _bcs1
+    @ ./broadcast.jl:535 [inlined]
+  [2] _bcs
+    @ ./broadcast.jl:529 [inlined]
+  [3] broadcast_shape
+    @ ./broadcast.jl:523 [inlined]
+  [4] combine_axes
+    @ ./broadcast.jl:504 [inlined]
+  [5] instantiate
+    @ ./broadcast.jl:313 [inlined]
+  [6] materialize(bc::Base.Broadcast.Broadcasted{Base.Broadcast.DefaultArrayStyle{2}, Nothing, typeof(-), Tuple{Matrix{Float64}, Matrix{Float64}}})
+    @ Base.Broadcast ./broadcast.jl:894
+  [7] (::var"#main##0#main##1")()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_sign_debug.jl:41
+  [8] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+  [9] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [10] open
+    @ ./io.jl:407 [inlined]
+ [11] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [12] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_sign_debug.jl:15
+ [13] _start()
+    @ Base ./client.jl:556

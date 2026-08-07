@@ -1,0 +1,22 @@
+================================================================================
+Timestamp: 2026-08-07T11:20:01.791
+Command run: julia testing/test_find_best_energy_sector_features.jl 
+================================================================================
+=== Running find_best_energy_sector Features Tests ===
+Finding best energy sector
+u_idx=1 k=[10, 20] [-5.0, -5.0]
+u_idx=2 k=[10, 20] [-4.0, -3.0]
+Selected ground state symmetry sector: 1
+Result without U_values: 10
+Finding best energy sector
+U=0.0 k=[10, 20] [-5.0, -5.0]
+U=2.0 k=[10, 20] [-4.0, -3.0]
+Selected ground state symmetry sector: 1
+Result with U_values: 10
+Finding best energy sector
+u_idx=1 k=[:sec1, :sec2, :sec3] [-5.0, -5.0, -4.0]
+u_idx=2 k=[:sec1, :sec2, :sec3] [-4.0, -4.0, -4.0]
+u_idx=3 k=[:sec2, :sec3, :sec1] [-3.0, -3.0, -2.0]
+Selected ground state symmetry sector: 2
+Selected degenerate sector: sec2
+=== All Tests Passed ===

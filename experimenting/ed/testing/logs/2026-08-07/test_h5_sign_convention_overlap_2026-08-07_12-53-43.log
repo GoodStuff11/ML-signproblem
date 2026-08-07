@@ -1,0 +1,20 @@
+================================================================================
+Timestamp: 2026-08-07T12:53:43.651
+Command run: julia testing/test_h5_sign_convention_overlap.jl 
+================================================================================
+=== Running HDF5 Sign Convention Overlap Test ===
+
+Testing sign_convention = :spin_first
+  create_Hubbard overlap magnitude: 1.0
+  HubbardMomentumBasis overlap magnitude: 0.9999999999999994
+  Expectation energy: -10.891066204174916
+
+Testing sign_convention = :coordinate_first
+  create_Hubbard overlap magnitude: 1.0
+  HubbardMomentumBasis overlap magnitude: 0.33319394824899523
+  Expectation energy: -10.891066204174916
+Test Failed at /home/jek354/research/ML-signproblem/experimenting/ed/testing/test_h5_sign_convention_overlap.jl:83
+  Expression: isapprox(overlap_trotter, 1.0; atol = 1.0e-5)
+   Evaluated: isapprox(0.33319394824899523, 1.0; atol = 1.0e-5)
+ERROR: There was an error during testing
+

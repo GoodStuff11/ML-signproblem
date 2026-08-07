@@ -1,0 +1,26 @@
+ERROR: LoadError: MethodError: Cannot `convert` an object of type Int64 to an object of type Tuple{Vararg{Int64}}
+The function `convert` exists, but no method is defined for this combination of argument types.
+
+Closest candidates are:
+  (::Type{T})(::Any) where T<:Tuple
+   @ Base tuple.jl:454
+  convert(::Type{T}, !Matched::T) where T<:Tuple
+   @ Base essentials.jl:600
+  convert(::Type{T}, !Matched::NTuple{N, Any}) where {N, T<:Tuple}
+   @ Base essentials.jl:601
+  ...
+
+Stacktrace:
+ [1] convert(::Type{Union{Nothing, Tuple{Vararg{Int64}}}}, x::Int64)
+   @ Base ./some.jl:37
+ [2] HubbardSubspace(N_up::Int64, N_down::Int64, lattice::Square{Tuple{Periodic, Periodic}}; k::Int64)
+   @ Main ~/research/ML-signproblem/experimenting/ed/ed_objects.jl:89
+ [3] top-level scope
+   @ ~/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:58
+ [4] include(mod::Module, _path::String)
+   @ Base ./Base.jl:306
+ [5] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:317
+ [6] _start()
+   @ Base ./client.jl:550
+in expression starting at /home/jek354/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:58

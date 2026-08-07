@@ -1,0 +1,26 @@
+================================================================================
+Timestamp: 2026-08-07T13:52:40.977
+Command run: julia testing/debug_trotter_33316.jl 
+================================================================================
+=== Debugging 0.333166 Overlap in test_h5_sign_convention_overlap ===
+indexer.a[1:3] = Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(2, 1), Coordinate(3, 1)]
+actual_sign = coordinate_first, order = RowSnake()
+create overlap: 1.0
+trotter overlap: 0.3331667725129818
+Max abs diff |M_trotter - H_create|: 0.05555555555555555
+Number of differing entries: 5236
+  (6, 1): M_trotter = 0.027777777777777776, H_create = -0.027777777777777776
+    row 6: int = 2571
+    col 1: int = 4681
+  (8, 1): M_trotter = 0.027777777777777776, H_create = -0.027777777777777776
+    row 8: int = 135179
+    col 1: int = 4681
+  (11, 1): M_trotter = 0.027777777777777776, H_create = -0.027777777777777776
+    row 11: int = 20547
+    col 1: int = 4681
+  (12, 1): M_trotter = -0.027777777777777776, H_create = 0.027777777777777776
+    row 12: int = 131651
+    col 1: int = 4681
+  (14, 1): M_trotter = -0.027777777777777776, H_create = 0.027777777777777776
+    row 14: int = 6218
+    col 1: int = 4681

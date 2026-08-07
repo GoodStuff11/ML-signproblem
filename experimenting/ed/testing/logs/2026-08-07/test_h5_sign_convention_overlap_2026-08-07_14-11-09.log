@@ -1,0 +1,19 @@
+================================================================================
+Timestamp: 2026-08-07T14:11:09.236
+Command run: julia testing/test_h5_sign_convention_overlap.jl 
+================================================================================
+=== Running HDF5 Sign Convention Overlap Test ===
+
+Testing sign_convention = :spin_first
+  j=1 (U=0.25): create overlap = 1.0 | trotter overlap = 0.9999999999999998 | GS energy = -10.891066204174916
+  j=2 (U=0.5): create overlap = 0.9999999999999993 | trotter overlap = 0.9999999999999996 | GS energy = -10.786446540662995
+  j=3 (U=0.75): create overlap = 0.9999999999999993 | trotter overlap = 0.9999999999999992 | GS energy = -10.686069728879472
+  j=4 (U=1.0): create overlap = 0.9999999999999994 | trotter overlap = 0.9999999999999999 | GS energy = -10.589851434307272
+
+Testing sign_convention = :coordinate_first
+  j=1 (U=0.25): create overlap = 1.0 | trotter overlap = 0.3331667725129818 | GS energy = -10.891066204174916
+Test Failed at /home/jek354/research/ML-signproblem/experimenting/ed/testing/test_h5_sign_convention_overlap.jl:86
+  Expression: isapprox(overlap_trotter, 1.0; atol = 1.0e-5)
+   Evaluated: isapprox(0.3331667725129818, 1.0; atol = 1.0e-5)
+
+ERROR: There was an error during testing

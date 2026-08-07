@@ -1,0 +1,9 @@
+================================================================================
+Timestamp: 2026-08-07T13:28:57.106
+Command run: julia testing/debug_indexer_difference.jl 
+================================================================================
+=== Debugging indexer returned by load_ED_data vs indexer_rebuilt ===
+Overlap using indexer_from_load: 0.9997384937131112
+Overlap using indexer_rebuilt:   0.9997384937131112
+indexer_from_load inv_comb_dict length: 336
+indexer_rebuilt inv_comb_dict length:   336

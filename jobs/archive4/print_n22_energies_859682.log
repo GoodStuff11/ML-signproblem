@@ -1,0 +1,26 @@
+ERROR: LoadError: MethodError: no method matching zero(::Type{Any})
+This error has been manually thrown, explicitly, so the method may exist but be intentionally marked as unimplemented.
+
+Closest candidates are:
+  zero(::Type{Union{Missing, T}}) where T
+   @ Base missing.jl:105
+  zero(!Matched::Type{Union{}}, Any...)
+   @ Base number.jl:315
+  zero(!Matched::Type{LibGit2.GitHash})
+   @ LibGit2 ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/LibGit2/src/oid.jl:221
+  ...
+
+Stacktrace:
+ [1] zero(::Type{Any})
+   @ Base ./missing.jl:106
+ [2] invperm(a::Vector{Any})
+   @ Base ./combinatorics.jl:289
+ [3] top-level scope
+   @ ~/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:79
+ [4] include(mod::Module, _path::String)
+   @ Base ./Base.jl:306
+ [5] exec_options(opts::Base.JLOptions)
+   @ Base ./client.jl:317
+ [6] _start()
+   @ Base ./client.jl:550
+in expression starting at /home/jek354/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:79

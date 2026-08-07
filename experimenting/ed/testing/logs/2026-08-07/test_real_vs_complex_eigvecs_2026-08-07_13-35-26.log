@@ -1,0 +1,9 @@
+================================================================================
+Timestamp: 2026-08-07T13:35:26.551
+Command run: julia testing/test_real_vs_complex_eigvecs.jl 
+================================================================================
+=== Testing LAPACK Real vs Complex Eigenvector Solver ===
+Is M_dense_complex purely real? true
+Overlap using complex solver eigvecs(Matrix{ComplexF64}): 0.9997384937131112
+Overlap using real solver eigvecs(Matrix{Float64}):       0.9997384937131109
+Overlap using real Hermitian eigvecs(Hermitian{Float64}): 0.9997384937131109

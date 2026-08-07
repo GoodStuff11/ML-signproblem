@@ -1,0 +1,34 @@
+  [Memory] Before create_randomized_nth_order_operator -> GC Live: 267.325 MB | MaxRSS: 1.111 GB
+  0.279157 seconds (477.08 k allocations: 23.264 MiB, 95.82% compilation time)
+  [Memory] After create_randomized_nth_order_operator -> GC Live: 294.779 MB | MaxRSS: 1.138 GB
+Coordinate{2, Int64}[Coordinate(1, 1), Coordinate(1, 2), Coordinate(2, 1), Coordinate(2, 2), Coordinate(3, 1), Coordinate(3, 2)]
+  1.261461 seconds (647.58 k allocations: 32.539 MiB, 50.51% gc time, 99.63% compilation time)
+  [Memory] After build_n_body_structure_from_keys -> GC Live: 73.298 MB | MaxRSS: 1.145 GB
+  [Memory] After ensure_operator_structure! complete -> GC Live: 113.397 MB | MaxRSS: 1.145 GB
+ERROR: LoadError: DimensionMismatch: second dimension of A, 39, does not match the first dimension of B, 0
+Stacktrace:
+  [1] _spmatmul!(C::Vector{ComplexF64}, A::SparseMatrixCSC{ComplexF64, Int64}, B::Vector{ComplexF64}, α::Bool, β::Bool)
+    @ SparseArrays ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/SparseArrays/src/linalg.jl:78
+  [2] spdensemul!
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/SparseArrays/src/linalg.jl:60 [inlined]
+  [3] generic_matvecmul!
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/SparseArrays/src/linalg.jl:54 [inlined]
+  [4] _mul!
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/matmul.jl:74 [inlined]
+  [5] mul!
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/matmul.jl:71 [inlined]
+  [6] mul!
+    @ ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/matmul.jl:265 [inlined]
+  [7] *(A::SparseMatrixCSC{ComplexF64, Int64}, x::Vector{ComplexF64})
+    @ LinearAlgebra ~/.julia/juliaup/julia-1.12.5+0.x64.linux.gnu/share/julia/stdlib/v1.12/LinearAlgebra/src/matmul.jl:60
+  [8] compute_exact_exp_energies(exact_coeffs_raw::Vector{Union{Nothing, Vector{Float64}}}, t_keys_JLD2::Vector{Any}, indexer::CombinationIndexer{Coordinate{2, Int64}}, gates::Vector{Any}, lvec::Vector{Int64}, basis_ints::Vector{UInt16}, ref_state::Vector{ComplexF64}, H_hop_mom::SparseMatrixCSC{ComplexF64, Int64}, H_int_mom::SparseMatrixCSC{ComplexF64, Int64}, U_values::Vector{Float64}; antihermitian::Bool, sign_convention::Symbol)
+    @ Main ~/research/ML-signproblem/experimenting/ed/trotter_exp_testing.jl:544
+  [9] top-level scope
+    @ ~/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:82
+ [10] include(mod::Module, _path::String)
+    @ Base ./Base.jl:306
+ [11] exec_options(opts::Base.JLOptions)
+    @ Base ./client.jl:317
+ [12] _start()
+    @ Base ./client.jl:550
+in expression starting at /home/jek354/.gemini/antigravity-ide/brain/81ac6ec6-f4fe-49d9-bd15-94069aba4b07/scratch/print_n22_energies.jl:82
