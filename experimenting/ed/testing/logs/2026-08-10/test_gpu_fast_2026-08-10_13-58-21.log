@@ -1,0 +1,11 @@
+================================================================================
+Timestamp: 2026-08-10T13:58:21.676
+Command run: julia testing/test_gpu_fast.jl --use_gpu
+================================================================================
+==========================================================
+TEST GPU FAST IMPLEMENTATION VERIFICATION
+==========================================================
+GPU Device: Tesla T4
+Loading dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(5, 4)_4x3
+Computing slater ground state for sector 2
+Basis dimension: 32670

@@ -1,0 +1,61 @@
+================================================================================
+Timestamp: 2026-08-10T18:05:18.924
+Command run: julia testing/benchmark_all_options_4x3.jl 
+================================================================================
+================================================================================
+=== Comprehensive Benchmark: All Offloading Options vs Full GPU vs Pure CPU ===
+================================================================================
+
+--- Problem Specification ---
+Lattice: [4, 3] (12 sites)
+Electrons: (5, 4)
+Hilbert space dimension (d): 32670
+Number of Trotter gates (M): 1092
+
+Pre-building CPU gate matrices...
+
+Benchmarking Mode 1: Pure CPU (use_gpu = false)...
+loss: 0.9999991949905026
+Forward time: 1.68214559
+Gradient time: 1.92987926
+loss: 0.9999991949905026
+Forward time: 1.222181002
+Gradient time: 1.29175171
+loss: 0.9999991949905026
+Forward time: 0.634023705
+Gradient time: 1.165463631
+loss: 0.9999991949905026
+Forward time: 1.064407781
+Gradient time: 1.2119454
+loss: 0.9999991949905026
+Forward time: 0.520929244
+Gradient time: 1.24424355
+loss: 0.9999991949905026
+Forward time: 1.023696735
+Gradient time: 1.184986513
+Benchmarking Mode 2: Full GPU (All on VRAM)...
+Benchmarking Mode 3: Option A (phis on CPU Host RAM, tau_dev on GPU)...
+Benchmarking Mode 4: Option B (tau_dev on CPU Host RAM, phis on GPU)...
+Benchmarking Mode 5: Option C (Both phis & tau_dev on CPU Host RAM)...
+
+================================================================================
+=== FINAL BENCHMARK SUMMARY & PERFORMANCE COMPARISON (4x3 case) ===
+================================================================================
+Problem size: 4x3 lattice, Hilbert space dimension d = 32670, 1092 gates
+-----------------------------------------------------------------------------------------------
+Mode / Offloading Option            | Time / Step  | Speedup vs CPU | Overhead vs GPU | GPU VRAM Used
+-----------------------------------------------------------------------------------------------
+1. Pure Single CPU (use_gpu=false)  | 2151.66    ms | 1.00          x | N/A          | 0.0 MiB     
+2. Full GPU (All on VRAM)           | 317.06     ms | 6.79          x | 1.00        x | 298.94     MiB
+3. Option A (phis on CPU Host RAM)  | 401.52     ms | 5.36          x | 1.27        x | 298.94     MiB
+4. Option B (tau_dev on CPU Host RAM) | 359.01     ms | 5.99          x | 1.13        x | 298.94     MiB
+5. Option C (Hybrid phis+tau_dev CPU) | 432.19     ms | 4.98          x | 1.36        x | 330.94     MiB
+-----------------------------------------------------------------------------------------------
+
+--- Projecting Options to 4x4 Lattice (d = 4,008,576, M = 1,000 gates) ---
+Component sizes for 4x4 (Float32): tau_dev = 47.0 GiB, phis = 15.3 GiB
+Mode 1 (Pure CPU):                 Slowest (~15-30s per gradient step), 0 VRAM
+Mode 2 (Full GPU):                 CRASHES (79.3 GiB required, exceeds 80GB A100 limit)
+Mode 3 (Option A: phis on CPU):    Runs on A100 (47.0 GiB VRAM), ~0.5s overhead vs Full GPU
+Mode 4 (Option B: tau_dev on CPU): Runs on A100 (15.3 GiB VRAM), ~1.5s overhead vs Full GPU
+Mode 5 (Option C: Hybrid CPU):     Runs on A100 (<0.1 GiB VRAM), ~2.0s overhead vs Full GPU

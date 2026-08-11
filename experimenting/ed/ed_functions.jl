@@ -1,3 +1,5 @@
+using HDF5
+
 function make_hermitian(A::SparseMatrixCSC)
     # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
     # This function doesn't override non-zero values with zero values like Hermitian(A) can

@@ -1,0 +1,181 @@
+================================================================================
+Timestamp: 2026-08-10T14:34:20.271
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+GPU Device:        Tesla T4
+Threads available: 1
+
+--- Setting up test system (2x2 lattice) ---
+Basis dimension: 256
+Number of gates: 58, total parameters M: 116
+
+--- Test 3: CPU vs GPU Adjoint Loss Value Match ---
+CPU Loss: 0.5013041039613871
+GPU Loss: 0.5013041039613871
+Loss Absolute Difference: 0.0
+PASSED: CPU and GPU loss values match to machine precision.
+
+--- Test 4: CPU vs GPU Gradient (Zygote rrule) Match ---
+loss: 0.5013041039613871
+Forward time: 0.001272183
+Gradient time: 0.068444165
+loss: 0.5013041039613871
+Forward time: 0.001254341
+Gradient time: 0.001435036
+Max Gradient Difference: 0.0
+Relative Gradient Difference: 0.0
+PASSED: CPU and GPU gradients match to high precision.
+
+--- Test 5: Full optimize_unitary Run (CPU vs GPU) ---
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=false)...
+loss: 0.5013041039613871
+Forward time: 0.001184643
+Gradient time: 0.001225336
+loss: 0.6739272448254074
+Forward time: 0.00123115
+Gradient time: 0.001153304
+loss: 0.4395315008417505
+Forward time: 0.001074794
+Gradient time: 0.001122089
+loss: 0.4395315008417505
+Forward time: 0.00104717
+Gradient time: 0.001122864
+loss: 0.41392928992899214
+Forward time: 0.001046125
+Gradient time: 0.001446827
+loss: 0.4010778775046129
+Forward time: 0.001490519
+Gradient time: 0.001442563
+loss: 0.39413143224947145
+Forward time: 0.001493657
+Gradient time: 0.001381804
+loss: 0.3918947872040779
+Forward time: 0.001499135
+Gradient time: 0.001533605
+loss: 0.3897381705834728
+Forward time: 0.001446462
+Gradient time: 0.001428807
+loss: 0.38824809772016766
+Forward time: 0.001475755
+Gradient time: 0.001445128
+loss: 0.3851259758789395
+Forward time: 0.001472285
+Gradient time: 0.001491987
+loss: 0.38202139709713456
+Forward time: 0.001494642
+Gradient time: 0.001830462
+loss: 0.3737741303685599
+Forward time: 0.001444395
+Gradient time: 0.001832378
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.03019686345265693)
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.5013041039613871
+Forward time: 0.001493947
+Gradient time: 0.001840676
+loss: 0.6739272448254074
+Forward time: 0.001467594
+Gradient time: 0.001822818
+loss: 0.4395315008417505
+Forward time: 0.00150255
+Gradient time: 0.001838176
+loss: 0.4395315008417505
+Forward time: 0.00146293
+Gradient time: 0.001824147
+loss: 0.41392928992899214
+Forward time: 0.001461689
+Gradient time: 0.00183556
+loss: 0.4010778775046129
+Forward time: 0.001631575
+Gradient time: 0.00183742
+loss: 0.39413143224947145
+Forward time: 0.001621546
+Gradient time: 0.001801912
+loss: 0.3918947872040779
+Forward time: 0.001697298
+Gradient time: 0.001811218
+loss: 0.3897381705834728
+Forward time: 0.001701394
+Gradient time: 0.603721621
+loss: 0.38824809772016766
+Forward time: 0.001383258
+Gradient time: 0.001219932
+loss: 0.3851259758789395
+Forward time: 0.001317798
+Gradient time: 0.001205699
+loss: 0.38202139709713456
+Forward time: 0.001067252
+Gradient time: 0.001264559
+loss: 0.3737741303685599
+Forward time: 0.001108124
+Gradient time: 0.001285582
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.03019686345265693)
+Final CPU Loss: 0.3737741303685599
+Final GPU Loss: 0.3737741303685599
+Optimization Loss Difference: 0.0
+Parameter Max Difference: 0.0
+PASSED: Full optimize_unitary converges identically on CPU and GPU.
+
+--- Test 6: Benchmark on N=(5, 4)_4x3 dataset in data_h5_fixed ---
+Loading 4x3 dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(5, 4)_4x3
+Computing slater ground state for sector 2
+4x3 Basis sector dimension: 32670
+Number of gates for 4x3: 1368
+ERROR: Scalar indexing is disallowed.
+Invocation of getindex resulted in scalar indexing of a GPU array.
+This is typically caused by calling an iterating implementation of a method.
+Such implementations *do not* execute on the GPU, but very slowly on the CPU,
+and therefore should be avoided.
+
+If you want to allow scalar iteration, use `allowscalar` or `@allowscalar`
+to enable scalar iteration globally or for the operations in question.
+Stacktrace:
+  [1] error(s::String)
+    @ Base ./error.jl:44
+  [2] errorscalar(op::String)
+    @ GPUArraysCore ~/.julia/packages/GPUArraysCore/aNaXo/src/GPUArraysCore.jl:151
+  [3] _assertscalar(op::String, behavior::GPUArraysCore.ScalarIndexing)
+    @ GPUArraysCore ~/.julia/packages/GPUArraysCore/aNaXo/src/GPUArraysCore.jl:124
+  [4] assertscalar(op::String)
+    @ GPUArraysCore ~/.julia/packages/GPUArraysCore/aNaXo/src/GPUArraysCore.jl:112
+  [5] getindex
+    @ ~/.julia/packages/GPUArrays/VNJ6B/src/host/indexing.jl:50 [inlined]
+  [6] (::Main.Trotter.TamFermion.var"#_apply!#109"{Float64, Vector{Int64}, Vector{Int64}})(w::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, v::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, off_signs::Vector{ComplexF64})
+    @ Main.Trotter.TamFermion ~/research/ML-signproblem/experimenting/ed/TamFermion.jl:861
+  [7] (::Main.Trotter.TamFermion.var"#110#111"{Main.Trotter.TamFermion.var"#_apply!#109"{Float64, Vector{Int64}, Vector{Int64}}})(v::CuArray{ComplexF64, 1, CUDACore.DeviceMemory})
+    @ Main.Trotter.TamFermion ~/research/ML-signproblem/experimenting/ed/TamFermion.jl:868
+  [8] _apply_fun
+    @ ~/.julia/packages/LinearMaps/KV78T/src/functionmap.jl:84 [inlined]
+  [9] *(A::LinearMaps.FunctionMap{ComplexF64, Main.Trotter.TamFermion.var"#110#111"{Main.Trotter.TamFermion.var"#_apply!#109"{Float64, Vector{Int64}, Vector{Int64}}}, Main.Trotter.TamFermion.var"#112#113"{Main.Trotter.TamFermion.var"#_apply!#109"{Float64, Vector{Int64}, Vector{Int64}}}, false}, x::CuArray{ComplexF64, 1, CUDACore.DeviceMemory})
+    @ LinearMaps ~/.julia/packages/LinearMaps/KV78T/src/functionmap.jl:92
+ [10] apply_unitary_checkpoints(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, ref::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, basis::Vector{UInt64}, N::Int64, num_exponentials::Int64; antihermitian::Bool, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:296
+ [11] apply_unitary_checkpoints
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:267 [inlined]
+ [12] apply_unitary(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, ref::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, basis::Vector{UInt64}, N::Int64, num_exponentials::Int64; antihermitian::Bool, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:366
+ [13] apply_unitary
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:365 [inlined]
+ [14] adjoint_loss(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, tau_terms::Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, ref::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, target::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, basis::Vector{UInt64}, N::Int64; num_exponentials::Int64, antihermitian::Bool, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:384
+ [15] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:210
+ [16] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [17] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [18] open
+    @ ./io.jl:407 [inlined]
+ [19] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [20] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:70
+ [21] _start()
+    @ Base ./client.jl:556

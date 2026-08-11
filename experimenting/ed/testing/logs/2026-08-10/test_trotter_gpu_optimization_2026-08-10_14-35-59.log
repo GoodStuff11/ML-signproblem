@@ -1,0 +1,54 @@
+================================================================================
+Timestamp: 2026-08-10T14:35:59.805
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+GPU Device:        Tesla T4
+Threads available: 1
+
+--- Setting up test system (2x2 lattice) ---
+Basis dimension: 256
+Number of gates: 58, total parameters M: 116
+
+--- Test 3: CPU vs GPU Adjoint Loss Value Match ---ERROR: UndefVarError: `sparse` not defined
+ in `Main.Trotter.TrotterOptimization`
+Suggestion: check for spelling errors or missing imports.
+Hint: a global variable of this name also exists in SparseArrays.
+Stacktrace:
+  [1] build_direct_sparse_tau(g::Main.Trotter.TamFermion.FGate, N::Int64, basis::Vector{UInt32}, sortOrder::Vector{Int64}, spec_mask::UInt64; antihermitian::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:182
+  [2] build_direct_sparse_tau
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:130 [inlined]
+  [3] prepare_gpu_gate_ops(gates::Vector{Main.Trotter.TamFermion.FGate}, N::Int64, basis::Vector{UInt32}; antihermitian::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:205
+  [4] prepare_gpu_gate_ops
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:185 [inlined]
+  [5] get_gpu_gate_ops(gates::Vector{Main.Trotter.TamFermion.FGate}, N::Int64, basis::Vector{UInt32}; antihermitian::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:221
+  [6] get_gpu_gate_ops
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:216 [inlined]
+  [7] apply_unitary(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, ref::Vector{ComplexF64}, basis::Vector{UInt32}, N::Int64, num_exponentials::Int64; antihermitian::Bool, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:395
+  [8] apply_unitary
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:389 [inlined]
+  [9] adjoint_loss(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, tau_terms::Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, ref::Vector{ComplexF64}, target::Vector{ComplexF64}, basis::Vector{UInt32}, N::Int64; num_exponentials::Int64, antihermitian::Bool, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_optimization.jl:437
+ [10] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:128
+ [11] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [12] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [13] open
+    @ ./io.jl:407 [inlined]
+ [14] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [15] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:70
+ [16] _start()
+    @ Base ./client.jl:556

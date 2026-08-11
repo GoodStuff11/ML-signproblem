@@ -1,0 +1,184 @@
+================================================================================
+Timestamp: 2026-08-10T17:11:02.123
+Command run: julia testing/test_eigenstate_phase.jl N=(2, 2)_2x2
+================================================================================
+=== Eigenstate Phase Verification ===
+Folder: /home/jek354/research/data/new_data/data_h5_fixed/N=(2, 2)_2x2
+Check all sectors: falseERROR: IOError: 
+readdir("/home/jek354/research/data/new_data/data_h5_fixed/N=(2, 2)_2x2"): no such file or directory (ENOENT)
+Stacktrace:
+  [1] _uv_error(prefix::String, c::Int32)
+    @ Base ./libuv.jl:114
+  [2] uv_error
+    @ ./libuv.jl:113 [inlined]
+  [3] _readdir(dir::String; return_objects::Bool, join::Bool, sort::Bool)
+    @ Base.Filesystem ./file.jl:1112
+  [4] _readdir
+    @ ./file.jl:1105 [inlined]
+  [5] readdir
+    @ ./file.jl:1034 [inlined]
+  [6] load_h5_ED_data(folder::String; verbose::Bool, kwargs::@Kwargs{sign_convention::Symbol, use_slater_reference::Bool})
+    @ Main ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:640
+  [7] load_h5_ED_data
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:635 [inlined]
+  [8] load_ED_data(folder::String; verbose::Bool, kwargs::@Kwargs{sign_convention::Symbol, use_slater_reference::Bool})
+    @ Main ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:959
+  [9] load_ED_data
+    @ ~/research/ML-signproblem/experimenting/ed/ed_functions.jl:955 [inlined]
+ [10] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_eigenstate_phase.jl:81
+ [11] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [12] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [13] open
+    @ ./io.jl:407 [inlined]
+ [14] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [15] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_eigenstate_phase.jl:74
+ [16] _start()
+    @ Base ./client.jl:556
+1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-10.910880472135803, -10.613068683362682]
+U=2.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-10.809384998125761, -10.496106502247116]
+U=2.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-10.71160410856488, -10.385032902617537]
+U=3.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-10.617457488468963, -10.279490141129788]
+U=3.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-10.526857645697678, -10.17914232214651]
+U=3.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-10.439710978426385, -10.083674668488204]
+U=3.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-10.355918844331033, -9.992792603183345]
+U=4.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-10.275378608256906, -9.90622072184034]
+U=4.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-10.197984648550767, -9.82370171295025]
+U=4.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-10.123629305986018, -9.744995266302425]
+U=4.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-10.052203763047372, -9.669876996868211]
+U=5.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-9.983598845054837, -9.598137402104532]
+U=5.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.917705738032542, -9.52958086386043]
+U=5.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.854416621253606, -9.464024701286322]
+U=5.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.793625214954877, -9.401298277823612]
+U=6.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-9.73522724578755, -9.341242163091385]
+U=6.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-9.67912083416686, -9.283707348985333]
+U=6.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.625206808832868, -9.228554518337535]
+U=6.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.57338895468957, -9.175653363893703]
+U=7.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.523574200404699, -9.124881955028377]
+U=7.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.475672752390576, -9.076126149459323]
+U=7.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.429598181703472, -9.029279047178498]
+U=7.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.38526747015166, -8.98424048385024]
+U=8.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-9.34260102153545, -8.940916561010363]
+U=8.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.301522643499078, -8.899219210511012]
+U=8.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.261959504985771, -8.859065790785953]
+U=8.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-9.223842073781253, -8.820378712647031]
+U=9.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-9.187104038126625, -8.783085092463397]
+U=9.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-9.151682215893992, -8.747116430711941]
+U=9.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-9.117516454358181, -8.712408314022825]
+U=9.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-9.084549523171106, -8.678900138972136]
+U=10.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-9.052727002755955, -8.646534855997274]
+U=10.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-9.02199716998755, -8.615258731926867]
+U=10.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-8.992310882712937, -8.585021129726101]
+U=10.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.963621464392046, -8.555774304162098]
+U=11.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.935884589895819, -8.5274732121888]
+U=11.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-8.909058173294463, -8.50007533694205]
+U=11.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.883102258286714, -8.473540524318002]
+U=11.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.857978911771458, -8.44783083118652]
+U=12.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.833652120933039, -8.42291038436316]
+U=12.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-8.810087694104375, -8.3987452495302]
+U=12.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-8.787253165582197, -8.375303309359827]
+U=12.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.76511770449477, -8.35255415014943]
+U=13.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-8.743652027762154, -8.330468956332734]
+U=13.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.722828317140115, -8.309020412278967]
+U=13.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(7).h5"] [-8.702620140299823, -8.288182610838565]
+U=13.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-8.683002375865474, -8.267930968134985]
+U=14.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-8.663951142307452, -8.248242144141404]
+U=14.25 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-8.645443730571936, -8.229093968616567]
+U=14.5 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(5).h5"] [-8.627458540314379, -8.210465372007008]
+U=14.75 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(4).h5"] [-8.609975019596027, -8.192336320953073]
+U=15.0 k=["HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(8).h5"] [-8.592973607896605, -8.174687758064302]
+k-value counts: Dict(1 => 60)
+Selected ground state symmetry sector: 1
+Loading hdf5 data: /home/jek354/research/data/new_data/data_h5_fixed/N=(3, 3)_3x3/HubbardED_XDiag_momSlater_3x3_nu_3_nd_3_t_1_m_2_sectors_(0).h5
+[[-11.863088651085064, -11.812177939453552]]
+Computing native indexer for sector k = (1, 1)
+
+Hilbert space dimension: 792
+Number of U values: 60
+
+--- Ground State Sector Eigenstates ---
+  U_value  |  max_imag_residual  |  is_real_up_to_phase
+  ------------------------------------------------------------
+  U=0.25  |  2.9204186898104404e-10  |  ✗ COMPLEX
+  U=0.5  |  1.1998886729916097e-9  |  ✗ COMPLEX
+  U=0.75  |  6.395499971790085e-9  |  ✗ COMPLEX
+  U=1.0  |  5.787519283262395e-10  |  ✗ COMPLEX
+  U=1.25  |  1.1636795624325758e-9  |  ✗ COMPLEX
+  U=1.5  |  1.0698158955935188e-9  |  ✗ COMPLEX
+  U=1.75  |  1.8016579617086145e-9  |  ✗ COMPLEX
+  U=2.0  |  1.327342993330539e-9  |  ✗ COMPLEX
+  U=2.25  |  7.93596716119894e-10  |  ✗ COMPLEX
+  U=2.5  |  1.049370819405926e-9  |  ✗ COMPLEX
+  U=2.75  |  7.386686262655924e-10  |  ✗ COMPLEX
+  U=3.0  |  7.461833581579043e-10  |  ✗ COMPLEX
+  U=3.25  |  7.727805097224048e-10  |  ✗ COMPLEX
+  U=3.5  |  9.460443192721441e-10  |  ✗ COMPLEX
+  U=3.75  |  1.0596377898394742e-9  |  ✗ COMPLEX
+  U=4.0  |  1.1262711076265312e-9  |  ✗ COMPLEX
+  U=4.25  |  1.4100230488409159e-9  |  ✗ COMPLEX
+  U=4.5  |  1.6922833073438039e-9  |  ✗ COMPLEX
+  U=4.75  |  2.3665236072861796e-9  |  ✗ COMPLEX
+  U=5.0  |  3.020942503095818e-9  |  ✗ COMPLEX
+  U=5.25  |  2.9333306998669026e-9  |  ✗ COMPLEX
+  U=5.5  |  1.3617855905423438e-9  |  ✗ COMPLEX
+  U=5.75  |  9.667555051056531e-10  |  ✗ COMPLEX
+  U=6.0  |  1.2660569399737371e-9  |  ✗ COMPLEX
+  U=6.25  |  9.157237454762128e-10  |  ✗ COMPLEX
+  U=6.5  |  1.3016034814902361e-9  |  ✗ COMPLEX
+  U=6.75  |  9.086851399423792e-10  |  ✗ COMPLEX
+  U=7.0  |  1.1989138839710154e-9  |  ✗ COMPLEX
+  U=7.25  |  2.0942831011061536e-9  |  ✗ COMPLEX
+  U=7.5  |  1.3711704931196325e-9  |  ✗ COMPLEX
+  U=7.75  |  2.216080827524558e-9  |  ✗ COMPLEX
+  U=8.0  |  1.4168283368913508e-9  |  ✗ COMPLEX
+  U=8.25  |  1.983092702780072e-9  |  ✗ COMPLEX
+  U=8.5  |  1.6613864400033193e-9  |  ✗ COMPLEX
+  U=8.75  |  2.236464149814933e-9  |  ✗ COMPLEX
+  U=9.0  |  1.6068102854793459e-9  |  ✗ COMPLEX
+  U=9.25  |  2.266315514576559e-9  |  ✗ COMPLEX
+  U=9.5  |  1.895553931684296e-9  |  ✗ COMPLEX
+  U=9.75  |  2.77205365464144e-9  |  ✗ COMPLEX
+  U=10.0  |  2.017587828467934e-9  |  ✗ COMPLEX
+  U=10.25  |  2.986608370242717e-9  |  ✗ COMPLEX
+  U=10.5  |  2.1978368090560657e-9  |  ✗ COMPLEX
+  U=10.75  |  3.2280774805177404e-9  |  ✗ COMPLEX
+  U=11.0  |  4.53016853196874e-9  |  ✗ COMPLEX
+  U=11.25  |  3.4789719495242833e-9  |  ✗ COMPLEX
+  U=11.5  |  4.775773540521824e-9  |  ✗ COMPLEX
+  U=11.75  |  3.2669672329336227e-9  |  ✗ COMPLEX
+  U=12.0  |  4.367827993274134e-9  |  ✗ COMPLEX
+  U=12.25  |  3.4119555577392793e-9  |  ✗ COMPLEX
+  U=12.5  |  2.467703969387261e-9  |  ✗ COMPLEX
+  U=12.75  |  3.3464240089572098e-9  |  ✗ COMPLEX
+  U=13.0  |  6.1238592842516174e-9  |  ✗ COMPLEX
+  U=13.25  |  5.113282443292001e-9  |  ✗ COMPLEX
+  U=13.5  |  4.222308405688039e-9  |  ✗ COMPLEX
+  U=13.75  |  5.138457968151257e-9  |  ✗ COMPLEX
+  U=14.0  |  6.1394906276934656e-9  |  ✗ COMPLEX
+  U=14.25  |  4.499132677526764e-9  |  ✗ COMPLEX
+  U=14.5  |  5.274906060559458e-9  |  ✗ COMPLEX
+  U=14.75  |  6.0640386635724e-9  |  ✗ COMPLEX
+  U=15.0  |  4.3570607206217236e-9  |  ✗ COMPLEX
+
+  Overall max imaginary residual: 6.395499971790085e-9
+  ✗ Some eigenstates have significant imaginary components after phase stripping.
+  → Must use ComplexF64/ComplexF32 precision for GPU computation.
+
+--- Tau Matrix Reality Check ---
+Number of gates: 432
+Max imaginary component across all tau matrices: 0.0
+✓ All tau matrices are purely REAL → real arithmetic is valid for antihermitian case.
+
+--- Antihermitian Propagation Reality Check ---
+Testing: if ref is real, does exp(a*tau)*ref stay real?
+Max imaginary after antihermitian propagation: 0.0
+✓ Antihermitian evolution preserves reality of the state.
+
+=== Summary ===
+Eigenstates real up to phase: false (max residual: 6.395499971790085e-9)
+Tau matrices real: true
+Antihermitian preserves reality: true

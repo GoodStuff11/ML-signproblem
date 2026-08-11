@@ -1,0 +1,165 @@
+================================================================================
+Timestamp: 2026-08-10T14:36:53.909
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+GPU Device:        Tesla T4
+Threads available: 1
+
+--- Setting up test system (2x2 lattice) ---
+Basis dimension: 256
+Number of gates: 58, total parameters M: 116
+
+--- Test 3: CPU vs GPU Adjoint Loss Value Match ---
+CPU Loss: 0.5013041039613871
+GPU Loss: 0.5013041039613871
+Loss Absolute Difference: 0.0
+PASSED: CPU and GPU loss values match to machine precision.
+
+--- Test 4: CPU vs GPU Gradient (Zygote rrule) Match ---
+loss: 0.5013041039613871
+Forward time: 0.006524831
+Gradient time: 0.068220826
+loss: 0.5013041039613871
+Forward time: 0.029265633
+Gradient time: 0.411726706
+Max Gradient Difference: 9.71445146547012e-17
+Relative Gradient Difference: 4.364763850342735e-16
+PASSED: CPU and GPU gradients match to high precision.
+
+--- Test 5: Full optimize_unitary Run (CPU vs GPU) ---
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=false)...
+loss: 0.5013041039613871
+Forward time: 0.001145232
+Gradient time: 0.001221011
+loss: 0.6739272448254074
+Forward time: 0.001221407
+Gradient time: 0.001144964
+loss: 0.4395315008417505
+Forward time: 0.001051695
+Gradient time: 0.001187797
+loss: 0.4395315008417505
+Forward time: 0.001044831
+Gradient time: 0.001386855
+loss: 0.41392928992899214
+Forward time: 0.001501918
+Gradient time: 0.001806229
+loss: 0.4010778775046129
+Forward time: 0.001592985
+Gradient time: 0.001834562
+loss: 0.39413143224947145
+Forward time: 0.001535259
+Gradient time: 0.001874562
+loss: 0.3918947872040779
+Forward time: 0.001400724
+Gradient time: 0.001930026
+loss: 0.3897381705834728
+Forward time: 0.001673573
+Gradient time: 0.001927687
+loss: 0.38824809772016766
+Forward time: 0.001684825
+Gradient time: 0.00186458
+loss: 0.3851259758789395
+Forward time: 0.001857371
+Gradient time: 0.001778939
+loss: 0.38202139709713456
+Forward time: 0.001696772
+Gradient time: 0.001862049
+loss: 0.3737741303685599
+Forward time: 0.001690215
+Gradient time: 0.00185161
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.03019686345265693)
+Initial loss (overlap): 0.424311521422988
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.5013041039613871
+Forward time: 0.005117188
+Gradient time: 0.011043377
+loss: 0.6739272448254076
+Forward time: 0.004810666
+Gradient time: 0.010956585
+loss: 0.43953150084175074
+Forward time: 0.004822642
+Gradient time: 0.011090178
+loss: 0.43953150084175074
+Forward time: 0.004829779
+Gradient time: 0.127964844
+loss: 0.4139292899289919
+Forward time: 0.004517433
+Gradient time: 0.01038152
+loss: 0.4010778775046129
+Forward time: 0.004279321
+Gradient time: 0.010438876
+loss: 0.39413143224947145
+Forward time: 0.004444079
+Gradient time: 0.010654612
+loss: 0.39189478720407755
+Forward time: 0.004264739
+Gradient time: 0.010546254
+loss: 0.3897381705834726
+Forward time: 0.004511752
+Gradient time: 0.010677452
+loss: 0.3882480977201679
+Forward time: 0.004463032
+Gradient time: 0.010751706
+loss: 0.3851259758789395
+Forward time: 0.004607591
+Gradient time: 0.010631092
+loss: 0.38202139709713434
+Forward time: 0.004466461
+Gradient time: 0.010502794
+loss: 0.37377413036855944
+Forward time: 0.004651365
+Gradient time: 0.010721391
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.030196863452659893)
+Final CPU Loss: 0.3737741303685599
+Final GPU Loss: 0.37377413036855944
+Optimization Loss Difference: 4.440892098500626e-16
+Parameter Max Difference: 3.6637359812630166e-15
+PASSED: Full optimize_unitary converges identically on CPU and GPU.
+
+--- Test 6: Benchmark on N=(5, 4)_4x3 dataset in data_h5_fixed ---
+Loading 4x3 dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(5, 4)_4x3
+Computing slater ground state for sector 2
+4x3 Basis sector dimension: 32670
+Number of gates for 4x3: 1368
+loss: 0.10810583195598378
+Forward time: 0.105912027
+Gradient time: 0.201171085
+
+Benchmarking GPU Forward Pass (5 runs)...
+
+Benchmarking GPU Gradient Pass (5 runs)...
+loss: 0.10810583195598378
+Forward time: 0.087316452
+Gradient time: 0.171404896
+loss: 0.10810583195598378
+Forward time: 0.147550015
+Gradient time: 0.174993771
+loss: 0.10810583195598378
+Forward time: 0.085413327
+Gradient time: 0.170378844
+loss: 0.10810583195598378
+Forward time: 0.158345001
+Gradient time: 0.170730709
+loss: 0.10810583195598378
+Forward time: 0.087152663
+Gradient time: 0.170081955
+
+==========================================================
+BENCHMARK COMPARISON ON N=(5, 4)_4x3 DATASET
+CPU (1 core) Forward Pass Avg:  1.1767 s
+GPU Forward Pass Avg:          0.1028 s (11.4x faster)
+CPU (1 core) Gradient Pass Avg: 2.2338 s
+GPU Gradient Pass Avg:         0.3226 s (6.9x faster)
+==========================================================
+PASSED: GPU implementation is significantly faster than CPU for both forward and gradient passes!
+
+==========================================================
+ALL VERIFICATION TESTS PASSED SUCCESSFULLY!
+==========================================================

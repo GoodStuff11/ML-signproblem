@@ -2,6 +2,7 @@ module TrotterOptimization
 
 using ChainRulesCore
 using LinearAlgebra
+using SparseArrays
 using Zygote
 using Optimization
 using OptimizationOptimJL
@@ -74,7 +75,7 @@ function extract_convergence_info(sol)
 
     primary_reason = join(reasons, "; ")
 
-    return Dict{String, Any}(
+    return Dict{String,Any}(
         "retcode" => retcode_str,
         "primary_reason" => primary_reason,
         "g_converged" => g_conv,
@@ -92,16 +93,219 @@ end
 # ═══════════════════════════════════════════════════════════════════════
 
 """
+    strip_global_phase(v::AbstractVector{<:Complex}) -> (v_stripped, phase)
+
+Strip the global complex phase from vector `v` by dividing by the phase of
+the component with the largest magnitude. Returns `(real.(v_stripped), phase)`.
+"""
+function strip_global_phase(v::AbstractVector{<:Complex})
+    idx = argmax(abs.(v))
+    val = v[idx]
+    phase = abs(val) > 0 ? val / abs(val) : ComplexF64(1.0)
+    v_stripped = v .* conj(phase)
+    return real.(v_stripped), phase
+end
+
+function strip_global_phase(v::AbstractVector{<:Real})
+    return v, 1.0
+end
+
+"""
+    GpuGateOps
+
+Precomputed GPU data structures for ultra-fast gate exponentials and matrix-vector operations.
+"""
+function _get_cuda()
+    if @isdefined(CUDA)
+        return CUDA
+    elseif isdefined(parentmodule(@__MODULE__), :CUDA)
+        return getfield(parentmodule(@__MODULE__), :CUDA)
+    elseif isdefined(Main, :CUDA)
+        return getfield(Main, :CUDA)
+    end
+    return nothing
+end
+
+function _has_cuda()
+    c = _get_cuda()
+    return c !== nothing && c.has_cuda_gpu()
+end
+
+"""
+    GpuGateOps
+
+Precomputed GPU data structures for ultra-fast gate exponentials and matrix-vector operations.
+"""
+struct GpuGateOps
+    tau_dev::Vector{Any}
+    is_diag::Vector{Bool}
+    sign0_val::Vector{Float64}
+    w1::Any
+    w2::Any
+end
+
+const _GPU_GATE_OPS_CACHE = Dict{UInt64, GpuGateOps}()
+
+function build_direct_sparse_tau(g, N::Int, basis::AbstractVector{<:Integer}, sortOrder, spec_mask; antihermitian::Bool=false)
+    d = length(basis)
+    nbits = 2N
+    s_I = UInt64(g.cre_up) | (UInt64(g.cre_dn) << N)
+    s_J = UInt64(g.ann_up) | (UInt64(g.ann_dn) << N)
+    basis64 = UInt64.(basis)
+
+    s_Ip = s_I & ~s_J
+    s_Jp = s_J & ~s_I
+    Delta = s_I ⊻ s_J
+    s_IJ = s_I | s_J
+    p = count_ones(s_J)
+
+    sign0 = (div(p * (p - 1), 2) % 2 == 0) ? 1.0 : -1.0
+    sgn_ref = TamFermion._jw_sign_ref(s_I, s_J, nbits)
+    mask = spec_mask !== nothing ? spec_mask : TamFermion._odd_spectator_mask(Delta, s_IJ, nbits)
+
+    if s_I == s_J
+        if antihermitian
+            return sparse(Int[], Int[], ComplexF64[], d, d), true, sign0
+        else
+            idxc = findall((basis64 .& s_I) .== s_I)
+            val = 2.0 * sign0
+            return sparse(idxc, idxc, fill(ComplexF64(val), length(idxc)), d, d), true, sign0
+        end
+    end
+
+    srcJ_mask = ((basis64 .& s_J) .== s_J) .& ((basis64 .& s_Ip) .== UInt64(0))
+    isrcJ = findall(srcJ_mask)
+    srcJ = basis64[isrcJ]
+
+    sorted_basis = basis64[sortOrder]
+
+    itgtI = Vector{Int}(undef, length(isrcJ))
+    for k in eachindex(isrcJ)
+        s = srcJ[k]
+        t = s ⊻ Delta
+        j = searchsortedfirst(sorted_basis, t)
+        itgtI[k] = sortOrder[j]
+    end
+
+    signs = Vector{Float64}(undef, length(isrcJ))
+    for k in eachindex(isrcJ)
+        s = srcJ[k]
+        spec_parity = count_ones(s & mask) & 1
+        signs[k] = sgn_ref * (spec_parity == 1 ? -1.0 : 1.0)
+    end
+
+    I_vec = vcat(isrcJ, itgtI)
+    J_vec = vcat(itgtI, isrcJ)
+    V_vec = antihermitian ? vcat(ComplexF64.(-signs), ComplexF64.(signs)) : vcat(ComplexF64.(signs), ComplexF64.(signs))
+
+    return sparse(I_vec, J_vec, V_vec, d, d), false, sign0
+end
+
+function _get_gpu_tau_mat(gpu_ops::GpuGateOps, k::Int)
+    mat = gpu_ops.tau_dev[k]
+    if mat isa SparseMatrixCSC
+        CUDA_mod = _get_cuda()
+        return CUDA_mod.CUSPARSE.CuSparseMatrixCSC(mat)
+    else
+        return mat
+    end
+end
+
+function prepare_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antihermitian::Bool=false, datatype::Type{<:Number}=ComplexF64, stream_tau::Bool=true)
+    CUDA_mod = _get_cuda()
+    num_gates = length(gates)
+    tau_dev = Vector{Any}(undef, num_gates)
+    is_diag = Vector{Bool}(undef, num_gates)
+    sign0_val = Vector{Float64}(undef, num_gates)
+
+    if datatype <: Real && !antihermitian
+        error("Real data type ($datatype) requires antihermitian=true.")
+    end
+
+    sortOrder = sortperm(UInt64.(basis))
+    nbits = 2N
+    spec_masks = Vector{UInt64}(undef, num_gates)
+    for k in 1:num_gates
+        g = gates[k]
+        s_I = UInt64(g.cre_up) | (UInt64(g.cre_dn) << N)
+        s_J = UInt64(g.ann_up) | (UInt64(g.ann_dn) << N)
+        Delta = s_I ⊻ s_J
+        s_IJ = s_I | s_J
+        spec_masks[k] = TamFermion._odd_spectator_mask(Delta, s_IJ, nbits)
+    end
+
+    for k in 1:num_gates
+        sp_mat, is_d, sign0 = build_direct_sparse_tau(gates[k], N, basis, sortOrder, spec_masks[k]; antihermitian=antihermitian)
+        is_diag[k] = is_d
+        sign0_val[k] = sign0
+        sp_mat_typed = datatype <: Real ? SparseMatrixCSC{datatype, Int32}(real.(sp_mat)) : SparseMatrixCSC{datatype, Int32}(sp_mat)
+        if stream_tau
+            tau_dev[k] = sp_mat_typed # Option B: store on CPU Host RAM to save VRAM
+        else
+            tau_dev[k] = CUDA_mod.CUSPARSE.CuSparseMatrixCSC(sp_mat_typed) # store on GPU VRAM
+        end
+    end
+    d = length(basis)
+    w1 = CUDA_mod.CuArray(zeros(datatype, d))
+    w2 = CUDA_mod.CuArray(zeros(datatype, d))
+    return GpuGateOps(tau_dev, is_diag, sign0_val, w1, w2)
+end
+
+function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antihermitian::Bool=false, datatype::Type{<:Number}=ComplexF64, stream_tau::Bool=true)
+    key = hash((objectid(gates), objectid(basis), N, antihermitian, datatype, stream_tau))
+    if haskey(_GPU_GATE_OPS_CACHE, key)
+        return _GPU_GATE_OPS_CACHE[key]
+    end
+    gpu_ops = prepare_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype, stream_tau=stream_tau)
+    _GPU_GATE_OPS_CACHE[key] = gpu_ops
+    return gpu_ops
+end
+
+function gpu_apply_gate_exp!(v_out, v_in, gpu_ops::GpuGateOps, k::Int, a::Float64; antihermitian::Bool=false, inverse::Bool=false)
+    is_d = gpu_ops.is_diag[k]
+    sign0 = gpu_ops.sign0_val[k]
+    w1 = gpu_ops.w1
+    w2 = gpu_ops.w2
+    T = eltype(v_in)
+
+    if is_d
+        if antihermitian
+            copyto!(v_out, v_in)
+        else
+            tau_mat = _get_gpu_tau_mat(gpu_ops, k)
+            a_val = inverse ? -a : a
+            phase_val = T(exp(2im * a_val * sign0))
+            mul!(w1, tau_mat, v_in)
+            v_out .= v_in .+ ((phase_val - T(1.0)) / T(2.0 * sign0)) .* w1
+        end
+    else
+        tau_mat = _get_gpu_tau_mat(gpu_ops, k)
+        a_val = inverse ? -a : a
+        ca = cos(a_val)
+        sa = sin(a_val)
+        coeff_sin = T(antihermitian ? sa : 1im * sa)
+        coeff_cos_m1 = T(antihermitian ? (1.0 - ca) : (ca - 1.0))
+
+        mul!(w1, tau_mat, v_in)
+        mul!(w2, tau_mat, w1)
+        v_out .= v_in .+ coeff_cos_m1 .* w2 .+ coeff_sin .* w1
+    end
+    return v_out
+end
+
+"""
     to_device_vector(v, use_gpu::Bool)
 
 Convert vector `v` to a GPU `CuVector` if `use_gpu` is true and CUDA is loaded/functional,
 otherwise return `v`.
 """
-function to_device_vector(v::AbstractVector, use_gpu::Bool)
-    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
-        return CUDA.CuArray(v)
+function to_device_vector(v::AbstractVector, use_gpu::Bool, datatype::Type{<:Number}=eltype(v))
+    v_typed = (eltype(v) == datatype) ? v : datatype.(v)
+    if use_gpu && _has_cuda()
+        CUDA_mod = _get_cuda()
+        return v_typed isa CUDA_mod.CuArray ? v_typed : CUDA_mod.CuArray(v_typed)
     end
-    return v
+    return v_typed
 end
 
 """
@@ -110,9 +314,10 @@ end
 Convert a collection of operators (e.g. `LinearMap`s) to GPU sparse matrices `CuSparseMatrixCSC`
 if `use_gpu` is true and CUDA is loaded/functional, otherwise return `ops` unchanged.
 """
-function to_device_ops(ops::AbstractVector, use_gpu::Bool)
-    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
-        return [CUDA.CUSPARSE.CuSparseMatrixCSC(sparse(op)) for op in ops]
+function to_device_ops(ops::AbstractVector, use_gpu::Bool, datatype::Type{<:Number}=ComplexF64)
+    if use_gpu && _has_cuda()
+        CUDA_mod = _get_cuda()
+        return [CUDA_mod.CUSPARSE.CuSparseMatrixCSC(SparseMatrixCSC{datatype, Int32}(sparse(op))) for op in ops]
     end
     return ops
 end
@@ -124,24 +329,42 @@ Evolves the state `ref` forward through all parameters `A` and returns a list
 of intermediate state checkpoints `phis`, where `phis[1]` is `ref` and `phis[end]`
 is the fully evolved state. Supports GPU execution via `use_gpu=true`.
 """
-function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
+function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates
-    ref_dev = to_device_vector(ref, use_gpu)
-    phis = Vector{typeof(ref_dev)}(undef, M + 1)
-    phis[1] = ref_dev
-    curr = 1
-    for l in 1:P
-        coefs = A[((l-1)*num_gates+1):(l*num_gates)]
-        ops = TamFermion.fgateToExpSector(gates, coefs, N, basis; antihermitian=antihermitian)
-        ops_dev = to_device_ops(ops, use_gpu)
-        for op in ops_dev
-            phis[curr+1] = op * phis[curr]
-            curr += 1
+
+    if use_gpu && _has_cuda()
+        CUDA_mod = _get_cuda()
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
+        ref_dev = to_device_vector(ref, use_gpu, datatype)
+        phis = Vector{typeof(ref_dev)}(undef, M + 1)
+        phis[1] = copy(ref_dev)
+        curr = 1
+        for l in 1:P
+            for param_idx in 1:num_gates
+                a = Float64(A[curr])
+                phis[curr+1] = similar(ref_dev)
+                gpu_apply_gate_exp!(phis[curr+1], phis[curr], gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=false)
+                curr += 1
+            end
         end
+        return phis
+    else
+        ref_dev = (eltype(ref) == datatype) ? ref : datatype.(ref)
+        phis = Vector{typeof(ref_dev)}(undef, M + 1)
+        phis[1] = ref_dev
+        curr = 1
+        for l in 1:P
+            coefs = A[((l-1)*num_gates+1):(l*num_gates)]
+            ops = TamFermion.fgateToExpSector(gates, coefs, N, basis; antihermitian=antihermitian)
+            for op in ops
+                phis[curr+1] = op * phis[curr]
+                curr += 1
+            end
+        end
+        return phis
     end
-    return phis
 end
 
 """
@@ -151,49 +374,93 @@ Propagates the `adjoint_state` backward starting from `init_adjoint_state`,
 computing the gradient of the parameters at each step using the forward state checkpoints `phis`.
 Supports GPU execution via `use_gpu=true`.
 """
-function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::Vector, init_adjoint_state::AbstractVector, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
+function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::Vector, init_adjoint_state::AbstractVector, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+    P = num_exponentials
+    num_gates = length(gates)
+    M = P * num_gates
+    grad_A = Vector{Float64}(undef, M)
+
+    if use_gpu && _has_cuda()
+        CUDA_mod = _get_cuda()
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
+        adj_curr = copy(init_adjoint_state)
+        ref_sample = phis[1]
+        adj_next = similar(ref_sample)
+
+        curr = M
+        for l in P:-1:1
+            for param_idx in num_gates:-1:1
+                a = Float64(A[curr])
+                tau_mat = _get_gpu_tau_mat(gpu_ops, param_idx)
+                mul!(gpu_ops.w1, tau_mat, phis[curr+1])
+                dot_val = dot(adj_curr, gpu_ops.w1)
+                grad_A[curr] = antihermitian ? -real(dot_val) : imag(dot_val)
+
+                gpu_apply_gate_exp!(adj_next, adj_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=true)
+                adj_curr, adj_next = adj_next, adj_curr
+                curr -= 1
+            end
+        end
+        CUDA_mod.synchronize()
+        return grad_A
+    else
+        adjoint_state = copy(init_adjoint_state)
+        curr = M
+        for l in P:-1:1
+            coefs = A[((l-1)*num_gates+1):(l*num_gates)]
+            ops_inv = TamFermion.fgateToExpSector(gates, -coefs, N, basis; antihermitian=antihermitian)
+
+            for param_idx in num_gates:-1:1
+                op_inv = ops_inv[param_idx]
+                tau_term = tau_terms[param_idx]
+
+                dot_val = dot(adjoint_state, tau_term * phis[curr+1])
+                if antihermitian
+                    grad_A[curr] = -real(dot_val)
+                else
+                    grad_A[curr] = imag(dot_val)
+                end
+
+                adjoint_state = op_inv * adjoint_state
+                curr -= 1
+            end
+        end
+        return grad_A
+    end
+end
+
+function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates
 
-    grad_A = Vector{Float64}(undef, M)
-    adjoint_state = copy(init_adjoint_state)
-    tau_terms_dev = to_device_ops(tau_terms, use_gpu)
-
-    curr = M
-    for l in P:-1:1
-        coefs = A[((l-1)*num_gates+1):(l*num_gates)]
-        ops_inv = TamFermion.fgateToExpSector(gates, -coefs, N, basis; antihermitian=antihermitian)
-        ops_inv_dev = to_device_ops(ops_inv, use_gpu)
-
-        for param_idx in num_gates:-1:1
-            op_inv = ops_inv_dev[param_idx]
-            tau_term = tau_terms_dev[param_idx]
-
-            # Compute gradient contribution for parameter at index curr
-            dot_val = dot(adjoint_state, tau_term * phis[curr+1])
-            if antihermitian
-                grad_A[curr] = -real(dot_val)
-            else
-                grad_A[curr] = imag(dot_val)
+    if use_gpu && _has_cuda()
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
+        ref_dev = to_device_vector(ref, use_gpu, datatype)
+        v_curr = copy(ref_dev)
+        v_next = similar(ref_dev)
+        curr = 1
+        for l in 1:P
+            for param_idx in 1:num_gates
+                a = Float64(A[curr])
+                gpu_apply_gate_exp!(v_next, v_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=false)
+                v_curr, v_next = v_next, v_curr
+                curr += 1
             end
-
-            # Propagate adjoint state backward
-            adjoint_state = op_inv * adjoint_state
-            curr -= 1
         end
+        return v_curr
+    else
+        ref_dev = (eltype(ref) == datatype) ? ref : datatype.(ref)
+        v_curr = copy(ref_dev)
+        for l in 1:P
+            coefs = A[((l-1)*num_gates+1):(l*num_gates)]
+            ops = TamFermion.fgateToExpSector(gates, coefs, N, basis; antihermitian=antihermitian)
+            for op in ops
+                v_curr = op * v_curr
+            end
+        end
+        return v_curr
     end
-
-    if use_gpu && @isdefined(CUDA) && CUDA.has_cuda_gpu()
-        CUDA.synchronize()
-    end
-
-    return grad_A
-end
-
-function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false)
-    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
-    return phis[end]
 end
 
 # ═══════════════════════════════════════════════════════════════════════
@@ -209,28 +476,35 @@ target :
 basis :
 N : number of sites
 """
-function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false)
-    ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
-    target_dev = to_device_vector(target, use_gpu)
+function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+    ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+    target_dev = to_device_vector(target, use_gpu, datatype)
     return 1 - abs2(dot(target_dev, ref_evolved))
 end
 
-function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false)
-    target_dev = to_device_vector(target, use_gpu)
-    phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
-    evolved_ref = phis[end]
-    overlap = dot(target_dev, evolved_ref)
-    loss = 1 - abs2(overlap)
-    println("loss: $loss")
+function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int; num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+    t = @elapsed begin
+        target_dev = to_device_vector(target, use_gpu, datatype)
+        phis = apply_unitary_checkpoints(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+        evolved_ref = phis[end]
+        overlap = dot(target_dev, evolved_ref)
+        loss = 1 - abs2(overlap)
+        println("loss: $loss")
+    end
+    println("Forward time: $t")
 
     function adjoint_loss_pullback(y)
-        init_adjoint_state = (2 * overlap * conj(y)) * target_dev
-        grad_A = backward_adjoint_propagation(A, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
+        t = @elapsed begin
+            init_adjoint_state = (2 * overlap * conj(y)) * target_dev
+            grad_A = backward_adjoint_propagation(A, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+        end
+        println("Gradient time: $t")
         return NoTangent(), grad_A, NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent(), NoTangent()
     end
 
     return loss, adjoint_loss_pullback
 end
+
 
 # ═══════════════════════════════════════════════════════════════════════
 # ENERGY LOSS
@@ -397,13 +671,22 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     initial_coefficients::Union{AbstractVector,Nothing}=nothing,
     antihermitian::Bool=false,
     use_gpu::Bool=false,
+    datatype::Type{<:Number}=ComplexF64,
     metric_functions::Dict{String,Function}=Dict{String,Function}())
+
+    # Handle conversion from Complex to Real data type if specified
+    ref_prep, _ = (datatype <: Real) ? strip_global_phase(ref) : (ref, 1.0)
+    target_prep = if target isa AbstractVector
+        (datatype <: Real) ? strip_global_phase(target)[1] : target
+    else
+        target
+    end
 
     f = (A, p=nothing) -> begin
         if loss_type == :overlap
-            return adjoint_loss(A, gates, tau_terms, ref, target, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu)
+            return adjoint_loss(A, gates, tau_terms, ref_prep, target_prep, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
         elseif loss_type == :energy
-            return energy_loss(A, gates, tau_terms, target, ref, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian)
+            return energy_loss(A, gates, tau_terms, target_prep, ref_prep, basis, N; num_exponentials=num_exponentials, antihermitian=antihermitian)
         else
             error("Unknown loss_type: $loss_type")
         end
@@ -430,7 +713,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     metrics["optimization_losses"] = Vector{Float64}[]
     metrics["multistart_losses"] = Vector{Vector{Float64}}[]
     metrics["best_start_idx"] = Int[]
-    metrics["convergence_info"] = Vector{Dict{String, Any}}[]
+    metrics["convergence_info"] = Vector{Dict{String,Any}}[]
     metrics["stopping_reasons"] = Vector{String}[]
     if loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H_mat) ? real(dot(ref, H_mat * ref)) : NaN]
@@ -472,7 +755,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     curr_A = copy(A_init)
     curr_loss = initial_loss
     final_history = Float64[]
-    stage_convergence_info = Dict{String, Any}[]
+    stage_convergence_info = Dict{String,Any}[]
 
     cb = (state, loss_val) -> begin
         push!(final_history, loss_val)
@@ -510,12 +793,13 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         push!(metrics["best_start_idx"], 0)
     end
 
-    ref_evolved = apply_unitary(curr_A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
+    ref_evolved = apply_unitary(curr_A, gates, ref_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+    ref_evolved_cpu = Array(ref_evolved)
     if loss_type == :overlap
-        final_energy = !isnothing(H_mat) ? real(dot(ref_evolved, H_mat * ref_evolved)) : NaN
+        final_energy = !isnothing(H_mat) ? real(dot(ref_evolved_cpu, H_mat * ref_evolved_cpu)) : NaN
         push!(metrics["energy"], final_energy)
     elseif loss_type == :energy
-        final_overlap = !isnothing(state2_vec) ? (1.0 - abs2(dot(state2_vec, ref_evolved))) : NaN
+        final_overlap = !isnothing(target_prep) ? (1.0 - abs2(dot(target_prep, ref_evolved_cpu))) : NaN
         push!(metrics["overlap"], final_overlap)
     end
 
@@ -569,6 +853,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     multi_start_iters::Int=30,
     antihermitian::Bool=get(instructions, "antihermitian", false),
     use_gpu::Bool=false,
+    datatype::Type{<:Number}=ComplexF64,
     metric_functions::Dict{String,Function}=Dict{String,Function}()
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
@@ -651,8 +936,13 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             initial_coefficients=current_coeffs,
             antihermitian=antihermitian,
             use_gpu=use_gpu,
+            datatype=datatype,
             metric_functions=metric_functions
         )
+
+        if use_gpu && _has_cuda()
+            _get_cuda().reclaim()
+        end
 
         current_coeffs = A_opt
 
@@ -663,15 +953,18 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         push!(data_dict["loss_metrics"], final_loss)
 
         # Calculate comparison metrics
-        ref_evolved = apply_unitary(A_opt, gates, state1, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu)
+        state1_prep, _ = (datatype <: Real) ? strip_global_phase(state1) : (state1, 1.0)
+        state2_prep, _ = (datatype <: Real) ? strip_global_phase(state2) : (state2, 1.0)
+        ref_evolved = apply_unitary(A_opt, gates, state1_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+        ref_evolved_cpu = Array(ref_evolved)
         H_eval = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
             H_hopping + target_u * H_interaction
         else
             nothing
         end
-        ed_energy = !isnothing(H_eval) ? real(dot(state2, H_eval * state2)) : NaN
-        trotter_energy = !isnothing(H_eval) ? real(dot(ref_evolved, H_eval * ref_evolved)) : NaN
-        overlap = abs2(dot(state2, ref_evolved))
+        ed_energy = !isnothing(H_eval) ? real(dot(state2_prep, H_eval * state2_prep)) : NaN
+        trotter_energy = !isnothing(H_eval) ? real(dot(ref_evolved_cpu, H_eval * ref_evolved_cpu)) : NaN
+        overlap = abs2(dot(state2_prep, ref_evolved_cpu))
 
         println("  Optimization Complete:")
         println("    Final Loss ($loss_type): $final_loss")

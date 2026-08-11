@@ -31,6 +31,8 @@ Arguments:
                      Valid options:
                      - "--use_gpu" or "--use_gpu=true": Enable CUDA acceleration.
                      - "--use_gpu=false": Disable GPU acceleration (CUDA is not loaded to preserve @safe_threads compatibility).
+  --datatype=<type> (optional): Data type for GPU vector and matrix operations. Default: ComplexF64.
+                     Valid options: ComplexF64, ComplexF32, Float64, Float32.
 
 Examples:
   julia --project=.. run_trotter_scan_optimization.jl "N=(2, 2)_2x2" 25 35
@@ -105,6 +107,7 @@ function parse_arguments(args::Vector{String})
     antihermitian = false
     custom_ref_state_arg = nothing
     use_gpu = false
+    datatype = ComplexF64
 
     for arg in args[4:end]
         if startswith(arg, "--maxiters=")
@@ -129,20 +132,34 @@ function parse_arguments(args::Vector{String})
             use_gpu = true
         elseif arg == "--use_gpu=false"
             use_gpu = false
+        elseif startswith(arg, "--datatype=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val == "ComplexF64"
+                datatype = ComplexF64
+            elseif val == "ComplexF32"
+                datatype = ComplexF32
+            elseif val == "Float64"
+                datatype = Float64
+            elseif val == "Float32"
+                datatype = Float32
+            else
+                error("Invalid --datatype option: '$val'. Valid options: 'ComplexF64', 'ComplexF32', 'Float64', 'Float32'.")
+            end
         else
             error("Unknown argument: $arg")
         end
     end
 
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu = parse_arguments(ARGS)
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype = parse_arguments(ARGS)
         println("Number of threads: $(Threads.nthreads())")
         println("Use GPU: $use_gpu")
+        println("Data Type: $datatype")
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
             load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=custom_ref_state_arg == "slater")
@@ -210,7 +227,8 @@ function (@main)(ARGS)
             loss_type=loss_type,
             U_values=U_values,
             antihermitian=antihermitian,
-            use_gpu=use_gpu
+            use_gpu=use_gpu,
+            datatype=datatype
         )
 
         return 0

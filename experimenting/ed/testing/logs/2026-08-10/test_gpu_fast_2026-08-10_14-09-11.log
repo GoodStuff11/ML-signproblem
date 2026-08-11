@@ -1,0 +1,36 @@
+================================================================================
+Timestamp: 2026-08-10T14:09:11.894
+Command run: julia testing/test_gpu_fast.jl --use_gpu
+================================================================================
+==========================================================
+TEST GPU FAST IMPLEMENTATION & GRADIENT VERIFICATION
+==========================================================
+GPU Device: Tesla T4
+Loading dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(5, 4)_4x3
+Computing slater ground state for sector 2
+Basis dimension: 32670
+Number of gates: 1368, M: 1368
+
+Precomputing GPU gate ops...
+
+--- Testing CPU vs Fast GPU Gradient Match ---
+loss: 0.12257184848402725
+Forward time: 1.324830473
+Gradient time: 2.022345371
+CPU Loss: 0.12257184848402725
+GPU Loss: 0.12257184848402525
+Loss Absolute Difference: 1.9984014443252818e-15
+Max Gradient Difference (CPU vs Fast GPU): 1.1188966420050406e-14
+PASSED: CPU and Fast GPU loss & gradients match to machine precision!
+
+Benchmarking 5 full Gradient Passes (Forward + Pullback) on GPU...
+GPU Gradient Pass Times (s): [0.3053, 0.4824, 0.2597, 0.3304, 0.2615]
+Average GPU Gradient Pass Time: 0.3279 s
+
+==========================================================
+SUMMARY COMPARISON ON N=(5, 4)_4x3 DATASET
+CPU (1 core) Forward Pass:  1.1767 s
+GPU Fast Forward Pass:      0.1202 s (9.8x faster)
+CPU (1 core) Gradient Pass: 2.2338 s
+GPU Fast Gradient Pass:     0.3279 s (6.8x faster)
+==========================================================

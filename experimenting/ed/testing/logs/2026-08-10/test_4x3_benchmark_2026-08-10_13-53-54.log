@@ -1,0 +1,51 @@
+================================================================================
+Timestamp: 2026-08-10T13:53:54.213
+Command run: julia testing/test_4x3_benchmark.jl --use_gpu=false
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION 4x3 BENCHMARK
+==========================================================
+Requested use_gpu: false
+Num exponentials:  1
+Threads available: 1
+Loading dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(5, 4)_4x3
+Computing slater ground state for sector 2
+ED data loaded in 5.589 s
+Basis sector dimension: 32670
+Number of gates: 1368, total parameters M: 1368
+
+Performing warmup run...
+loss: 0.12257184848402725
+Forward time: 1.69230126
+Gradient time: 1.258546154
+Warmup loss: 0.12257184848402725, grad norm: 0.6310530356418282
+
+Benchmarking Forward Pass (5 runs)...
+Forward Pass Times (s): [1.2334, 1.3225, 0.9192, 1.2045, 1.2042]
+Average Forward Pass Time: 1.1767 s
+
+Benchmarking Gradient Pass (Zygote rrule) (5 runs)...
+loss: 0.12257184848402725
+Forward time: 1.192116233
+Gradient time: 1.213817161
+loss: 0.12257184848402725
+Forward time: 0.922583216
+Gradient time: 1.441320773
+loss: 0.12257184848402725
+Forward time: 0.723244796
+Gradient time: 1.351944616
+loss: 0.12257184848402725
+Forward time: 0.883288491
+Gradient time: 1.178218852
+loss: 0.12257184848402725
+Forward time: 0.925240046
+Gradient time: 1.109620606
+Gradient Pass Times (s): [2.632, 2.3643, 2.0756, 2.0619, 2.0353]
+Average Gradient Pass Time: 2.2338 s
+
+==========================================================
+BENCHMARK COMPLETE
+Mode: CPU (1 core)
+Forward Avg:  1.1767 s
+Gradient Avg: 2.2338 s
+==========================================================

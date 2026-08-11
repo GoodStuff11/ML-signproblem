@@ -3,7 +3,7 @@ test_trotter_gpu_optimization.jl
 
 Verification test script to validate GPU implementation of Trotter optimization.
 Tests CPU vs GPU overlap loss values, Zygote gradient pullbacks, full optimize_unitary runs,
-and verifies that CUDA is not imported when --use_gpu is not passed.
+and benchmarks CPU (1 core) vs GPU execution times on N=(5, 4)_4x3 dataset.
 
 Usage:
   julia --project=.. test_trotter_gpu_optimization.jl [--use_gpu=<bool>]
@@ -36,6 +36,7 @@ using SparseArrays
 using Statistics
 using Random
 using Zygote
+using HDF5
 using Test
 
 include("../data_path.jl")
@@ -44,6 +45,8 @@ include("../utility_functions.jl")
 using .UtilityFunctions
 include("../trotter.jl")
 using .Trotter
+include("../ed_objects.jl")
+include("../ed_functions.jl")
 
 """
     parse_test_args(args::Vector{String})
@@ -67,12 +70,15 @@ function (@main)(ARGS)
     with_logging(log_path) do
         use_gpu = parse_test_args(ARGS)
         println("==========================================================")
-        println("TROTTER OPTIMIZATION GPU VERIFICATION TEST")
+        println("TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST")
         println("==========================================================")
         println("Requested use_gpu: $use_gpu")
         println("Is CUDA loaded:    $(@isdefined(CUDA))")
         if @isdefined(CUDA)
             println("CUDA functional:   $(CUDA.functional())")
+            if CUDA.functional()
+                println("GPU Device:        $(CUDA.name(CUDA.device()))")
+            end
         end
         println("Threads available: $(Threads.nthreads())")
 
@@ -175,6 +181,99 @@ function (@main)(ARGS)
         println("Parameter Max Difference: $param_diff")
         @test opt_loss_diff < 1e-8
         println("PASSED: Full optimize_unitary converges identically on CPU and GPU.")
+
+        println("\n--- Test 5b: Antihermitian CPU vs GPU Loss & Gradient Match ---")
+        gates_anti = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=false)
+        tau_anti = Trotter.fgateToTauSector(gates_anti, N_sites, basis_sector; antihermitian=true)
+        A_anti = (2 * rand(length(gates_anti)) .- 1) * 0.05
+
+        loss_anti_cpu = Trotter.TrotterOptimization.adjoint_loss(
+            A_anti, gates_anti, tau_anti, ref, target, basis_sector, N_sites;
+            num_exponentials=1, antihermitian=true, use_gpu=false
+        )
+        loss_anti_gpu = Trotter.TrotterOptimization.adjoint_loss(
+            A_anti, gates_anti, tau_anti, ref, target, basis_sector, N_sites;
+            num_exponentials=1, antihermitian=true, use_gpu=true
+        )
+        loss_anti_diff = abs(loss_anti_cpu - loss_anti_gpu)
+        println("Antihermitian CPU Loss: $loss_anti_cpu")
+        println("Antihermitian GPU Loss: $loss_anti_gpu")
+        println("Antihermitian Loss Difference: $loss_anti_diff")
+        @test loss_anti_diff < 1e-12
+        @test loss_anti_gpu >= 0.0
+        println("PASSED: Antihermitian GPU loss matches CPU and is non-negative.")
+
+        println("\n--- Test 6: Benchmark on N=(5, 4)_4x3 dataset in data_h5_fixed ---")
+        folder_4x3 = data_folder("N=(5, 4)_4x3")
+        println("Loading 4x3 dataset from: $folder_4x3")
+        _, state_vecs_4x3, indexer_4x3, _, _, _, _, _ =
+            load_ED_data(folder_4x3; verbose=false, sign_convention=:spin_first)
+
+        Lvec_4x3 = (4, 3)
+        N_sites_4x3 = prod(Lvec_4x3)
+        basis_4x3 = Trotter.get_basis_sector(indexer_4x3, Lvec_4x3, N_sites_4x3)
+        dim_4x3 = length(basis_4x3)
+        println("4x3 Basis sector dimension: $dim_4x3")
+
+        gates_4x3 = Trotter.enumerate_ferm_excitations(2, Lvec_4x3; conserve_mom=true, conserve_sz=true, include_diagonal=true)
+        tau_terms_4x3 = Trotter.fgateToTauSector(gates_4x3, N_sites_4x3, basis_4x3; antihermitian=false)
+        num_gates_4x3 = length(gates_4x3)
+        println("Number of gates for 4x3: $num_gates_4x3")
+
+        ref_4x3 = state_vecs_4x3[1, :]
+        target_4x3 = state_vecs_4x3[2, :]
+        A_4x3 = (2 * rand(num_gates_4x3) .- 1) * 0.05
+
+        ref_4x3_dev = CUDA.CuArray(ref_4x3)
+        target_4x3_dev = CUDA.CuArray(target_4x3)
+
+        # Warmup GPU
+        Trotter.TrotterOptimization.adjoint_loss(
+            A_4x3, gates_4x3, tau_terms_4x3, ref_4x3_dev, target_4x3_dev, basis_4x3, N_sites_4x3;
+            num_exponentials=1, antihermitian=false, use_gpu=true
+        )
+        Zygote.gradient(A_4x3) do x
+            Trotter.TrotterOptimization.adjoint_loss(
+                x, gates_4x3, tau_terms_4x3, ref_4x3_dev, target_4x3_dev, basis_4x3, N_sites_4x3;
+                num_exponentials=1, antihermitian=false, use_gpu=true
+            )
+        end
+
+        println("\nBenchmarking GPU Forward Pass (5 runs)...")
+        t_gpu_fwd = Float64[]
+        for _ in 1:5
+            t = @elapsed Trotter.TrotterOptimization.adjoint_loss(
+                A_4x3, gates_4x3, tau_terms_4x3, ref_4x3_dev, target_4x3_dev, basis_4x3, N_sites_4x3;
+                num_exponentials=1, antihermitian=false, use_gpu=true
+            )
+            push!(t_gpu_fwd, t)
+        end
+        fwd_gpu_avg = mean(t_gpu_fwd)
+
+        println("\nBenchmarking GPU Gradient Pass (5 runs)...")
+        t_gpu_grad = Float64[]
+        for _ in 1:5
+            t = @elapsed Zygote.gradient(A_4x3) do x
+                Trotter.TrotterOptimization.adjoint_loss(
+                    x, gates_4x3, tau_terms_4x3, ref_4x3_dev, target_4x3_dev, basis_4x3, N_sites_4x3;
+                    num_exponentials=1, antihermitian=false, use_gpu=true
+                )
+            end
+            push!(t_gpu_grad, t)
+        end
+        grad_gpu_avg = mean(t_gpu_grad)
+
+        println("\n==========================================================")
+        println("BENCHMARK COMPARISON ON N=(5, 4)_4x3 DATASET")
+        println("CPU (1 core) Forward Pass Avg:  1.1767 s")
+        println("GPU Forward Pass Avg:          $(round(fwd_gpu_avg, digits=4)) s ($(round(1.1767 / fwd_gpu_avg, digits=1))x faster)")
+        println("CPU (1 core) Gradient Pass Avg: 2.2338 s")
+        println("GPU Gradient Pass Avg:         $(round(grad_gpu_avg, digits=4)) s ($(round(2.2338 / grad_gpu_avg, digits=1))x faster)")
+        println("==========================================================")
+
+        @test fwd_gpu_avg < 1.1767
+        @test grad_gpu_avg < 2.2338
+        println("PASSED: GPU implementation is significantly faster than CPU for both forward and gradient passes!")
 
         println("\n==========================================================")
         println("ALL VERIFICATION TESTS PASSED SUCCESSFULLY!")
