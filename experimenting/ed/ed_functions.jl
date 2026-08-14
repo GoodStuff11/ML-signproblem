@@ -1,4 +1,5 @@
 using HDF5
+using LinearAlgebra
 
 function make_hermitian(A::SparseMatrixCSC)
     # acts similar to Hermitian(A) but is when only one of A[i,j] and A[j,i] are non-zero
@@ -610,6 +611,48 @@ function get_su2_ground_state(
 end
 
 """
+    select_continuous_state_indices(evecs, energies; order=1:size(evecs, 3))
+
+Among the low-lying eigenstates stored in `evecs` (shape `(H_dim, n_states, n_points)`),
+select the index at each point along the third dimension that continuously connects to
+the state chosen at the neighboring point, rather than naively always taking the
+lowest-energy state (index 1). This matters when two stored states undergo a level
+crossing as the swept parameter (e.g. U) varies: the state with the smallest eigenvalue
+can swap identity between adjacent grid points, which would otherwise introduce a
+discontinuous jump in the returned eigenvector.
+
+`order` gives the sequence of column indices to sweep through, e.g. `sortperm(U_values)`
+if the points are not already stored in monotonic order; it defaults to sweeping the
+columns in stored order. The first point in `order` is seeded with the lowest-energy
+state from `energies` (shape `(n_states, n_points)`); every subsequent point picks
+whichever stored state has the largest wavefunction overlap with the previously
+selected one.
+"""
+function select_continuous_state_indices(evecs::AbstractArray{<:Any,3}, energies::AbstractMatrix; order=nothing)
+    n_states, n_points = size(evecs, 2), size(evecs, 3)
+    seq = order === nothing ? (1:n_points) : order
+
+    if n_states == 1
+        return ones(Int, n_points)
+    end
+
+    selected = Vector{Int}(undef, n_points)
+
+    first_idx = seq[1]
+    selected[first_idx] = argmin(view(energies, :, first_idx))
+    prev_vec = evecs[:, selected[first_idx], first_idx]
+
+    for i in 2:length(seq)
+        idx = seq[i]
+        overlaps = [abs(prev_vec' * view(evecs, :, s, idx)) for s in 1:n_states]
+        selected[idx] = argmax(overlaps)
+        prev_vec = evecs[:, selected[idx], idx]
+    end
+
+    return selected
+end
+
+"""
     load_h5_ED_data(folder; verbose=false, kwargs...)
 
 Load exact diagonalization (ED) data from HDF5 files in the specified `folder`.
@@ -694,7 +737,9 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
 
         evecs_dataset = read(data, "data/evecs/$(k_min)")
         H_dim = size(evecs_dataset, 1)
-        raw_evecs = evecs_dataset[:, 1, :] # shape (H_dim, n_U)
+        energies_k_min = real.(read(data, "data/energies/$(k_min)"))
+        state_idx = select_continuous_state_indices(evecs_dataset, energies_k_min; order=sortperm(U_values))
+        raw_evecs = reduce(hcat, evecs_dataset[:, state_idx[u], u] for u in eachindex(U_values)) # shape (H_dim, n_U)
         target_vecs = Matrix(transpose(raw_evecs)) # shape (n_U, H_dim)
 
         use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
@@ -2967,6 +3012,7 @@ end
                            antihermitian::Bool=false,
                            loss_type::Symbol=:overlap,
                            nn_strategy_file=nothing,
+                           num_exponentials::Int=1,
                            suffix=nothing)
 
 Construct a standardized filename prefix string for optimization run results.
@@ -2978,52 +3024,52 @@ Construct a standardized filename prefix string for optimization run results.
   - `:trotter` / `"trotter"`: expands to `"trotter_N=\$(sites)"`.
   - Any arbitrary String (e.g. `"custom_prefix"`): used as base prefix.
 - `electrons`: Number of spin up and spin down electrons (e.g., `(2, 2)` or `(3, 3)`). Required for `:exact` mode (or fallback `N`).
-- `sites`: Number of lattice sites (e.g., `4` or `9`). Required for `:trotter` mode (or fallback `N`).
-- `N`: Fallback for `electrons` (for `:exact`) or `sites` (for `:trotter`).
+- `sites`: Fallback for `electrons` (for `:exact`) or `sites` (for `:trotter`).
 - `use_symmetry`: Boolean indicating whether symmetry was used (default `false`). Used when `name` is `:exact` / `"exact"`.
 - `custom_ref_state_arg`: Optional reference state identifier (e.g., `"slater"` or integer index). Appends `"_ref_\$(custom_ref_state_arg)"` if provided.
 - `antihermitian`: Whether antihermitian generators are used. Appends `"_antihermitian"` if `true`.
 - `loss_type`: Loss function type (`:overlap` or `:energy`). Appends `"_loss_energy"` if `:energy`.
 - `nn_strategy_file`: Optional path to a trained neural network file. Appends `"_nn_\$(nn_name)"` if provided.
+- `num_exponentials`: Number of Trotter layers/exponentials in the ansatz (default `1`). Appends `"_num_exponentials=\$(num_exponentials)"` if not equal to `1`, so the default (single-exponential) filenames are unchanged and every existing `num_exponentials=1` file on disk keeps matching this function's output.
 - `suffix`: Optional additional suffix string to append at the end (e.g., `"random_multistart"`).
 
 # Returns
 - A `String` containing the constructed prefix.
 """
 function build_save_name_prefix(name::Union{Symbol,String};
-    electrons=nothing,
-    sites=nothing,
-    N=nothing,
+    electrons::Union{Nothing,Tuple}=nothing,
+    sites::Union{Nothing,Int}=nothing,
     use_symmetry::Bool=false,
     custom_ref_state_arg=nothing,
     antihermitian::Bool=false,
     loss_type::Symbol=:overlap,
     nn_strategy_file=nothing,
+    num_exponentials::Int=1,
     suffix=nothing)
     name_str = string(name)
     if name_str in ("exact", "exact_exponential", ":exact", ":exact_exponential")
-        elec_val = electrons !== nothing ? electrons : N
+        elec_val = electrons !== nothing ? electrons : sites
         if isnothing(elec_val)
             error("electrons (or N) must be specified when using :exact or :exact_exponential mode in build_save_name_prefix")
         end
         prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$elec_val"
     elseif name_str in ("trotter", ":trotter")
-        sites_val = sites !== nothing ? sites : N
-        if isnothing(sites_val)
-            error("sites (or N) must be specified when using :trotter mode in build_save_name_prefix")
+        if isnothing(sites)
+            error("sites must be specified when using :trotter mode in build_save_name_prefix")
         end
-        prefix = "trotter_N=$sites_val"
+        prefix = "trotter_N=$sites"
     else
         prefix = name_str
-        if !isnothing(N) && !contains(prefix, "N=")
-            prefix *= "_N=$N"
-        elseif !isnothing(sites) && !contains(prefix, "N=")
+        if !isnothing(sites) && !contains(prefix, "N=")
             prefix *= "_N=$sites"
         elseif !isnothing(electrons) && !contains(prefix, "N=")
             prefix *= "_N=$electrons"
         end
     end
 
+    if num_exponentials != 1
+        prefix *= "_num_exponentials=$(num_exponentials)"
+    end
     if !isnothing(custom_ref_state_arg)
         prefix *= "_ref_$(custom_ref_state_arg)"
     end

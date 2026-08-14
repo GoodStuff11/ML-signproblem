@@ -1,0 +1,540 @@
+================================================================================
+Timestamp: 2026-08-12T00:32:00.768
+Command run: julia testing/test_trotter_resume_loss_history.jl 
+================================================================================
+=================================================================
+TEST: Trotter Optimization Current-U Loading & Loss History
+=================================================================
+Loading dataset from: /home/jek354/research/data/new_data/data_h5_fixed/N=(2, 2)_3x2
+Computing slater ground state for sector 0
+Created temporary test directory: /tmp/jl_mrP2Wf
+Testing on single U index: 20 (U = 4.75)
+
+--- Step 1: Running initial optimization (maxiters = 12) ---
+
+--- Scanning U index: 20 (U = 4.75) ---
+Initial loss (overlap): 0.5279014834095195
+Sampling 5 initial configurations for multi-start...
+loss: 0.5279014834116584
+loss: 0.5279584650215563
+Forward time: 0.324156445
+loss: 0.5279014834371539
+Forward time: 0.324046723
+loss: 0.5279054655266173
+Forward time: 0.324324235
+Forward time: 0.324948848
+loss: 0.5640935424008133
+Forward time: 0.326371294
+Gradient time: 0.299233378
+Gradient time: 0.299257282
+Gradient time: 0.299222282
+Gradient time: 0.299225672
+Gradient time: 0.299267642
+Performing quick optimization on top 5 candidates...
+loss: 0.5279584650215563
+Forward time: 0.002476906
+loss: 0.5279054655266173
+loss: 0.5279014834116584
+Forward time: 0.003055746
+loss: 0.5640935424008133
+Forward time: 0.00322049
+loss: 0.5279014834371539
+Forward time: 0.003521618
+Forward time: 0.002932632
+Gradient time: 0.001615076
+Gradient time: 0.00246455
+Gradient time: 0.002749871
+Gradient time: 0.00298609
+Gradient time: 0.002751778
+loss: 0.5278842948277436
+Forward time: 0.001905785
+loss: 0.4883998838330589
+Forward time: 0.002174748
+loss: 0.5279014833608752
+Forward time: 0.002904332
+loss: 0.5273972758389829
+Forward time: 0.003227898
+loss: 0.5279014833403535
+Forward time: 0.003681263
+Gradient time: 0.001538905
+Gradient time: 0.001851003
+Gradient time: 0.002282771
+loss: 0.5275999369384287
+Forward time: 0.001497207
+loss: 0.36945692139444164
+Forward time: 0.001714896
+Gradient time: 0.003263765
+Gradient time: 0.001527731
+loss: 0.5279014828157775
+Gradient time: 0.001655849
+Forward time: 0.012199411
+Gradient time: 0.00299127
+loss: 0.5274542192967021
+loss: 0.9799250947976468
+Forward time: 0.001598035
+loss: 0.522253404939597
+Forward time: 0.002123797
+Forward time: 0.001669407
+Gradient time: 0.001921236
+Gradient time: 0.001447014
+Gradient time: 0.001516356
+Gradient time: 0.002042832
+loss: 0.5279014718831432
+Forward time: 0.004955758
+loss: 0.5274542192967021
+loss: 0.5279014825086228
+Forward time: 0.006663817
+Forward time: 0.00413004
+loss: 0.9691931281848123
+Forward time: 0.005109441
+loss: 0.4525179820427655
+Forward time: 0.001900234
+Gradient time: 0.001522927
+Gradient time: 0.003062774
+Gradient time: 0.00189668
+loss: 0.5262090508472967
+Forward time: 0.090462124
+loss: 0.5279012120415254
+Gradient time: 0.002785385
+Gradient time: 0.001641849
+loss: 0.964688134046131
+Forward time: 0.090765742
+loss: 0.5279014768938368
+Gradient time: 0.001924621
+loss: 0.9600880688677386
+Forward time: 0.002789116
+Forward time: 0.002750881
+loss: 0.5112695039014608
+Forward time: 0.003147573
+Forward time: 0.091152132
+Gradient time: 0.002619198
+Gradient time: 0.002466619
+Gradient time: 0.00208072
+Gradient time: 0.001743556
+Gradient time: 0.002363506
+loss: 0.8097604347531022
+Forward time: 0.085283663
+loss: 0.527894783466735
+Forward time: 0.08850267
+loss: 0.5279013939131807
+Forward time: 0.088947373
+loss: 0.7874224469103981
+Forward time: 0.089184776
+Gradient time: 0.00168168
+Gradient time: 0.001856925
+loss: 0.9890849626922226
+Forward time: 0.004678409
+Gradient time: 0.002045029
+Gradient time: 0.002762414
+loss: 0.43162994621430906
+loss: 0.5277344653784286
+Forward time: 0.002140167
+Gradient time: 0.003093678
+loss: 0.5278996075518543
+Forward time: 0.002468896
+Gradient time: 0.001712467
+Forward time: 0.003367243
+loss: 0.5086625414747912
+Forward time: 0.100623535
+Gradient time: 0.091199094
+loss: 0.8784048174274436
+Forward time: 0.096774393
+loss: 0.5278571413650459
+Forward time: 0.003199775
+Gradient time: 0.003145951
+loss: 0.43162994621430895
+Gradient time: 0.002011546
+Forward time: 0.099712075
+Gradient time: 0.002840709
+Gradient time: 0.001766989
+loss: 0.523765200344347
+Forward time: 0.090645151
+loss: 0.5272624664838952
+Gradient time: 0.008334707
+loss: 0.5086625414747915
+Forward time: 0.091565715
+Forward time: 0.091244824
+loss: 0.4932975278563011
+Forward time: 0.003161078
+Gradient time: 0.003097728
+loss: 0.5026893897292741
+Forward time: 0.003205139
+Gradient time: 0.003030363
+Gradient time: 0.003296558
+Gradient time: 0.00233607
+loss: 0.4457237568793362
+Forward time: 0.002919562
+Gradient time: 0.002589584
+loss: 0.6894891228422965
+Forward time: 0.002862857
+loss: 0.6537195269746255
+Forward time: 0.002794921
+loss: 0.42734336723501565
+Forward time: 0.002427723
+loss: 0.32106034086724655
+Forward time: 0.00221233
+Gradient time: 0.002280108
+Gradient time: 0.001876626
+Gradient time: 0.002512237
+Gradient time: 0.001930363
+loss: 0.42734336723501554
+Forward time: 0.001757867
+loss: 0.5272564889721733
+Forward time: 0.002541834
+loss: 0.923154463515484
+Forward time: 0.00198506
+Gradient time: 0.002390729
+Gradient time: 0.001697501
+loss: 0.32106034086724655
+Forward time: 0.097926718
+Gradient time: 0.001753613
+loss: 0.5048800632982935
+Forward time: 0.092804448
+loss: 0.41765414012621027
+Forward time: 0.089278588
+Gradient time: 0.090464955
+Gradient time: 0.091289111
+loss: 0.5272463376773433
+Forward time: 0.022841938
+loss: 0.2648379135501797
+Gradient time: 0.002419305
+Forward time: 0.023147602
+Gradient time: 0.001484555
+Gradient time: 0.001710564
+loss: 0.5272463376773433
+Forward time: 0.00144929
+loss: 0.14253134156920844
+Forward time: 0.001606342
+Gradient time: 0.001422223
+Gradient time: 0.002972397
+Gradient time: 0.067598039
+loss: 0.5048800632982935
+Forward time: 0.071360917
+loss: 0.06151028432774952
+Forward time: 0.068192819
+Gradient time: 0.090250764
+loss: 0.705626858942026
+Forward time: 0.114069029
+loss: 0.07349280931533797
+loss: 0.6579745633513526
+Forward time: 0.311177758
+Gradient time: 0.003038639
+Forward time: 0.120692981
+loss: 0.044578939045576305
+Forward time: 0.08924512
+Gradient time: 0.079790805
+Gradient time: 0.081988539
+Gradient time: 0.003009037
+loss: 0.38235146710115075
+Forward time: 0.005358647
+loss: 0.5272463290278693
+Forward time: 0.005012269
+loss: 0.07349280931533797
+Forward time: 0.00296937
+Gradient time: 0.00289502
+Gradient time: 0.002768244
+loss: 0.38235000819786147
+Gradient time: 0.010650473
+Gradient time: 0.092553792
+loss: 0.048629634522951326
+loss: 0.03580487346095307
+Forward time: 0.202030032
+loss: 0.5268147503105876
+Forward time: 0.202193784
+loss: 0.46051850957562324
+Forward time: 0.092377536
+Forward time: 0.096260964
+Forward time: 0.399994459
+Gradient time: 0.001585131
+Gradient time: 0.001933795
+Gradient time: 0.002679043
+Gradient time: 0.096533578
+Gradient time: 0.003037361
+loss: 0.38235000819786147
+Forward time: 0.008541017
+loss: 0.041239033930087654
+Forward time: 0.009151012
+loss: 0.35294786007183576
+loss: 0.0344384603128165
+Forward time: 0.009276879
+Forward time: 0.008170261
+loss: 0.5249854619637616
+Forward time: 0.097073012
+Gradient time: 0.088067545
+Gradient time: 0.001569196
+Gradient time: 0.088844854
+loss: 0.35294786007183576
+Forward time: 0.001507993
+Gradient time: 0.002981673
+loss: 0.040309905533220114
+Forward time: 0.003102181
+loss: 0.034237430194527185
+Forward time: 0.005114784
+Gradient time: 0.090061844
+Gradient time: 0.001515788
+Gradient time: 0.006838894
+loss: 0.5327137767187942
+Forward time: 0.102620578
+loss: 0.5278786163231823
+loss: 0.03950819801929728
+Forward time: 0.005333674
+Gradient time: 0.003054075
+Gradient time: 0.003038693
+Gradient time: 0.090873498
+loss: 0.5234559161190675
+Forward time: 0.0927153
+Forward time: 0.010432946
+loss: 0.23598782476038138
+Forward time: 0.099873845
+loss: 0.03816454417435722
+Gradient time: 0.002839726
+Gradient time: 0.0035363
+Forward time: 0.007089308
+Gradient time: 0.002648632
+loss: 0.5234559161190675
+Forward time: 0.00614679
+loss: 0.0327038280822608
+loss: 0.3933873895776021
+loss: 0.07822154692037997
+Forward time: 0.099063945
+Forward time: 0.199065709
+Forward time: 0.099267874
+Gradient time: 0.006633696
+Gradient time: 0.003841336
+loss: 0.03608005304399742
+Gradient time: 0.003314681
+Gradient time: 0.003576046
+Gradient time: 0.003258603
+Forward time: 0.003154413
+loss: 0.38234914857436453
+Forward time: 0.002944339
+loss: 0.9167544335855613
+loss: 0.031869232558199956
+loss: 0.05670723164036062
+Forward time: 0.003385356
+Forward time: 0.003370996
+Forward time: 0.003516561
+Gradient time: 0.003544372
+Gradient time: 0.002328252
+Gradient time: 0.002647251
+Gradient time: 0.003136373
+loss: 0.033797331340208236
+loss: 0.06804599232773834
+Forward time: 0.087725493
+Forward time: 0.089706224
+Gradient time: 0.002843651
+loss: 0.04218390946421946
+Forward time: 0.002302857
+loss: 0.5323889068331651
+Forward time: 0.003695751
+Gradient time: 0.002728839
+Gradient time: 0.003696752
+Gradient time: 0.02937589
+loss: 0.047377775057707794
+Forward time: 0.029538605
+loss: 0.04033019458594511
+Forward time: 0.003525201
+loss: 0.03633141965322806
+Forward time: 0.00551444
+Gradient time: 0.001858489
+Gradient time: 0.063206677
+Gradient time: 0.029454495
+Gradient time: 0.069577202
+loss: 0.039372488534017425
+Forward time: 0.002121048
+loss: 0.521581467842515
+Forward time: 0.10360043
+loss: 0.04067533005010415
+Gradient time: 0.002208589
+loss: 0.03332040133823855
+Forward time: 0.104240752
+Forward time: 0.101992205
+Gradient time: 0.002268658
+Gradient time: 0.003666357
+Gradient time: 0.003720622
+loss: 0.03332040133823855
+Forward time: 0.00255078
+loss: 0.521581467842515
+Forward time: 0.003148485
+loss: 0.03996706301738551
+Forward time: 0.003437003
+Gradient time: 0.002362416
+Gradient time: 0.002484775
+loss: 0.032287554969547605
+Forward time: 0.085602758
+Gradient time: 0.00278983
+Gradient time: 0.002749488
+loss: 0.039088008822533604
+Forward time: 0.002705684
+loss: 0.5132105560276533
+Forward time: 0.003808829
+Gradient time: 0.002738609
+Gradient time: 0.002885851
+loss: 0.0385111379879044
+Forward time: 0.002615428
+loss: 0.48844853076929007
+Forward time: 0.002652245
+Gradient time: 0.002196419
+Gradient time: 0.002250007
+loss: 0.03675665179651544
+Forward time: 0.002525568
+loss: 0.3958637504057061
+Forward time: 0.002499815
+Gradient time: 0.002057722
+loss: 0.0348182457929187
+Gradient time: 0.002355979
+Forward time: 0.001968411
+Gradient time: 0.00180075
+loss: 0.14736096836928936
+Forward time: 0.003066453
+loss: 0.033280476989516417
+Forward time: 0.001868457
+Gradient time: 0.001609671
+loss: 0.0902368593676588
+Forward time: 0.001835027
+Gradient time: 0.001824726
+loss: 0.03234014141318109
+Forward time: 0.002229316
+Gradient time: 0.002973857
+loss: 0.04619708667266398
+Forward time: 0.069913388
+Gradient time: 0.073108097
+Gradient time: 0.002592718
+loss: 0.042842041755960625
+Forward time: 0.002308163
+Gradient time: 0.001867713
+Selected best candidate with loss=0.031869232558199956
+Running main optimization step 1 with LBFGS (maxiters=12, use_gpu=false)...
+loss: 0.031869232558199956
+Forward time: 0.001448483
+Gradient time: 0.001510171
+loss: 0.031844657054355574
+Forward time: 0.001607473
+Gradient time: 0.001530684
+loss: 0.03165431514475314
+Forward time: 0.001429847
+Gradient time: 0.001422863
+loss: 0.03165431514475314
+Forward time: 0.001414748
+Gradient time: 0.001397816
+loss: 0.031597831031577095
+Forward time: 0.001403506
+Gradient time: 0.00143598
+loss: 0.031524672061326586
+Forward time: 0.001452418
+Gradient time: 0.001433275
+loss: 0.03123380772555251
+Forward time: 0.00143521
+Gradient time: 0.001423616
+loss: 0.030756033962784035
+Forward time: 0.001419685
+Gradient time: 0.00142986
+loss: 0.0297841855920431
+Forward time: 0.001404363
+Gradient time: 0.001425676
+loss: 0.028843353264026317
+Forward time: 0.001413502
+Gradient time: 0.001408081
+loss: 0.027685321051874268
+Forward time: 0.001405125
+Gradient time: 0.001390829
+loss: 0.02675330200819559
+Forward time: 0.001409325
+Gradient time: 0.00139103
+loss: 0.02620824469232086
+Forward time: 0.001390084
+Gradient time: 0.043571639
+loss: 0.02459302298711674
+Forward time: 0.001710418
+Gradient time: 0.001669117
+loss: 0.022833383836507015
+Forward time: 0.001661595
+Gradient time: 0.001638362
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 12, Final |g|: 0.02978578088447162)
+  Optimization Complete:
+    Final Loss (overlap): 0.022833383836507015
+    Stopping Reason (Stage 1 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 12, Final |g|: 0.02978578088447162)
+    Fidelity (Overlap^2):   0.977166616163493
+saving shared data...
+Initial optimization completed:
+  Recorded loss evaluations count: 13
+  Initial loss: 0.031869232558199956
+  Final loss: 0.022833383836507015
+
+--- Step 2: Running continuation optimization on same U index (maxiters = 15) ---
+
+--- Scanning U index: 20 (U = 4.75) ---
+  Resuming from existing optimization history (13 prior iterations)
+Initial loss (overlap): 0.5279014834095195
+Running main optimization step 1 with LBFGS (maxiters=15, use_gpu=false)...
+loss: 0.022833383836507015
+Forward time: 0.00148585
+Gradient time: 0.001507381
+loss: 0.02200812056279078
+Forward time: 0.001461747
+Gradient time: 0.001483085
+loss: 0.02124065432097999
+Forward time: 0.001458734
+Gradient time: 0.001548801
+loss: 0.020937240882469288
+Forward time: 0.001454464
+Gradient time: 0.001539459
+loss: 0.020141866715336354
+Forward time: 0.00152222
+Gradient time: 0.001532913
+loss: 0.018756996873356746
+Forward time: 0.001796586
+Gradient time: 0.001551276
+loss: 0.015819625704217355
+Forward time: 0.001541805
+Gradient time: 0.001612271
+loss: 0.013832459734170577
+Forward time: 0.001569098
+Gradient time: 0.001575885
+loss: 0.011117133969208437
+Forward time: 0.001549125
+Gradient time: 0.001607186
+loss: 0.009863106273399369
+Forward time: 0.001561416
+Gradient time: 0.001631766
+loss: 0.009448183712468028
+Forward time: 0.001546258
+Gradient time: 0.001653333
+loss: 0.008634297017692139
+Forward time: 0.001562696
+Gradient time: 0.001639335
+loss: 0.00816082586398792
+Forward time: 0.001575993
+Gradient time: 0.001633217
+loss: 0.007817944288679435
+Forward time: 0.001556905
+Gradient time: 0.001633099
+loss: 0.0074057225867352194
+Forward time: 0.001548436
+Gradient time: 0.001635402
+loss: 0.006784976015156152
+Forward time: 0.001578075
+Gradient time: 0.001607633
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 15, Final |g|: 0.014890717405072855)
+  Optimization Complete:
+    Final Loss (overlap): 0.006784976015156152
+    Stopping Reason (Stage 1 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 12, Final |g|: 0.02978578088447162)
+    Stopping Reason (Stage 1 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 15, Final |g|: 0.014890717405072855)
+    Fidelity (Overlap^2):   0.9932150239848438
+saving shared data...
+Continuation optimization completed:
+  Total accumulated loss evaluations count: 29
+  Prior loss evaluations count: 13
+  New loss evaluations added: 16
+  Initial loss (start of Step 1): 0.031869232558199956
+  Step 1 final loss: 0.022833383836507015
+  Step 2 final loss: 0.006784976015156152
+
+--- Step 3: Verifying extract_losses_from_file compatibility ---
+  Extracted total loss length: 42 (was_multistart=true)
+
+Cleaned up temporary test directory: /tmp/jl_mrP2Wf
+
+=================================================================
+ALL TROTTER RESUME AND LOSS HISTORY TESTS PASSED SUCCESSFULLY!
+=================================================================

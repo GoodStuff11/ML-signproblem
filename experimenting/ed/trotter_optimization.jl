@@ -13,7 +13,7 @@ using ..Trotter: @safe_threads
 using JLD2
 using Statistics
 
-export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state, extract_convergence_info
+export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state, extract_convergence_info, grow_coefficients
 
 """
     extract_convergence_info(sol) -> Dict{String, Any}
@@ -651,6 +651,36 @@ function find_multi_start_initialization(f, optf, M::Int;
 end
 
 """
+    grow_coefficients(old_coeffs, old_num_exponentials, new_num_exponentials, num_gates) -> Vector{Float64}
+
+Extend a Trotter coefficient vector that was optimized for `old_num_exponentials` layers into
+one usable for a larger `new_num_exponentials`, so the newly-added (later) layers can be
+optimized starting from an already-converged shorter ansatz instead of from scratch.
+
+Coefficients are stored as `new_num_exponentials * num_gates` contiguous per-layer blocks
+(layer `l`'s parameters live at `A[(l-1)*num_gates+1 : l*num_gates]`, matching
+[`apply_unitary`](@ref) / [`apply_unitary_checkpoints`](@ref)), and layer 1 is applied first
+(closest to the reference state). Growing therefore keeps `old_coeffs` unchanged as the first
+`old_num_exponentials` (earlier) layers, and appends zeros for the new (later) layers, ready to
+be optimized.
+
+`new_num_exponentials` must be `>= old_num_exponentials`, and `length(old_coeffs)` must equal
+`old_num_exponentials * num_gates`.
+"""
+function grow_coefficients(old_coeffs::AbstractVector, old_num_exponentials::Int, new_num_exponentials::Int, num_gates::Int)
+    if new_num_exponentials < old_num_exponentials
+        error("new_num_exponentials ($new_num_exponentials) must be >= old_num_exponentials ($old_num_exponentials)")
+    end
+    old_len = old_num_exponentials * num_gates
+    if length(old_coeffs) != old_len
+        error("length(old_coeffs) = $(length(old_coeffs)) does not match old_num_exponentials * num_gates = $old_len")
+    end
+    new_coeffs = zeros(Float64, new_num_exponentials * num_gates)
+    new_coeffs[1:old_len] .= old_coeffs
+    return new_coeffs
+end
+
+"""
     optimize_unitary(gates, tau_terms, ref, target, basis, N; kwargs...)
 
 Optimize the parameter vector A of length `num_exponentials * length(gates)` to minimize
@@ -669,6 +699,8 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     multi_start_samples::Int=5,
     multi_start_iters::Int=30,
     initial_coefficients::Union{AbstractVector,Nothing}=nothing,
+    initial_history::Vector{Float64}=Float64[],
+    loaded_metrics::Union{Dict,Nothing}=nothing,
     antihermitian::Bool=false,
     use_gpu::Bool=false,
     datatype::Type{<:Number}=ComplexF64,
@@ -707,7 +739,11 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     end
 
     metrics = Dict{String,Vector{Any}}()
-    metrics["loss"] = Float64[initial_loss]
+    if !isnothing(loaded_metrics) && haskey(loaded_metrics, "loss") && !isempty(loaded_metrics["loss"])
+        metrics["loss"] = copy(loaded_metrics["loss"])
+    else
+        metrics["loss"] = Float64[initial_loss]
+    end
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
     metrics["optimization_losses"] = Vector{Float64}[]
@@ -715,8 +751,13 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     metrics["best_start_idx"] = Int[]
     metrics["convergence_info"] = Vector{Dict{String,Any}}[]
     metrics["stopping_reasons"] = Vector{String}[]
-    if loss_type == :overlap
+    if !isnothing(loaded_metrics) && haskey(loaded_metrics, "energy") && !isempty(loaded_metrics["energy"])
+        metrics["energy"] = copy(loaded_metrics["energy"])
+    elseif loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H_mat) ? real(dot(ref, H_mat * ref)) : NaN]
+    end
+    if !isnothing(loaded_metrics) && haskey(loaded_metrics, "overlap") && !isempty(loaded_metrics["overlap"])
+        metrics["overlap"] = copy(loaded_metrics["overlap"])
     elseif loss_type == :energy
         metrics["overlap"] = Float64[!isnothing(state2_vec) ? (1.0 - abs2(dot(state2_vec, ref))) : NaN]
     end
@@ -754,7 +795,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     optimizers = (optimizer isa AbstractVector) ? optimizer : [optimizer]
     curr_A = copy(A_init)
     curr_loss = initial_loss
-    final_history = Float64[]
+    final_history = copy(initial_history)
     stage_convergence_info = Dict{String,Any}[]
 
     cb = (state, loss_val) -> begin
@@ -783,11 +824,23 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
 
     push!(metrics["loss"], curr_loss)
     push!(metrics["optimization_losses"], final_history)
-    push!(metrics["convergence_info"], stage_convergence_info)
-    push!(metrics["stopping_reasons"], [info["primary_reason"] for info in stage_convergence_info])
+
+    if !isnothing(loaded_metrics) && haskey(loaded_metrics, "convergence_info") && !isempty(loaded_metrics["convergence_info"])
+        prev_stages = loaded_metrics["convergence_info"][1]
+        all_conv = vcat(prev_stages, stage_convergence_info)
+        push!(metrics["convergence_info"], all_conv)
+        push!(metrics["stopping_reasons"], [info["primary_reason"] for info in all_conv])
+    else
+        push!(metrics["convergence_info"], stage_convergence_info)
+        push!(metrics["stopping_reasons"], [info["primary_reason"] for info in stage_convergence_info])
+    end
+
     if multistart_run
         push!(metrics["multistart_losses"], local_multistart_losses)
         push!(metrics["best_start_idx"], local_best_start_idx)
+    elseif !isnothing(loaded_metrics) && haskey(loaded_metrics, "multistart_losses") && !isempty(loaded_metrics["multistart_losses"])
+        push!(metrics["multistart_losses"], loaded_metrics["multistart_losses"][1])
+        push!(metrics["best_start_idx"], get(loaded_metrics, "best_start_idx", [0])[1])
     else
         push!(metrics["multistart_losses"], Vector{Float64}[])
         push!(metrics["best_start_idx"], 0)
@@ -836,6 +889,23 @@ end
 
 Scan over a range of U interaction parameters, optimizing Trotter parameters at each step.
 Analogous to `interaction_scan_map_to_state` in `ed_optimization.jl`.
+
+# Growing from a smaller ansatz (`grow_from_num_exponentials`)
+When increasing `num_exponentials` (via `instructions["num_exponentials"]`) beyond what was
+previously optimized, pass `grow_from_num_exponentials` (the old, smaller layer count) and
+`grow_from_save_name` (the `build_save_name_prefix(...)` prefix those older, per-`u_idx`
+`\$(save_folder)/\$(grow_from_save_name)_u_\$(u_idx).jld2"` files were saved under) to bootstrap
+the new (later) layers from the existing optimized (earlier) ones instead of starting from
+scratch. [`grow_coefficients`](@ref) keeps the loaded coefficients as the first
+`grow_from_num_exponentials` layers and zero-initializes the rest for optimization. This only
+takes effect where there is no already-resumable file at the *current* `num_exponentials` for
+that `u_idx` (an existing same-size file, e.g. from a partially-completed run, always takes
+precedence). Two ways of seeding across the `u_range` are supported via `grow_mode`:
+- `:chain` (default): grow only once, from `grow_from_save_name`'s file at the first `u_idx` in
+  `instructions["u_range"]`. Every subsequent `u_idx` warm-starts from the *previous* `u_idx`'s
+  just-optimized (already-grown) coefficients, exactly like the normal scan behavior.
+- `:per_u`: grow independently at *every* `u_idx`, always reloading `grow_from_save_name`'s file
+  for that same `u_idx` rather than chaining from the neighboring `u_idx`'s grown result.
 """
 function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any},
     gates, tau_terms, basis, N::Int;
@@ -854,19 +924,35 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     antihermitian::Bool=get(instructions, "antihermitian", false),
     use_gpu::Bool=false,
     datatype::Type{<:Number}=ComplexF64,
-    metric_functions::Dict{String,Function}=Dict{String,Function}()
+    metric_functions::Dict{String,Function}=Dict{String,Function}(),
+    grow_from_num_exponentials::Union{Int,Nothing}=nothing,
+    grow_from_save_name::Union{String,Nothing}=nothing,
+    grow_mode::Symbol=:chain
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
     instructions["antihermitian"] = antihermitian
 
+    if !isnothing(grow_from_num_exponentials)
+        if isnothing(grow_from_save_name)
+            error("grow_from_save_name must be provided when grow_from_num_exponentials is set")
+        end
+        if isnothing(save_folder)
+            error("save_folder must be provided when grow_from_num_exponentials is set (the grow-from files are looked up under it)")
+        end
+        if grow_mode ∉ (:chain, :per_u)
+            error("Invalid grow_mode: $grow_mode. Valid options are :chain, :per_u.")
+        end
+    end
+
     data_dict = Dict{String,Any}("norm1_metrics" => [], "norm2_metrics" => [],
         "loss_metrics" => [], "labels" => [], "loss_std_metrics" => [], "all_matrices" => [],
         "coefficients" => [], "coefficient_labels" => nothing, "param_mapping" => nothing, "parities" => nothing)
 
-    if haskey(instructions, "load_file")
-        dic = JLD2.load(instructions["load_file"])["dict"]
-        current_coeffs = dic["coefficients"]
+    loaded_dict = nothing
+    if haskey(instructions, "load_file") && isfile(instructions["load_file"])
+        loaded_dict = JLD2.load(instructions["load_file"])["dict"]
+        current_coeffs = loaded_dict["coefficients"]
     else
         current_coeffs = initial_coefficients
     end
@@ -888,6 +974,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     has_prepended_ref = !isnothing(u_vals) && (degen_rm_U isa AbstractMatrix) && (size(degen_rm_U, 1) == length(u_vals) + 1)
     target_state_idx(idx) = has_prepended_ref ? idx + 1 : idx
+
+    num_gates = length(gates)
+    grown_once = false
 
     for u_idx in u_indices
         u_val_str = isnothing(u_vals) ? "" : " (U = $(u_vals[u_idx]))"
@@ -921,6 +1010,38 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         opt_target = (loss_type == :energy) ? H : state2
 
+        # Check if loaded file is for the current U index (resuming/continuing optimization)
+        is_current_u_resume = !isnothing(loaded_dict) && (
+            (haskey(loaded_dict, "u_idx") && loaded_dict["u_idx"] == u_idx) ||
+            (length(u_indices) == 1 && haskey(instructions, "load_file"))
+        )
+
+        init_history = Float64[]
+        loaded_m = nothing
+        if is_current_u_resume && haskey(loaded_dict, "metrics")
+            loaded_m = loaded_dict["metrics"]
+            if haskey(loaded_m, "optimization_losses") && !isempty(loaded_m["optimization_losses"])
+                init_history = copy(loaded_m["optimization_losses"][1])
+                println("  Resuming from existing optimization history ($(length(init_history)) prior iterations)")
+            end
+        end
+
+        # Bootstrap a larger ansatz from an existing smaller one (see docstring above for
+        # :chain vs :per_u). Only applies when there is no already-resumable file at the
+        # *current* num_exponentials for this u_idx (is_current_u_resume takes precedence).
+        if !is_current_u_resume && !isnothing(grow_from_num_exponentials) &&
+           (grow_mode == :per_u || (grow_mode == :chain && !grown_once))
+            grow_file = joinpath(save_folder, "$(grow_from_save_name)_u_$(u_idx).jld2")
+            if isfile(grow_file)
+                old_coeffs = JLD2.load(grow_file)["dict"]["coefficients"]
+                println("  Growing initial coefficients from num_exponentials=$(grow_from_num_exponentials) to $(num_exponentials) using $grow_file")
+                current_coeffs = grow_coefficients(old_coeffs, grow_from_num_exponentials, num_exponentials, num_gates)
+                grown_once = true
+            else
+                @warn "grow_from_num_exponentials set but no file found for u_idx=$u_idx: $grow_file. Falling back to default initialization."
+            end
+        end
+
         A_opt, final_loss, metrics = optimize_unitary(
             gates, tau_terms, state1, opt_target, basis, N;
             loss_type=loss_type,
@@ -934,6 +1055,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             multi_start_samples=multi_start_samples,
             multi_start_iters=multi_start_iters,
             initial_coefficients=current_coeffs,
+            initial_history=init_history,
+            loaded_metrics=loaded_m,
             antihermitian=antihermitian,
             use_gpu=use_gpu,
             datatype=datatype,
@@ -945,6 +1068,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         end
 
         current_coeffs = A_opt
+        loaded_dict = nothing # Consume loaded dictionary so subsequent U indices start fresh
 
         # Store results for this U
         push!(data_dict["norm1_metrics"], [norm(A_opt, 1)])

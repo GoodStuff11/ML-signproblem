@@ -5,7 +5,7 @@ Run pruning analysis on a set of optimized unitary parameter mapping files.
 Supports both exact exponential (unitary map) and Trotterized optimizations.
 
 Usage:
-  julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>]
+  julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>] [--use_gpu=<bool>] [--datatype=<type>]
 
 Arguments:
   folder (optional): The path to the folder containing optimization files. Default: "N=(4, 4)_3x3_2".
@@ -13,7 +13,28 @@ Arguments:
   --custom_ref_state (optional): The custom reference state to use (e.g. "slater" or an integer index). Default: nothing.
   --antihermitian (optional): Whether antihermitian generators were used. Default: false.
   --loss (optional): The loss function used during optimization. Default: "overlap".
+  --use_gpu (optional): Enable GPU acceleration for Trotter overlap calculations. Default: false.
+                     Valid options:
+                     - "--use_gpu" or "--use_gpu=true": Enable CUDA acceleration.
+                     - "--use_gpu=false": Disable GPU acceleration (CUDA is not loaded to preserve @safe_threads compatibility).
+  --datatype (optional): Data type for GPU vector and matrix operations. Default: ComplexF64.
+                     Valid options: ComplexF64, ComplexF32, Float64, Float32.
 =#
+
+# Pre-scan ARGS for GPU flag before loading CUDA package
+_use_gpu_prescan = let val = false
+    for arg in ARGS
+        if arg == "--use_gpu" || arg == "--use_gpu=true"
+            val = true
+        end
+    end
+    val
+end
+
+if _use_gpu_prescan
+    ENV["JULIA_CUDA_USE_COMPAT"] = "true"
+    using CUDA
+end
 
 using Lattices
 using LinearAlgebra
@@ -55,6 +76,8 @@ function parse_arguments(args::Vector{String})
     custom_ref_state_arg = nothing
     antihermitian = false
     loss_type = :overlap
+    use_gpu = false
+    datatype = ComplexF64
     positional = String[]
 
     for arg in args
@@ -84,6 +107,23 @@ function parse_arguments(args::Vector{String})
             else
                 error("Invalid --loss: '$val'. Valid options: 'overlap', 'energy'")
             end
+        elseif arg == "--use_gpu" || arg == "--use_gpu=true"
+            use_gpu = true
+        elseif arg == "--use_gpu=false"
+            use_gpu = false
+        elseif startswith(arg, "--datatype=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val == "ComplexF64"
+                datatype = ComplexF64
+            elseif val == "ComplexF32"
+                datatype = ComplexF32
+            elseif val == "Float64"
+                datatype = Float64
+            elseif val == "Float32"
+                datatype = Float32
+            else
+                error("Invalid --datatype option: '$val'. Valid options: 'ComplexF64', 'ComplexF32', 'Float64', 'Float32'.")
+            end
         elseif startswith(arg, "--")
             error("Unknown option: $arg")
         else
@@ -95,7 +135,7 @@ function parse_arguments(args::Vector{String})
         folder = data_folder(positional[1])
     end
 
-    return folder, type, custom_ref_state_arg, antihermitian, loss_type
+    return folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype
 end
 
 function get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type)
@@ -126,7 +166,7 @@ function get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, a
     return prefix
 end
 
-function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type)
+function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype)
     sign_convention = type == :trotter ? :spin_first : :coordinate_first
     use_slater_ref = custom_ref_state_arg == "slater"
     U_values, target_vecs, indexer, _, N, _, use_symmetry, sign_convention =
@@ -194,7 +234,7 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     @safe_threads for k in 1:num_maps
         iter_data = load_saved_dict(iter_files[k])
         ending_U_index = iter_data["u_idx"]
-        state2 = target_vecs[ending_U_index+(use_slater_ref ? 1 : 0), :]
+        state2 = target_vecs[ending_U_index, :]
 
         if type == :exact
             coeffs = iter_data["coefficients"]
@@ -280,10 +320,12 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
                 # Apply unitary sequence
                 psi = TrotterOptimization.apply_unitary(
                     A_pruned, gates, state1, basis_ints, N_sites, stored_num_exp;
-                    antihermitian=antihermitian
+                    antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype
                 )
 
-                mapped_overlap = state2' * psi
+                # Convert target to device if using GPU so dot product runs on-device
+                state2_dev = use_gpu ? TrotterOptimization.to_device_vector(state2, use_gpu, datatype) : state2
+                mapped_overlap = dot(state2_dev, psi)
                 true_loss = 1 - abs2(mapped_overlap)
 
                 removed_terms[l, ending_U_index] = removed_count
@@ -296,8 +338,8 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     save_path = joinpath(folder, "pruning_analysis_$(prefix).jld2")
     println("Saving results to: ", save_path)
     JLD2.jldsave(save_path; error_data=error_data, removed_terms=removed_terms, thresholds=thresholds)
-    println(size(error_data))
-    display(error_data[1:50, 50])
+    changing_indices = diff(removed_terms[:, 50]) .> 0
+    display(error_data[1:length(changing_indices), 50][changing_indices][1:min(50, sum(changing_indices))])
     println("\n=== SUMMARY STATISTICS ===")
     println("Largest threshold applied: ", thresholds[end])
     println("Total optimizable parameters per mapped unitary sequence: ", total_params)
@@ -324,7 +366,9 @@ end
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_pruning_analysis")
     with_logging(log_path) do
-        folder, type, custom_ref_state_arg, antihermitian, loss_type = parse_arguments(ARGS)
-        run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type)
+        folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype = parse_arguments(ARGS)
+        println("Use GPU: $use_gpu")
+        println("Data Type: $datatype")
+        run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype)
     end # with_logging
 end
