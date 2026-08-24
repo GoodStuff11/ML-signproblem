@@ -1,0 +1,48 @@
+================================================================================
+Timestamp: 2026-08-18T14:32:41.889
+Command run: julia testing/test_comm_szi_smsp_nullspace.jl 
+================================================================================
+================================================================================
+TEST SUITE: Intersection of Nullspaces of [S^z_i, S_- S_+] for all i
+================================================================================
+
+--- 1. Testing Operator Construction on 2x2 with (2,2) Fermions ---
+Sum of [S^z_i, S_- S_+] over all sites is identically zero (norm = 0.0).
+Subspace dimension: 36, Nullspace intersection dimension: 6
+Max ||[S^z_i, S_- S_+] v|| for all basis vectors and sites: 1.726179866916192e-15
+Identified 6 doubly-occupied singlet states forming the nullspace:
+  State 1: occupied sites = [(0, 0), (0, 1)]
+  State 2: occupied sites = [(0, 1), (1, 1)]
+  State 3: occupied sites = [(0, 0), (1, 0)]
+  State 4: occupied sites = [(0, 1), (1, 0)]
+  State 5: occupied sites = [(1, 1), (1, 0)]
+  State 6: occupied sites = [(0, 0), (1, 1)]
+Test Summary:                                                 | Pass  Total   Time
+1. Operator Construction and Properties on 2x2 Subspace (2,2) |   49     49  17.1s
+
+--- 2. Testing Multiple Sectors on 2x2 Lattice ---
+  Sector (0, 0): dim = 1   | nullspace intersection dim = 1   (Passed)
+  Sector (1, 0): dim = 4   | nullspace intersection dim = 4   (Passed)
+  Sector (1, 1): dim = 16  | nullspace intersection dim = 4   (Passed)
+  Sector (2, 0): dim = 6   | nullspace intersection dim = 6   (Passed)
+  Sector (2, 1): dim = 24  | nullspace intersection dim = 12  (Passed)
+  Sector (2, 2): dim = 36  | nullspace intersection dim = 6   (Passed)
+  Sector (3, 0): dim = 4   | nullspace intersection dim = 4   (Passed)
+  Sector (3, 1): dim = 16  | nullspace intersection dim = 12  (Passed)
+  Sector (3, 2): dim = 24  | nullspace intersection dim = 12  (Passed)
+  Sector (3, 3): dim = 16  | nullspace intersection dim = 4   (Passed)
+  Sector (4, 0): dim = 1   | nullspace intersection dim = 1   (Passed)
+  Sector (4, 4): dim = 1   | nullspace intersection dim = 1   (Passed)
+Test Summary:                                                             | Pass  Total  Time
+2. Nullspace Intersection Across Multiple Electron Sectors on 2x2 Lattice |  292    292  0.1s
+
+--- 3. Testing 1D 4-Site Chain & 3x2 Lattice ---
+  4-site chain (2,2): dim = 36 | nullspace intersection dim = 6 (Passed)
+  3x2 lattice (3,3): total subspace dim = 400
+  3x2 lattice (3,3): dim = 400 | nullspace intersection dim = 20 (Passed)
+Test Summary:                            | Pass  Total  Time
+3. 1D 4-Site Chain and 3x2 Lattice Tests |  147    147  1.0s
+
+================================================================================
+ALL NULLSPACE INTERSECTION TESTS COMPLETED SUCCESSFULLY!
+================================================================================

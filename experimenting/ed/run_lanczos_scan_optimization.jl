@@ -82,6 +82,7 @@ end
 using Dates
 
 
+include("data_path.jl")
 include("utility_functions.jl")
 include("ed_objects.jl")
 include("ed_functions.jl")
@@ -155,7 +156,7 @@ function parse_arguments(args::Vector{String})
     if length(filtered_args) < 1
         error("Please input a folder. Ex: data/N=(2, 2)_2x2")
     end
-    folder = filtered_args[1]
+    folder = data_folder(filtered_args[1])
 
     u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
     u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing

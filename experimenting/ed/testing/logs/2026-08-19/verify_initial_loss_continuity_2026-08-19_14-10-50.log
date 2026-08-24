@@ -1,0 +1,406 @@
+================================================================================
+Timestamp: 2026-08-19T14:10:50.124
+Command run: julia testing/verify_initial_loss_continuity.jl 
+================================================================================
+================================================================================
+STARTING VERIFICATION OF INITIAL LOSS CONTINUITY & DATATYPE HANDLING
+================================================================================
+Computing slater ground state for sector 0
+
+--- TEST 1: Initial Optimization (num_exponentials=1, maxiters=10) ---
+Sampling 5 initial configurations for multi-start...┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+
+loss: 0.86228836
+Forward time: 10.170318446
+Gradient time: 1.055624389
+loss: 0.8625528
+Forward time: 0.031792242
+Gradient time: 0.073664577
+loss: 0.862556
+Forward time: 0.025729151
+Gradient time: 0.071802865
+loss: 0.86255664
+Forward time: 0.02569242
+Gradient time: 0.07243488
+loss: 0.86255467
+Forward time: 0.025631354
+Gradient time: 0.070972208
+Performing quick optimization on top 5 candidates...
+┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+loss: 0.86228836
+Forward time: 0.0267889
+Gradient time: 0.074063643
+loss: 0.40224612
+Forward time: 0.025357969
+Gradient time: 0.071109684
+loss: 0.81598896
+Forward time: 0.025047215
+Gradient time: 0.070600875
+loss: 0.58746403
+Forward time: 0.02514093
+Gradient time: 0.070516058
+loss: 0.39712387
+Forward time: 0.02507251
+Gradient time: 0.068964486
+loss: 0.40726745
+Forward time: 0.025048259
+Gradient time: 0.069423973
+loss: 0.26503712
+Forward time: 0.025026937
+Gradient time: 0.068471791
+loss: 0.26503712
+Forward time: 0.024950242
+Gradient time: 0.068177563
+loss: 0.24888402
+Forward time: 0.024843212
+Gradient time: 0.068168461
+loss: 0.24062216
+Forward time: 0.024983202
+Gradient time: 0.068160364
+loss: 0.21674126
+Forward time: 0.02490602
+Gradient time: 0.069325476
+loss: 0.21674126
+Forward time: 0.024875408
+Gradient time: 0.068137691
+loss: 0.20814669
+Forward time: 0.024861786
+Gradient time: 0.068036405
+loss: 0.19912672
+Forward time: 0.025106088
+Gradient time: 0.069101383
+loss: 0.19107813
+Forward time: 0.025122645
+Gradient time: 0.068121119
+loss: 0.17385656
+Forward time: 0.024924047
+Gradient time: 0.067972914
+loss: 0.86255664
+Forward time: 0.025020236
+Gradient time: 0.069287209
+loss: 0.40261114
+Forward time: 0.026794948
+Gradient time: 0.071761157
+loss: 0.81557536
+Forward time: 0.026420713
+Gradient time: 0.321732403
+loss: 0.589007
+Forward time: 0.024974606
+Gradient time: 0.067729599
+loss: 0.3989668
+Forward time: 0.024940166
+Gradient time: 0.067606742
+loss: 0.4094994
+Forward time: 0.024790978
+Gradient time: 0.067769351
+loss: 0.26650816
+Forward time: 0.024759317
+Gradient time: 0.067871715
+loss: 0.26650816
+Forward time: 0.024495583
+Gradient time: 0.067465691
+loss: 0.2535013
+Forward time: 0.024833574
+Gradient time: 0.067648221
+loss: 0.23770154
+Forward time: 0.024649513
+Gradient time: 0.067451763
+loss: 0.21043378
+Forward time: 0.024749552
+Gradient time: 0.067582391
+loss: 0.2003414
+Forward time: 0.024640666
+Gradient time: 0.067515275
+loss: 0.19490081
+Forward time: 0.024721372
+Gradient time: 0.067663821
+loss: 0.17430949
+Forward time: 0.024667218
+Gradient time: 0.06725618
+loss: 0.8625528
+Forward time: 0.024539607
+Gradient time: 0.067515533
+loss: 0.40262747
+Forward time: 0.024546094
+Gradient time: 0.067231869
+loss: 0.8155836
+Forward time: 0.024369219
+Gradient time: 0.067185546
+loss: 0.58898187
+Forward time: 0.024561556
+Gradient time: 0.067060585
+loss: 0.39897048
+Forward time: 0.024541553
+Gradient time: 0.067034464
+loss: 0.40925497
+Forward time: 0.024550587
+Gradient time: 0.0674397
+loss: 0.26657057
+Forward time: 0.024673514
+Gradient time: 0.068066852
+loss: 0.26657057
+Forward time: 0.025712434
+Gradient time: 0.069861775
+loss: 0.2536909
+Forward time: 0.025546129
+Gradient time: 0.070196884
+loss: 0.23754197
+Forward time: 0.026001572
+Gradient time: 0.070737527
+loss: 0.21045095
+Forward time: 0.026628996
+Gradient time: 0.071692923
+loss: 0.20033818
+Forward time: 0.026756548
+Gradient time: 0.07168195
+loss: 0.19489068
+Forward time: 0.026516408
+Gradient time: 0.077714483
+loss: 0.17427051
+Forward time: 0.026577886
+Gradient time: 0.07151091
+loss: 0.86255467
+Forward time: 0.026448088
+Gradient time: 0.071540256
+loss: 0.40262812
+Forward time: 0.026358143
+Gradient time: 0.071347679
+loss: 0.8155968
+Forward time: 0.026494587
+Gradient time: 0.071157174
+loss: 0.58899665
+Forward time: 0.026243634
+Gradient time: 0.071290273
+loss: 0.39899176
+Forward time: 0.026376603
+Gradient time: 0.071359004
+loss: 0.40923375
+Forward time: 0.026445831
+Gradient time: 0.071140267
+loss: 0.266599
+Forward time: 0.026384709
+Gradient time: 0.07133655
+loss: 0.266599
+Forward time: 0.026250625
+Gradient time: 0.071239743
+loss: 0.25376594
+Forward time: 0.026495442
+Gradient time: 0.071345919
+loss: 0.23750001
+Forward time: 0.026760519
+Gradient time: 0.854098086
+loss: 0.21046305
+Forward time: 0.025032541
+Gradient time: 0.069589807
+loss: 0.20033872
+Forward time: 0.024860989
+Gradient time: 0.069217341
+loss: 0.19488972
+Forward time: 0.024820778
+Gradient time: 0.067944272
+loss: 0.17426854
+Forward time: 0.024893292
+Gradient time: 0.067926357
+loss: 0.862556
+Forward time: 0.024617583
+Gradient time: 0.067555312
+loss: 0.40263116
+Forward time: 0.024536256
+Gradient time: 0.067749286
+loss: 0.81558526
+Forward time: 0.024534171
+Gradient time: 0.06750937
+loss: 0.58898747
+Forward time: 0.024818967
+Gradient time: 0.067567079
+loss: 0.39898437
+Forward time: 0.024828671
+Gradient time: 0.067664922
+loss: 0.40922034
+Forward time: 0.024658073
+Gradient time: 0.067440338
+loss: 0.26659024
+Forward time: 0.024555143
+Gradient time: 0.067347639
+loss: 0.26659024
+Forward time: 0.02455221
+Gradient time: 0.067354002
+loss: 0.25374073
+Forward time: 0.031865226
+Gradient time: 0.068721301
+loss: 0.23751372
+Forward time: 0.025133513
+Gradient time: 0.068773355
+loss: 0.2104572
+Forward time: 0.025213205
+Gradient time: 0.069293664
+loss: 0.20033854
+Forward time: 0.024998676
+Gradient time: 0.068479435
+loss: 0.1948899
+Forward time: 0.02488704
+Gradient time: 0.068297383
+loss: 0.17426735
+Forward time: 0.02482727
+Gradient time: 0.068421148
+Selected best candidate with loss=0.17385655641555786
+Initial loss (overlap): 0.17385656
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.17385656
+Forward time: 0.025204735
+Gradient time: 0.068997165
+loss: 0.15370011
+Forward time: 0.025225005
+Gradient time: 0.069892795
+loss: 0.13884783
+Forward time: 0.024858283
+Gradient time: 0.069676591
+loss: 0.105300784
+Forward time: 0.024730802
+Gradient time: 0.069027156
+loss: 0.08167577
+Forward time: 0.024909769
+Gradient time: 0.070257177
+loss: 0.0654518
+Forward time: 0.02514784
+Gradient time: 0.069195919
+loss: 0.058760047
+Forward time: 0.025057931
+Gradient time: 0.069149335
+loss: 0.052169263
+Forward time: 0.025093333
+Gradient time: 0.069004346
+loss: 0.049440384
+Forward time: 0.025216768
+Gradient time: 0.069378958
+loss: 0.04645616
+Forward time: 0.025298115
+Gradient time: 0.0693958
+loss: 0.04360217
+Forward time: 0.0248121
+Gradient time: 0.068303113
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.024205561727285385)
+Stage 0 Final Loss: 0.043602168560028076
+
+--- TEST 2: Resume Optimization (num_exponentials=1 from A_opt_1) ---
+Initial loss (overlap): 0.04360217
+Running main optimization step 1 with LBFGS (maxiters=5, use_gpu=true)...
+loss: 0.04360217
+Forward time: 0.026131156
+Gradient time: 0.071009964
+loss: 0.042473555
+Forward time: 0.025812914
+Gradient time: 0.070611664
+loss: 0.041389823
+Forward time: 0.02611185
+Gradient time: 0.071214503
+loss: 0.04024762
+Forward time: 0.025973431
+Gradient time: 0.0710793
+loss: 0.039370716
+Forward time: 0.026123218
+Gradient time: 0.070434264
+loss: 0.037586927
+Forward time: 0.02646381
+Gradient time: 0.071466288
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 5, Final |g|: 0.019385673105716705)
+Resumed Initial Loss (first step of callback): 0.043602168560028076
+Previous Final Loss:                          0.043602168560028076
+Difference: 0.0
+✓ TEST 2 PASSED: Resumed initial loss matches previous final loss!
+
+--- TEST 3: Grow Mode Chain (num_exponentials=1 -> 2 from A_opt_1) ---
+A_grown length: 864 (expected 864)
+Initial loss (overlap): 0.04360217
+Running main optimization step 1 with LBFGS (maxiters=5, use_gpu=true)...
+loss: 0.04360217
+Forward time: 0.051830958
+Gradient time: 0.143746221
+loss: 0.027276397
+Forward time: 0.052893415
+Gradient time: 0.144508757
+loss: 0.017259121
+Forward time: 0.053170945
+Gradient time: 0.144005746
+loss: 0.014186382
+Forward time: 0.053152157
+Gradient time: 0.143596249
+loss: 0.010031104
+Forward time: 0.05314789
+Gradient time: 0.143207458
+loss: 0.0070059896
+Forward time: 0.052989799
+Gradient time: 0.144100258
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 5, Final |g|: 0.026891440153121948)
+Grown Initial Loss (first step of callback): 0.043602168560028076
+Previous Final Loss (from 1 exponential):   0.043602168560028076
+Difference: 0.0
+✓ TEST 3 PASSED: Grown initial loss matches previous final loss!
+
+--- TEST 4: Datatype Override & Conversion Safety ---
+Testing Hermitian mode with datatype=Float32 (expecting override to ComplexF64)...
+
+--- Scanning U index: 33 (U = 8.0) ---
+┌ Warning: Hermitian optimization requires complex arithmetic. Overriding datatype Float32 to ComplexF64.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_scan.jl:182
+Sampling 2 initial configurations for multi-start...
+loss: 0.8625562141025929
+Forward time: 2.323947854
+ERROR: MethodError: no method matching mv!(::Char, ::ComplexF64, ::Nothing, ::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, ::ComplexF64, ::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, ::Char)
+The function `mv!` exists, but no method is defined for this combination of argument types.
+
+Closest candidates are:
+  mv!(::Char, ::Number, !Matched::cuSPARSE.CuSparseMatrix{TA}, ::CuArray{T, 1}, ::Number, ::CuArray{T, 1}, ::Char) where {TA, T}
+   @ cuSPARSE ~/.julia/packages/cuSPARSE/zqP2Y/src/generic.jl:240
+  mv!(::Char, ::Number, !Matched::cuSPARSE.CuSparseMatrix{TA}, ::CuArray{T, 1}, ::Number, ::CuArray{T, 1}, ::Char, !Matched::cuSPARSE.cusparseSpMVAlg_t) where {TA, T}
+   @ cuSPARSE ~/.julia/packages/cuSPARSE/zqP2Y/src/generic.jl:240
+
+Stacktrace:
+  [1] backward_adjoint_propagation(A::Vector{Float64}, gates::Vector{Main.Trotter.TamFermion.FGate}, tau_terms::Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, phis::StridedCheckpoints{CuArray{ComplexF64, 1, CUDACore.DeviceMemory}}, init_adjoint_state::CuArray{ComplexF64, 1, CUDACore.DeviceMemory}, basis::Vector{UInt64}, N::Int64, num_exponentials::Int64; antihermitian::Bool, use_gpu::Bool, datatype::Type{ComplexF64})
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_evolution.jl:176
+  [2] macro expansion
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_loss.jl:39 [inlined]
+  [3] macro expansion
+    @ ./timing.jl:461 [inlined]
+  [4] (::Main.Trotter.TrotterOptimization.var"#adjoint_loss_pullback#13"{Int64, Bool, Bool, Type{ComplexF64}, Vector{Float64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, ComplexF64, StridedCheckpoints{CuArray{ComplexF64, 1, CUDACore.DeviceMemory}}, CuArray{ComplexF64, 1, CUDACore.DeviceMemory}})(y::Float64)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_loss.jl:37
+  [5] ZBack
+    @ ~/.julia/packages/Zygote/XLIVf/src/compiler/chainrules.jl:228 [inlined]
+  [6] (::Zygote.var"#kw_zpullback#chain_rrule_kw##0"{Main.Trotter.TrotterOptimization.var"#adjoint_loss_pullback#13"{Int64, Bool, Bool, Type{ComplexF64}, Vector{Float64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, ComplexF64, StridedCheckpoints{CuArray{ComplexF64, 1, CUDACore.DeviceMemory}}, CuArray{ComplexF64, 1, CUDACore.DeviceMemory}}})(dy::Float64)
+    @ Zygote ~/.julia/packages/Zygote/XLIVf/src/compiler/chainrules.jl:254
+  [7] (::Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Vector{Float64}, Nothing}, Any})(Δ::Float64)
+    @ Zygote ~/.julia/packages/Zygote/XLIVf/src/compiler/interface2.jl:106
+  [8] (::Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#25#26"{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}, Vector{Float64}}, Tuple{Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Vector{Float64}}, Tuple{Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Vector{Float64}, Nothing}, Any}}}, Zygote.var"#393#394"{Zygote.var"#back#back##9"{:f, Zygote.Context{false}, Main.Trotter.TrotterOptimization.var"#25#26"{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}, Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}}}})(Δ::Float64)
+    @ Zygote ~/.julia/packages/Zygote/XLIVf/src/compiler/interface2.jl:106
+  [9] (::Zygote.var"#pullback##0#pullback##1"{Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#25#26"{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}, Vector{Float64}}, Tuple{Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Vector{Float64}}, Tuple{Zygote.Pullback{Tuple{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Vector{Float64}, Nothing}, Any}}}, Zygote.var"#393#394"{Zygote.var"#back#back##9"{:f, Zygote.Context{false}, Main.Trotter.TrotterOptimization.var"#25#26"{Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}, Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}}}}}})(Δ::Float64)
+    @ Zygote ~/.julia/packages/Zygote/XLIVf/src/compiler/interface.jl:100
+ [10] withgradient(f::Function, args::Vector{Float64})
+    @ Zygote ~/.julia/packages/Zygote/XLIVf/src/compiler/interface.jl:222
+ [11] macro expansion
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_core_optimization.jl:157 [inlined]
+ [12] macro expansion
+    @ ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:345 [inlined]
+ [13] find_multi_start_initialization(f::Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, optf::SciMLBase.OptimizationFunction{true, ADTypes.AutoZygote, Main.Trotter.TrotterOptimization.var"#48#49"{Symbol, Int64, Nothing, Bool, Bool, Type{ComplexF64}, Vector{Main.Trotter.TamFermion.FGate}, Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, Vector{UInt64}, Int64, Int64, Vector{ComplexF64}, Vector{ComplexF64}}, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, typeof(SciMLBase.DEFAULT_OBSERVED_NO_TIME), Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing, Nothing}, M::Int64; initialization_samples::Int64, multi_start_samples::Int64, multi_start_iters::Int64, maxiters::Int64, optimizer::Symbol, perturb_optimization::Float64, use_gpu::Bool)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_core_optimization.jl:154
+ [14] find_multi_start_initialization
+    @ ~/research/ML-signproblem/experimenting/ed/trotter_core_optimization.jl:140 [inlined]
+ [15] optimize_unitary(gates::Vector{Main.Trotter.TamFermion.FGate}, tau_terms::Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, ref::Vector{ComplexF64}, target::Vector{ComplexF64}, basis::Vector{UInt64}, N::Int64; loss_type::Symbol, H::Nothing, state2::Vector{ComplexF64}, num_exponentials::Int64, active_indices::Nothing, maxiters::Int64, optimizer::Symbol, perturb_optimization::Float64, initialization_samples::Int64, multi_start_samples::Int64, multi_start_iters::Int64, initial_coefficients::Nothing, initial_history::Vector{Float64}, loaded_metrics::Nothing, antihermitian::Bool, use_gpu::Bool, datatype::Type{ComplexF64}, metric_functions::Dict{String, Function})
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_core_optimization.jl:313
+ [16] interaction_scan_map_to_state(degen_rm_U::Matrix{ComplexF64}, instructions::Dict{String, Any}, gates::Vector{Main.Trotter.TamFermion.FGate}, tau_terms::Vector{LinearMaps.FunctionMap{ComplexF64, F1, Nothing, false} where F1}, basis::Vector{UInt64}, N::Int64; maxiters::Int64, optimizer::Symbol, perturb_optimization::Float64, save_folder::Nothing, save_name::String, initial_coefficients::Nothing, U_values::Vector{Float64}, loss_type::Symbol, custom_ref_state::Nothing, H_hopping::Nothing, H_interaction::Nothing, initialization_samples::Int64, multi_start_samples::Int64, multi_start_iters::Int64, antihermitian::Bool, use_gpu::Bool, datatype::Type{Float32}, metric_functions::Dict{String, Function}, grow_from_num_exponentials::Nothing, grow_from_save_name::Nothing, grow_mode::Symbol, active_indices::Nothing, target_fidelity::Nothing, pruning_threshold::Nothing)
+    @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_scan.jl:188
+ [17] (::var"#main##0#main##1")()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/verify_initial_loss_continuity.jl:140
+ [18] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [19] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [20] open
+    @ ./io.jl:407 [inlined]
+ [21] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [22] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/verify_initial_loss_continuity.jl:34
+ [23] _start()
+    @ Base ./client.jl:556

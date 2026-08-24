@@ -9,4 +9,4 @@
 #SBATCH --partition=kim
 
 cd /home/jek354/research/ML-signproblem/experimenting/ed
-/usr/bin/time julia --project=.. run_trotter_scan_optimization.jl "N=(6, 6)_4x4" 33 33 --loss=overlap --antihermitian --custom_ref_state=slater --maxiters=300 --use_gpu
+/usr/bin/time julia --project=.. run_trotter_scan_optimization.jl "N=(6, 6)_4x4" 33 33 --loss=overlap --antihermitian --custom_ref_state=slater --maxiters=300 --use_gpu --datatype=Float32

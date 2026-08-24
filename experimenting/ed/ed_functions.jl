@@ -339,7 +339,7 @@ function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
         compute_single_spin_energies(L)
     end
 
-    return find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
+    idx = find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
         if !separate_spins_stored
             if slater_labels[1] isa UInt
                 E_up = sum(Float64.(digits(slater_labels[1, idx], base=2, pad=prod(L))) .* energies)
@@ -354,6 +354,8 @@ function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
         end
         return E_up + E_dn
     end)
+    println("best slater ground state: $idx")
+    return idx
 end
 
 function get_slater_ground_state(data, sector::Int; custom_ref=true)
@@ -740,6 +742,12 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
         energies_k_min = real.(read(data, "data/energies/$(k_min)"))
         state_idx = select_continuous_state_indices(evecs_dataset, energies_k_min; order=sortperm(U_values))
         raw_evecs = reduce(hcat, evecs_dataset[:, state_idx[u], u] for u in eachindex(U_values)) # shape (H_dim, n_U)
+        for u in 1:size(raw_evecs, 2)
+            n = norm(raw_evecs[:, u])
+            if n > 0
+                raw_evecs[:, u] ./= n
+            end
+        end
         target_vecs = Matrix(transpose(raw_evecs)) # shape (n_U, H_dim)
 
         use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
@@ -850,6 +858,12 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     if size(target_vecs, 1) == H_dim
         target_vecs = Matrix(transpose(target_vecs))
     end
+    for u in 1:size(target_vecs, 1)
+        n = norm(target_vecs[u, :])
+        if n > 0
+            target_vecs[u, :] ./= n
+        end
+    end
 
     use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
     if use_slater_ref
@@ -910,7 +924,7 @@ transform_basis(target_vecs::Matrix{ComplexF64}, native_indexer::CombinationInde
 Transforms target vectors of shape (U_num, H_dim) from the basis defined by native_indexer and native_sign
 to a basis with target_indexer and target_sign. This will change the ordering and sign convention.
 """
-function transform_basis(target_vecs::Matrix{Float64},
+function transform_basis(target_vecs::AbstractMatrix{<:Number},
     native_indexer::CombinationIndexer,
     target_indexer::CombinationIndexer,
     native_sign::Symbol,
@@ -2204,6 +2218,128 @@ function create_Sz!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64},
         push!(vals, magnitude * (length(conf[1]) - length(conf[2])))
     end
 end
+
+"""
+    create_Szi!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, site_spec, indexer::CombinationIndexer)
+
+Constructs the local spin-z operator S^z_i = 1/2 (n_{i\\uparrow} - n_{i\\downarrow}) for the specified site.
+`site_spec` can be either an integer (1-based index in `indexer.a`) or a site/Coordinate object.
+"""
+function create_Szi!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, site_spec, indexer::CombinationIndexer)
+    site = site_spec isa Integer ? indexer.a[site_spec] : site_spec
+    for (i, conf) in enumerate(indexer.inv_comb_dict)
+        n_up = (site in conf[1]) ? 1.0 : 0.0
+        n_dn = (site in conf[2]) ? 1.0 : 0.0
+        val = 0.5 * (n_up - n_dn)
+        if abs(val) > 1e-12
+            push!(rows, i)
+            push!(cols, i)
+            push!(vals, magnitude * val)
+        end
+    end
+end
+
+"""
+    create_SmSp!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+        sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+
+Constructs the total lowering-raising operator product S_- S_+ = \\sum_{j,k} S^-_j S^+_k.
+"""
+function create_SmSp!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        # Diagonal term: \\sum_k n_{k \\downarrow} (1 - n_{k \\uparrow})
+        diagonal_val = 0.0
+        for k_down in conf[2]
+            if k_down ∉ conf[1]
+                diagonal_val += 1.0
+            end
+        end
+
+        # Off-diagonal S^- S^+ terms
+        for k_up_annihilate ∈ conf[1]
+            for k_down_annihilate ∈ conf[2]
+                k_up_create = k_down_annihilate
+                k_down_create = k_up_annihilate
+
+                if k_up_create != k_up_annihilate && k_up_create ∉ conf[1] && k_down_create ∉ conf[2]
+                    new_up = union(setdiff(conf[1], [k_up_annihilate]), [k_up_create])
+                    new_down = union(setdiff(conf[2], [k_down_annihilate]), [k_down_create])
+                    i2 = index(indexer, new_up, new_down)
+
+                    ops = [
+                        (k_down_create, 2, :create),
+                        (k_up_annihilate, 1, :annihilate),
+                        (k_up_create, 1, :create),
+                        (k_down_annihilate, 2, :annihilate)
+                    ]
+                    sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
+                    push!(rows, i1)
+                    push!(cols, i2)
+                    push!(vals, magnitude * sign)
+                end
+            end
+        end
+
+        if abs(diagonal_val) > 1e-12
+            push!(rows, i1)
+            push!(cols, i1)
+            push!(vals, magnitude * diagonal_val)
+        end
+    end
+end
+
+"""
+    create_SpSm!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+        sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+
+Constructs the total raising-lowering operator product S_+ S_- = \\sum_{j,k} S^+_j S^-_k.
+"""
+function create_SpSm!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
+    sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+    sorted_sites = sort(indexer.a, order=lattice_ordering)
+    for (i1, conf) in enumerate(indexer.inv_comb_dict)
+        # Diagonal term: \\sum_k n_{k \\uparrow} (1 - n_{k \\downarrow})
+        diagonal_val = 0.0
+        for k_up in conf[1]
+            if k_up ∉ conf[2]
+                diagonal_val += 1.0
+            end
+        end
+
+        # Off-diagonal S^+ S^- terms
+        for k_down_annihilate ∈ conf[2]
+            for k_up_annihilate ∈ conf[1]
+                k_down_create = k_up_annihilate
+                k_up_create = k_down_annihilate
+
+                if k_down_create != k_down_annihilate && k_down_create ∉ conf[2] && k_up_create ∉ conf[1]
+                    new_down = union(setdiff(conf[2], [k_down_annihilate]), [k_down_create])
+                    new_up = union(setdiff(conf[1], [k_up_annihilate]), [k_up_create])
+                    i2 = index(indexer, new_up, new_down)
+
+                    ops = [
+                        (k_up_create, 1, :create),
+                        (k_down_annihilate, 2, :annihilate),
+                        (k_down_create, 2, :create),
+                        (k_up_annihilate, 1, :annihilate)
+                    ]
+                    sign = compute_jw_sign(conf, sorted_sites, ops; sign_convention=sign_convention)
+                    push!(rows, i1)
+                    push!(cols, i2)
+                    push!(vals, magnitude * sign)
+                end
+            end
+        end
+
+        if abs(diagonal_val) > 1e-12
+            push!(rows, i1)
+            push!(cols, i1)
+            push!(vals, magnitude * diagonal_val)
+        end
+    end
+end
 function create_Sx!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Float64}, magnitude::Float64, indexer::CombinationIndexer;
     sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     sorted_sites = sort(indexer.a, order=lattice_ordering)
@@ -2244,7 +2380,7 @@ function create_transform!(rows::Vector{Int}, cols::Vector{Int}, vals::Vector{Fl
     end
 end
 
-function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
+function create_operator(Hs::HubbardSubspace, op; kind=1, site=1, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake())
     dim = get_subspace_dimension(Hs)
     indexer = CombinationIndexer(Hs; order=lattice_ordering)
     rows = Int[]
@@ -2254,6 +2390,20 @@ function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=f
     #insert stuff here
     if op == :Sx
         create_Sx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
+    elseif op == :Sz
+        create_Sz!(rows, cols, vals, 0.5, indexer)
+    elseif op in (:Szi, :Sz_i, :Sz_local)
+        target_site = (site !== nothing) ? site : kind
+        create_Szi!(rows, cols, vals, 1.0, target_site, indexer)
+    elseif op in (:SmSp, :S_minus_S_plus, Symbol("S-S+"))
+        create_SmSp!(rows, cols, vals, 1.0, indexer; sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+    elseif op in (:SpSm, :S_plus_S_minus, Symbol("S+S-"))
+        create_SpSm!(rows, cols, vals, 1.0, indexer; sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+    elseif op == :comm_Szi_SmSp
+        target_site = (site !== nothing) ? site : kind
+        Szi = create_operator(Hs, :Szi; site=target_site, momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+        SmSp = create_operator(Hs, :SmSp; momentum_basis=momentum_basis, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+        return Szi * SmSp - SmSp * Szi
     elseif op == :∏σx
         create_∏σx!(rows, cols, vals, 1.0, indexer; momentum_basis=momentum_basis, sign_convention=sign_convention)
     elseif op == :S2
@@ -2286,6 +2436,72 @@ function create_operator(Hs::HubbardSubspace, op; kind=1, momentum_basis::Bool=f
 
     H = sparse(rows, cols, promote_type(eltype(vals), Float64)[v for v in vals], dim, dim)
     return H
+end
+
+"""
+    compute_nullspace_intersection(operators::Vector{<:AbstractMatrix}; atol::Real=1e-10)
+
+Computes an orthonormal basis for the intersection of the nullspaces of a collection of linear operators {A_1, ..., A_m}.
+Returns `(null_basis, null_dim)` where `null_basis` is a matrix whose columns form an orthonormal basis for the common nullspace,
+and `null_dim` is the dimension of the nullspace intersection.
+"""
+function compute_nullspace_intersection(operators::Vector{<:AbstractMatrix}; atol::Real=1e-10)
+    isempty(operators) && error("operators vector cannot be empty")
+    dim = size(operators[1], 2)
+    for (idx, op) in enumerate(operators)
+        size(op, 2) == dim || error("Operator $idx column dimension $(size(op, 2)) does not match expected dimension $dim")
+    end
+
+    # Gram matrix G = \\sum_k A_k^\\dagger A_k
+    # For any v, v^\\dagger G v = \\sum_k ||A_k v||^2 >= 0, so v \\in \\cap_k null(A_k) \\iff G v = 0.
+    T = promote_type(eltype(operators[1]), ComplexF64)
+    G = zeros(T, dim, dim)
+    for op in operators
+        G .+= Matrix(adjoint(op) * op)
+    end
+
+    F = eigen(Hermitian(G))
+    null_mask = F.values .< atol
+    null_dim = count(null_mask)
+    null_basis = F.vectors[:, null_mask]
+
+    return null_basis, null_dim
+end
+
+"""
+    compute_comm_Szi_SmSp_nullspace_intersection(Hs::HubbardSubspace; sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake(), atol::Real=1e-10)
+
+Constructs the commutator operators [S^z_i, S_- S_+] for all lattice sites i in `Hs`,
+and computes the intersection of their nullspaces \\bigcap_i null([S^z_i, S_- S_+]).
+
+Returns `(null_basis, null_dim, comm_ops)`:
+- `null_basis`: Orthonormal basis matrix whose columns span the intersecting nullspace.
+- `null_dim`: Dimension of the intersecting nullspace.
+- `comm_ops`: Vector of sparse commutator matrices [S^z_i, S_- S_+] for each site i.
+"""
+function compute_comm_Szi_SmSp_nullspace_intersection(
+    Hs::HubbardSubspace;
+    sign_convention::Symbol=:spin_first,
+    lattice_ordering::Ordering=ColSnake(),
+    atol::Real=1e-10
+)
+    indexer = CombinationIndexer(Hs; order=lattice_ordering)
+    nsites = length(indexer.a)
+
+    # 1. Total S_- S_+ operator
+    SmSp = create_operator(Hs, :SmSp; sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+
+    # 2. Local S^z_i operators and commutators [S^z_i, S_- S_+]
+    comm_ops = Vector{SparseMatrixCSC{Float64,Int}}(undef, nsites)
+    for s in 1:nsites
+        Szi = create_operator(Hs, :Szi; site=s, sign_convention=sign_convention, lattice_ordering=lattice_ordering)
+        comm_ops[s] = Szi * SmSp - SmSp * Szi
+    end
+
+    # 3. Intersection of nullspaces
+    null_basis, null_dim = compute_nullspace_intersection(comm_ops; atol=atol)
+
+    return null_basis, null_dim, comm_ops
 end
 
 function create_Hubbard(Hm::HubbardModel, Hs::HubbardSubspace;

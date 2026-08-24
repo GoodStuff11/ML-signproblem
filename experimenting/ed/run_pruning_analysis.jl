@@ -5,7 +5,7 @@ Run pruning analysis on a set of optimized unitary parameter mapping files.
 Supports both exact exponential (unitary map) and Trotterized optimizations.
 
 Usage:
-  julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>] [--use_gpu=<bool>] [--datatype=<type>]
+  julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>] [--num_exponentials=<number>] [--use_gpu=<bool>] [--datatype=<type>]
 
 Arguments:
   folder (optional): The path to the folder containing optimization files. Default: "N=(4, 4)_3x3_2".
@@ -13,6 +13,11 @@ Arguments:
   --custom_ref_state (optional): The custom reference state to use (e.g. "slater" or an integer index). Default: nothing.
   --antihermitian (optional): Whether antihermitian generators were used. Default: false.
   --loss (optional): The loss function used during optimization. Default: "overlap".
+  --num_exponentials (optional): Number of Trotter layers/steps the analyzed coefficient files
+                     were optimized with (only meaningful for --type=trotter). Must match the
+                     value used with run_trotter_scan_optimization.jl so the saved coefficient
+                     files (and the pruning_analysis_*.jld2 this produces) are found under/saved
+                     to the right name. Default: 1.
   --use_gpu (optional): Enable GPU acceleration for Trotter overlap calculations. Default: false.
                      Valid options:
                      - "--use_gpu" or "--use_gpu=true": Enable CUDA acceleration.
@@ -76,6 +81,7 @@ function parse_arguments(args::Vector{String})
     custom_ref_state_arg = nothing
     antihermitian = false
     loss_type = :overlap
+    num_exponentials = 1
     use_gpu = false
     datatype = ComplexF64
     positional = String[]
@@ -107,6 +113,8 @@ function parse_arguments(args::Vector{String})
             else
                 error("Invalid --loss: '$val'. Valid options: 'overlap', 'energy'")
             end
+        elseif startswith(arg, "--num_exponentials=")
+            num_exponentials = parse(Int, split(arg, "=", limit=2)[2])
         elseif arg == "--use_gpu" || arg == "--use_gpu=true"
             use_gpu = true
         elseif arg == "--use_gpu=false"
@@ -135,38 +143,32 @@ function parse_arguments(args::Vector{String})
         folder = data_folder(positional[1])
     end
 
-    return folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype
+    return folder, type, custom_ref_state_arg, antihermitian, loss_type, num_exponentials, use_gpu, datatype
 end
 
-function get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type)
+function get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type, num_exponentials::Int=1)
     local prefix
     if type == :trotter
         prefix = "trotter_N=$N_sites"
-        if !isnothing(custom_ref_state_arg)
-            prefix *= "_ref_$(custom_ref_state_arg)"
-        end
-        if antihermitian
-            prefix *= "_antihermitian"
-        end
-        if loss_type == :energy
-            prefix *= "_loss_energy"
-        end
     else
         prefix = "unitary_map_energy_symmetry=$(use_symmetry)_N=$N"
-        if !isnothing(custom_ref_state_arg)
-            prefix *= "_ref_$(custom_ref_state_arg)"
-        end
-        if antihermitian
-            prefix *= "_antihermitian"
-        end
-        if loss_type == :energy
-            prefix *= "_loss_energy"
-        end
+    end
+    if num_exponentials != 1
+        prefix *= "_num_exponentials=$(num_exponentials)"
+    end
+    if !isnothing(custom_ref_state_arg)
+        prefix *= "_ref_$(custom_ref_state_arg)"
+    end
+    if antihermitian
+        prefix *= "_antihermitian"
+    end
+    if loss_type == :energy
+        prefix *= "_loss_energy"
     end
     return prefix
 end
 
-function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype)
+function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, num_exponentials, use_gpu, datatype)
     sign_convention = type == :trotter ? :spin_first : :coordinate_first
     use_slater_ref = custom_ref_state_arg == "slater"
     U_values, target_vecs, indexer, _, N, _, use_symmetry, sign_convention =
@@ -178,20 +180,32 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     dim_parsed = parse_lattice_dimension(folder)
     N_sites = prod(dim_parsed)
 
-    prefix = get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type)
+    prefix = get_file_prefix(type, N_sites, custom_ref_state_arg, use_symmetry, N, antihermitian, loss_type, num_exponentials)
+
+    # run_trotter_scan_optimization.jl saves its output under a "_u_build" suffix (added
+    # after some of the num_exponentials=1 baseline data was already on disk), so a scan's
+    # coefficient/shared files may or may not carry it depending on when they were produced.
+    # Try the current-format name first and fall back to the pre-"u_build" bare prefix. This
+    # only affects where we *read* the scan's own files from -- `prefix` (used below to name
+    # this analysis's own pruning_analysis_*.jld2 output) stays the bare, "u_build"-free form,
+    # matching what run_trotter_scan_optimization.jl's --target_fidelity looks up.
+    read_prefix = prefix
+    if type == :trotter && !isfile(joinpath(folder, "$(prefix)_shared.jld2")) && isfile(joinpath(folder, "$(prefix)_u_build_shared.jld2"))
+        read_prefix = "$(prefix)_u_build"
+    end
 
     # Load shared data
-    shared_data_path = joinpath(folder, "$(prefix)_shared.jld2")
+    shared_data_path = joinpath(folder, "$(read_prefix)_shared.jld2")
     if !isfile(shared_data_path)
         error("Shared data file not found at: $shared_data_path")
     end
     shared_data = load_saved_dict(shared_data_path)
 
     # Find coefficient iteration files
-    iter_files = filter(f -> startswith(basename(f), "$(prefix)_u_") && endswith(basename(f), ".jld2"), readdir(folder, join=true))
+    iter_files = filter(f -> startswith(basename(f), "$(read_prefix)_u_") && endswith(basename(f), ".jld2"), readdir(folder, join=true))
     num_maps = length(iter_files)
     if num_maps == 0
-        error("No iteration files found matching prefix: $(prefix)_u_")
+        error("No iteration files found matching prefix: $(read_prefix)_u_")
     end
 
     state1 = target_vecs[1, :]
@@ -366,9 +380,9 @@ end
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_pruning_analysis")
     with_logging(log_path) do
-        folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype = parse_arguments(ARGS)
+        folder, type, custom_ref_state_arg, antihermitian, loss_type, num_exponentials, use_gpu, datatype = parse_arguments(ARGS)
         println("Use GPU: $use_gpu")
         println("Data Type: $datatype")
-        run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, use_gpu, datatype)
+        run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian, loss_type, num_exponentials, use_gpu, datatype)
     end # with_logging
 end

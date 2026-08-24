@@ -1,0 +1,65 @@
+================================================================================
+Timestamp: 2026-08-14T11:23:28.964
+Command run: julia testing/test_checkpoint_offload_benchmark_4x3.jl 
+================================================================================
+================================================================================
+CHECKPOINT OFFLOADING BENCHMARK (4x3 Lattice)
+Comparing Pure Single-Core CPU vs Full GPU vs Host RAM Checkpoint Offload
+================================================================================
+CPU Threads: 1
+GPU Device: Tesla T4
+Total GPU VRAM: 14.56 GiB
+
+=====================================================================================
+>>> BENCHMARKING PRECISION: Float32 (Float32)
+=====================================================================================
+Performing warmups...
+
+1. Running Pure CPU (1 core, use_gpu=false)...
+2. Running Full GPU (all 1092 checkpoints on VRAM)...
+3. Running Host RAM Checkpoints (checkpoints streamed to CPU RAM)...
+
+Gradient relative diff (Full GPU vs CPU):   2.58e+00
+Gradient relative diff (Host Offload vs GPU): 0.00e+00
+
+--- Summary for Float32 ---
+Hilbert dimension (d):               32670
+Number of gates (M):                 1092
+Single state vector size:            0.125 MiB
+Total Checkpoint VRAM (Full GPU):    136.22 MiB
+Total Checkpoint VRAM (Host RAM):    0.125 MiB
+-----------------------------------------------------------------------------------------------
+Mode                       | Forward (ms) | Backward (ms) | Total Step (ms) | Speedup vs CPU
+-----------------------------------------------------------------------------------------------
+1. Pure CPU (1 core)       |    1198.69 ms |    1138.20 ms |      2336.89 ms |         1.00x (baseline)
+2. Full GPU (All VRAM)     |     122.08 ms |     229.71 ms |       351.79 ms |         6.64x
+3. Host RAM Offload        |     224.09 ms |     263.44 ms |       487.54 ms |         4.79x
+-----------------------------------------------------------------------------------------------
+
+=====================================================================================
+>>> BENCHMARKING PRECISION: Float64 (Float64)
+=====================================================================================
+Performing warmups...
+
+1. Running Pure CPU (1 core, use_gpu=false)...
+2. Running Full GPU (all 1092 checkpoints on VRAM)...
+3. Running Host RAM Checkpoints (checkpoints streamed to CPU RAM)...
+
+Gradient relative diff (Full GPU vs CPU):   1.05e+00
+Gradient relative diff (Host Offload vs GPU): 0.00e+00
+
+--- Summary for Float64 ---
+Hilbert dimension (d):               32670
+Number of gates (M):                 1092
+Single state vector size:            0.249 MiB
+Total Checkpoint VRAM (Full GPU):    272.43 MiB
+Total Checkpoint VRAM (Host RAM):    0.249 MiB
+-----------------------------------------------------------------------------------------------
+Mode                       | Forward (ms) | Backward (ms) | Total Step (ms) | Speedup vs CPU
+-----------------------------------------------------------------------------------------------
+1. Pure CPU (1 core)       |    1052.33 ms |    1112.24 ms |      2164.57 ms |         1.00x (baseline)
+2. Full GPU (All VRAM)     |     120.98 ms |     227.62 ms |       348.60 ms |         6.21x
+3. Host RAM Offload        |     300.47 ms |     292.02 ms |       592.49 ms |         3.65x
+-----------------------------------------------------------------------------------------------
+
+Benchmark completed successfully without saving or modifying any files.

@@ -1,0 +1,88 @@
+================================================================================
+Timestamp: 2026-08-18T16:06:38.866
+Command run: julia testing/debug_initial_loss_u33.jl 
+================================================================================
+=== Debug Initial Loss for U_idx=33 ===
+Old file: /home/jek354/research/data/new_data/data_h5_fixed/N=(6, 6)_4x4/trotter_N=16_ref_slater_antihermitian_u_33.jld2
+Old coeffs length: 2712
+Old coeffs norm: 7.638259734391071
+Old recorded last iter loss: 0.07511115074157715
+Finding best energy sector
+U=0.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-23.464106228626132, -23.464106228626104]
+U=0.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-22.94984839599157, -22.949848395991552]
+U=0.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-22.456733832391023, -22.456733832391023]
+U=1.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-21.984264510794507, -21.984264510794482]
+U=1.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5"] [-21.53193505937314, -21.53193505937311]
+U=1.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5"] [-21.09923079636206, -21.099230796362058]
+U=1.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-20.685625962757083, -20.685625962757076]
+U=2.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5"] [-20.290582312601742, -20.290582312601742]
+U=2.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-19.913548195427147, -19.913548195427136]
+U=2.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-19.553958232335965, -19.553958232335958]
+U=2.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-19.211233648236675, -19.211233648236657]
+U=3.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5"] [-18.884783280249643, -18.884783280249625]
+U=3.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-18.574005239209544, -18.57400523920952]
+U=3.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-18.278289160691973, -18.27828916069197]
+U=3.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-17.99701894732727, -17.99701894732724]
+U=4.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-17.72957587813068, -17.729575878130657]
+U=4.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-17.475341945100126, -17.475341945100073]
+U=4.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5"] [-17.233703273136037, -17.233703273135976]
+U=4.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(8).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(2).h5"] [-17.00405348585689, -17.004053485856886]
+U=5.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-16.78685761983618, -16.78685761983616]
+U=5.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-16.583775363085234, -16.58377536308522]
+U=5.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-16.39123102252861, -16.391231022528597]
+U=5.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5"] [-16.208621791452074, -16.20862179145207]
+U=6.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-16.035367951981687, -16.035367951981673]
+U=6.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.870915082316412, -15.870915082316396]
+U=6.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.714735504635634, -15.714735504635613]
+U=6.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.566329070825548, -15.566329070825518]
+U=7.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.425223391369915, -15.425223391369899]
+U=7.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.290973611887173, -15.29097361188717]
+U=7.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.16316183488889, -15.16316183488884]
+U=7.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-15.041396273906711, -15.041396273906674]
+U=8.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.925310215108464, -14.92531021510842]
+U=8.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.814560849253553, -14.814560849253448]
+U=8.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.708828025200448, -14.70882802520037]
+U=8.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.607812965671405, -14.607812965671265]
+U=9.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.511236976832267, -14.511236976832079]
+U=9.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.41884017550917, -14.418840175508766]
+U=9.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.33038025146909, -14.33038025146877]
+U=9.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.245631277016404, -14.245631277015967]
+U=10.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.164382572043934, -14.164382572043253]
+U=10.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.086437629464259, -14.086437629463296]
+U=10.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-14.011613103484946, -14.011613103482418]
+U=10.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.939737861338152, -13.939737861335987]
+U=11.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.870652097713764, -13.870652097709646]
+U=11.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.80420651017122, -13.804206510163231]
+U=11.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.740261533135865, -13.740261533116797]
+U=11.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.678686627649753, -13.678686627576488]
+U=12.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.619359623790752, -13.619359620451233]
+U=12.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.562166112549253, -13.562166112359783]
+U=12.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.506998883929118, -13.506998883899323]
+U=12.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.453757408084837, -13.45375740807089]
+U=13.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.402347356404544, -13.402347356396149]
+U=13.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.352680159578524, -13.352680159572701]
+U=13.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.304672599844864, -13.304672599840373]
+U=13.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.258246434767058, -13.258246434763366]
+U=14.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.213328050068224, -13.213328050065108]
+U=14.25 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.169848139214315, -13.16984813921157]
+U=14.5 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.127741407605605, -13.127741407603912]
+U=14.75 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.086946299395313, -13.086946299393187]
+U=15.0 k=["HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(10).h5"] [-13.047404745106002, -13.047404745103949]
+k-value counts: Dict(15 => 19, 6 => 1, 9 => 19, 12 => 1, 8 => 1, 14 => 1, 3 => 42, 1 => 60)
+Selected ground state symmetry sector: 1
+Loading hdf5 data: /home/jek354/research/data/new_data/data_h5_fixed/N=(6, 6)_4x4/HubbardED_XDiag_momSlater_4x4_nu_6_nd_6_t_1_m_2_sectors_(0).h5
+[[-23.46410622862097, -23.463756897475204]]
+Computing slater ground state for sector 0
+Computing native indexer for sector k = (1, 1)
+Number of gates: 2712
+Basis sector size: 4008592
+Grown coeffs length: 5424
+
+--- ComplexF64 Analysis ---
+Raw <state2, state1> = 1.0656754842724298e-9 - 2.2725868772309917e-18im
+Raw overlap loss (un-evolved): 1.0
+Ref phase: 1.0 + 0.0im
+Target phase: -1.0 + 2.081118512069501e-9im
+Max imag in stripped ref: 0.0
+Max imag in stripped target: 1.587443840163645e-8
+Stripped overlap loss (un-evolved): 

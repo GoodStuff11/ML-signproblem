@@ -1,0 +1,3310 @@
+================================================================================
+Timestamp: 2026-08-18T16:45:31.536
+Command run: julia testing/run_3x3_nu4_nd4_u40.jl 
+================================================================================
+================================================================================
+Running 3x3 (4 up, 4 down) Trotter optimization (No file load, No file save)
+U index: 40
+Num exponentials: 1
+Max iterations: 100
+Loss type: overlap
+Antihermitian: true
+Custom ref state: slater
+Use GPU: true
+Datatype: Float32
+================================================================================
+Finding best energy sector
+U=0.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-13.592310873708756, -13.589536468762208]
+U=0.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-13.202451180761564, -13.191598674984732]
+U=0.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-12.830170340068705, -12.806361299135032]
+U=1.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-12.475136766226985, -12.433991110350624]
+U=1.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-12.136942899624836, -12.074643372749021]
+U=1.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-11.815113059946176, -11.728456671919716]
+U=1.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-11.509113373539225, -11.395546180982068]
+U=2.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-11.218362945491094, -11.075995583858937]
+U=2.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-10.942245479652533, -10.769848110952303]
+U=2.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-10.680120663573744, -10.477097383810001]
+U=2.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-10.431334793375592, -10.197678957852599]
+U=3.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-10.195230282720308, -9.931463536623538]
+U=3.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-9.971153856151846, -9.678252760625192]
+U=3.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-9.758463356356916, -9.43777823494276]
+U=3.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-9.556533192292298, -9.209704084430573]
+U=4.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-9.364758521598862, -8.99363288679294]
+U=4.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-9.182558300583327, -8.789114426233398]
+U=4.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-9.009377354028917, -8.595656417094112]
+U=4.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-8.844687620736956, -8.412736215763255]
+U=5.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-8.687988724153511, -8.239812571710821]
+U=5.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-8.538808004581213, -8.07633662793491]
+U=5.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-8.396700133421005, -7.921761610721268]
+U=5.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-8.261246412754446, -7.775550892132482]
+U=6.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-8.13205384678728, -7.637184323882549]
+U=6.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-8.008754056103195, -7.506162905242975]
+U=6.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-7.8910020917787325, -7.382011954598144]
+U=6.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-7.778475194369408, -7.264283010153797]
+U=7.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-7.670871532585821, -7.152554701762573]
+U=7.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-7.567908948022326, -7.0464328256973845]
+U=7.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-7.469323725400893, -6.945549828724366]
+U=7.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-7.374869402250928, -6.849563875550846]
+U=8.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-7.284315627556119, -6.758157640408335]
+U=8.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-7.1974470754737485, -6.6710369325870165]
+U=8.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-7.114062417594663, -6.587929238859861]
+U=8.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-7.033973355217415, -6.508582243457859]
+U=9.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.957003711624676, -6.432762368452771]
+U=9.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.8829885832731135, -6.360253363581261]
+U=9.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.811773548045038, -6.290854964080351]
+U=9.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.743213928195962, -6.224381627367785]
+U=10.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.677174105303744, -6.160661353813099]
+U=10.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.613526884341141, -6.099534592908623]
+U=10.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.552152903914345, -6.0408532334652705]
+U=10.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.4929400897099505, -5.984479674693119]
+U=11.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-6.4357831482482055, -5.930285973941266]
+U=11.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-6.380583098134656, -5.8781530662641375]
+U=11.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.327246836123729, -5.827970050716672]
+U=11.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(5).h5"] [-6.275686735443729, -5.779633538247227]
+U=12.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.2258202739796085, -5.733047056176362]
+U=12.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-6.177569690059249, -5.688120504472441]
+U=12.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-6.130861663737136, -5.644769659309108]
+U=12.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-6.085627021617754, -5.6029157197010075]
+U=13.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-6.041800463398224, -5.562484893330661]
+U=13.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-5.999320308448559, -5.523408017998491]
+U=13.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-5.958128260870916, -5.485620215430949]
+U=13.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(7).h5"] [-5.918169191603042, -5.449060574476364]
+U=14.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-5.879390936240014, -5.413671860984634]
+U=14.25 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-5.841744107354576, -5.379400251923712]
+U=14.5 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(8).h5"] [-5.805181920192916, -5.3461950915121275]
+U=14.75 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-5.769660030712522, -5.314008667362589]
+U=15.0 k=["HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5", "HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(4).h5"] [-5.735136385011385, -5.2827960048200415]
+k-value counts: Dict(1 => 60)
+Selected ground state symmetry sector: 1
+Loading hdf5 data: /home/jek354/research/data/new_data/data_h5_fixed/N=(4, 4)_3x3/HubbardED_XDiag_momSlater_3x3_nu_4_nd_4_t_1_m_2_sectors_(0).h5
+[[-13.592310873708756, -13.589770669522547]]
+Computing slater ground state for sector 0
+Computing native indexer for sector k = (1, 1)
+Optimizing U index 40 (U = 9.75)
+Basis sector size: 1764
+Number of gates: 432
+
+--- Scanning U index: 40 (U = 9.75) ---
+Initial loss (overlap): 0.9122519940095675
+Sampling 10 initial configurations for multi-start...┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+
+loss: 0.91225183
+Forward time: 9.560813752
+Gradient time: 1.034541028
+loss: 0.9122498
+Forward time: 0.026190098
+Gradient time: 0.07668416
+loss: 0.91225207
+Forward time: 0.025895601
+Gradient time: 0.076451359
+loss: 0.9122143
+Forward time: 0.025773513
+Gradient time: 0.072336822
+loss: 0.9123168
+Forward time: 0.025732496
+Gradient time: 0.070552386
+loss: 0.91225207
+Forward time: 0.025672401
+Gradient time: 0.06993649
+loss: 0.9115479
+Forward time: 0.025849441
+Gradient time: 0.185732853
+loss: 0.9122511
+Forward time: 0.024530537
+Gradient time: 0.066461384
+loss: 0.9122517
+Forward time: 0.024202646
+Gradient time: 0.066335896
+loss: 0.9129529
+Forward time: 0.024439803
+Gradient time: 0.066281164
+Performing quick optimization on top 5 candidates...
+┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+loss: 0.9115479
+Forward time: 0.024872877
+Gradient time: 0.074749888
+loss: 0.6620296
+Forward time: 0.025381554
+Gradient time: 0.074655108
+loss: 0.61900723
+Forward time: 0.024671753
+Gradient time: 0.074551248
+loss: 0.20983702
+Forward time: 0.024659613
+Gradient time: 0.067898159
+loss: 0.13953519
+Forward time: 0.024951381
+Gradient time: 0.067659587
+loss: 0.11299747
+Forward time: 0.024399909
+Gradient time: 0.067889031
+loss: 0.08268213
+Forward time: 0.025186064
+Gradient time: 0.068100399
+loss: 0.07001221
+Forward time: 0.025470017
+Gradient time: 0.067571063
+loss: 0.0561015
+Forward time: 0.025182422
+Gradient time: 0.067843814
+loss: 0.044623256
+Forward time: 0.032760621
+Gradient time: 0.070740869
+loss: 0.039168596
+Forward time: 0.025967902
+Gradient time: 0.069326058
+loss: 0.034893155
+Forward time: 0.02567065
+Gradient time: 0.068636611
+loss: 0.03334397
+Forward time: 0.025946223
+Gradient time: 0.068880981
+loss: 0.03135097
+Forward time: 0.025744503
+Gradient time: 0.06948713
+loss: 0.03004551
+Forward time: 0.025715038
+Gradient time: 0.068934429
+loss: 0.028612852
+Forward time: 0.025044223
+Gradient time: 0.067217621
+loss: 0.027465343
+Forward time: 0.024763076
+Gradient time: 0.067059868
+loss: 0.026588619
+Forward time: 0.024770484
+Gradient time: 0.066839078
+loss: 0.02602619
+Forward time: 0.024777658
+Gradient time: 0.066749863
+loss: 0.02480501
+Forward time: 0.024777771
+Gradient time: 0.066544275
+loss: 0.024495006
+Forward time: 0.02458851
+Gradient time: 0.06661297
+loss: 0.023923635
+Forward time: 0.024663991
+Gradient time: 0.066611881
+loss: 0.02341187
+Forward time: 0.024538442
+Gradient time: 0.066298096
+loss: 0.022849977
+Forward time: 0.024511182
+Gradient time: 0.066342796
+loss: 0.022456467
+Forward time: 0.024443671
+Gradient time: 0.066427295
+loss: 0.022131145
+Forward time: 0.024615355
+Gradient time: 0.066690037
+loss: 0.02181232
+Forward time: 0.024500888
+Gradient time: 0.066531662
+loss: 0.021376312
+Forward time: 0.02458444
+Gradient time: 0.066391977
+loss: 0.021128833
+Forward time: 0.024479588
+Gradient time: 0.066740092
+loss: 0.020858526
+Forward time: 0.024834409
+Gradient time: 0.066866648
+loss: 0.020625532
+Forward time: 0.024958818
+Gradient time: 0.067306439
+loss: 0.020309806
+Forward time: 0.025392459
+Gradient time: 0.068792963
+loss: 0.020309687
+Forward time: 0.02672892
+Gradient time: 0.069781981
+loss: 0.020188868
+Forward time: 0.026238299
+Gradient time: 0.069900475
+loss: 0.020115495
+Forward time: 0.026022629
+Gradient time: 0.070665009
+loss: 0.020072997
+Forward time: 0.026600899
+Gradient time: 0.070856994
+loss: 0.020075202
+Forward time: 0.026451159
+Gradient time: 0.070785512
+loss: 0.020003855
+Forward time: 0.026205407
+Gradient time: 0.070299282
+loss: 0.020003855
+Forward time: 0.026135884
+Gradient time: 0.070586516
+loss: 0.019976318
+Forward time: 0.026221148
+Gradient time: 0.070300972
+loss: 0.019976318
+Forward time: 0.026260325
+Gradient time: 0.070225454
+loss: 0.01995188
+Forward time: 0.026371639
+Gradient time: 0.070100321
+loss: 0.019929588
+Forward time: 0.026366645
+Gradient time: 0.070202857
+loss: 0.019849718
+Forward time: 0.026288147
+Gradient time: 0.070336989
+loss: 0.019849718
+Forward time: 0.026335597
+Gradient time: 0.070384132
+loss: 0.019871771
+Forward time: 0.024869444
+Gradient time: 0.066694228
+loss: 0.019822538
+Forward time: 0.024454148
+Gradient time: 0.066555737
+loss: 0.019822538
+Forward time: 0.024363053
+Gradient time: 0.073604631
+loss: 0.019825757
+Forward time: 0.02447136
+Gradient time: 0.066506348
+loss: 0.019796968
+Forward time: 0.02452433
+Gradient time: 0.066352939
+loss: 0.019796968
+Forward time: 0.024366487
+Gradient time: 0.066673191
+loss: 0.01977843
+Forward time: 0.024497416
+Gradient time: 0.066232707
+loss: 0.01977843
+Forward time: 0.024312137
+Gradient time: 0.066046151
+loss: 0.019762576
+Forward time: 0.024208951
+Gradient time: 0.066059064
+loss: 0.019747615
+Forward time: 0.024357397
+Gradient time: 0.066849708
+loss: 0.019694388
+Forward time: 0.024638202
+Gradient time: 0.066914266
+loss: 0.019694388
+Forward time: 0.024289756
+Gradient time: 0.066853964
+loss: 0.019833446
+Forward time: 0.024636787
+Gradient time: 0.066794626
+loss: 0.019676924
+Forward time: 0.024617828
+Gradient time: 0.067276568
+loss: 0.019676924
+Forward time: 0.024191596
+Gradient time: 0.066504608
+loss: 0.019659936
+Forward time: 0.024358912
+Gradient time: 0.066649645
+loss: 0.019643247
+Forward time: 0.024452586
+Gradient time: 0.066158773
+loss: 0.019643247
+Forward time: 0.024198364
+Gradient time: 0.066335894
+loss: 0.019627333
+Forward time: 0.024306394
+Gradient time: 0.066159353
+loss: 0.019612134
+Forward time: 0.024475326
+Gradient time: 0.066416495
+loss: 0.019612134
+Forward time: 0.02434601
+Gradient time: 0.066028508
+loss: 0.019597113
+Forward time: 0.024123678
+Gradient time: 0.066130568
+loss: 0.01958239
+Forward time: 0.024166294
+Gradient time: 0.066506128
+loss: 0.01958239
+Forward time: 0.024165963
+Gradient time: 0.06642728
+loss: 0.019568443
+Forward time: 0.024318835
+Gradient time: 0.066295602
+loss: 0.019554496
+Forward time: 0.02451244
+Gradient time: 0.066299719
+loss: 0.019554496
+Forward time: 0.024162807
+Gradient time: 0.066782159
+loss: 0.019541383
+Forward time: 0.024292796
+Gradient time: 0.066447681
+loss: 0.019541383
+Forward time: 0.024118324
+Gradient time: 0.066729617
+loss: 0.019527853
+Forward time: 0.024233518
+Gradient time: 0.066827682
+loss: 0.019527853
+Forward time: 0.025600788
+Gradient time: 0.069402382
+loss: 0.01951474
+Forward time: 0.027113986
+Gradient time: 0.069502443
+loss: 0.019502342
+Forward time: 0.025666835
+Gradient time: 0.069915613
+loss: 0.01946044
+Forward time: 0.025803625
+Gradient time: 0.069704361
+loss: 0.01946044
+Forward time: 0.026564924
+Gradient time: 0.070832279
+loss: 0.020039022
+Forward time: 0.026371921
+Gradient time: 0.07038653
+loss: 0.01944393
+Forward time: 0.026537816
+Gradient time: 0.070458165
+loss: 0.01944393
+Forward time: 0.026384792
+Gradient time: 0.070643987
+loss: 0.01943481
+Forward time: 0.026219225
+Gradient time: 0.070183857
+loss: 0.01943481
+Forward time: 0.026326904
+Gradient time: 0.070381406
+loss: 0.019426346
+Forward time: 0.026333162
+Gradient time: 0.070154842
+loss: 0.019397378
+Forward time: 0.026149817
+Gradient time: 0.070393789
+loss: 0.019397378
+Forward time: 0.026295427
+Gradient time: 0.070138305
+loss: 0.019483209
+Forward time: 0.026478524
+Gradient time: 0.070157851
+loss: 0.019385457
+Forward time: 0.026492575
+Gradient time: 0.070525885
+loss: 0.019385457
+Forward time: 0.385013661
+Gradient time: 0.066348529
+loss: 0.019374013
+Forward time: 0.02443209
+Gradient time: 0.066436063
+loss: 0.019374013
+Forward time: 0.024349647
+Gradient time: 0.066752499
+loss: 0.019374251
+Forward time: 0.024715292
+Gradient time: 0.070342376
+loss: 0.019360423
+Forward time: 0.024430941
+Gradient time: 0.071347644
+loss: 0.019340277
+Forward time: 0.024436518
+Gradient time: 0.066305849
+loss: 0.01926893
+Forward time: 0.024273062
+Gradient time: 0.066347591
+loss: 0.01926893
+Forward time: 0.024316168
+Gradient time: 0.06629172
+loss: 0.018809676
+Forward time: 0.024267438
+Gradient time: 0.066108431
+loss: 0.018521786
+Forward time: 0.024374012
+Gradient time: 0.065909503
+loss: 0.018622756
+Forward time: 0.024364934
+Gradient time: 0.066181088
+loss: 0.018451989
+Forward time: 0.024147498
+Gradient time: 0.066267257
+loss: 0.018451989
+Forward time: 0.024255647
+Gradient time: 0.06639837
+loss: 0.018331707
+Forward time: 0.024439679
+Gradient time: 0.066018658
+loss: 0.01828307
+Forward time: 0.024428955
+Gradient time: 0.065972436
+loss: 0.018218458
+Forward time: 0.024418749
+Gradient time: 0.066082904
+loss: 0.018096447
+Forward time: 0.024314345
+Gradient time: 0.066295752
+loss: 0.01795435
+Forward time: 0.024425007
+Gradient time: 0.06642222
+loss: 0.01799804
+Forward time: 0.024495196
+Gradient time: 0.066252389
+loss: 0.017903626
+Forward time: 0.024189893
+Gradient time: 0.065864061
+loss: 0.017903626
+Forward time: 0.024177997
+Gradient time: 0.065907849
+loss: 0.017850459
+Forward time: 0.024437633
+Gradient time: 0.065861507
+loss: 0.017822862
+Forward time: 0.024230334
+Gradient time: 0.066383143
+loss: 0.01778692
+Forward time: 0.024354307
+Gradient time: 0.066022605
+loss: 0.017718017
+Forward time: 0.024383269
+Gradient time: 0.066091405
+loss: 0.017768621
+Forward time: 0.024294006
+Gradient time: 0.065906076
+loss: 0.017681658
+Forward time: 0.024076948
+Gradient time: 0.066151548
+loss: 0.017681658
+Forward time: 0.024107454
+Gradient time: 0.066216003
+loss: 0.017620444
+Forward time: 0.024330128
+Gradient time: 0.065896929
+loss: 0.017571747
+Forward time: 0.024236128
+Gradient time: 0.065955136
+loss: 0.017534912
+Forward time: 0.02425991
+Gradient time: 0.065709574
+loss: 0.017478168
+Forward time: 0.024199246
+Gradient time: 0.065821327
+loss: 0.017438233
+Forward time: 0.024342445
+Gradient time: 0.066230909
+loss: 0.01737678
+Forward time: 0.024348794
+Gradient time: 0.06588497
+loss: 0.01733321
+Forward time: 0.024293649
+Gradient time: 0.06597944
+loss: 0.017292202
+Forward time: 0.024411758
+Gradient time: 0.066163997
+loss: 0.017271996
+Forward time: 0.024443952
+Gradient time: 0.065929972
+loss: 0.017171323
+Forward time: 0.024434138
+Gradient time: 0.065997062
+loss: 0.017133117
+Forward time: 0.024415438
+Gradient time: 0.066143195
+loss: 0.017094731
+Forward time: 0.024388693
+Gradient time: 0.066004125
+loss: 0.01704061
+Forward time: 0.024398331
+Gradient time: 0.065939713
+loss: 0.01696366
+Forward time: 0.024400278
+Gradient time: 0.066171613
+loss: 0.9122511
+Forward time: 0.024338721
+Gradient time: 0.068862611
+loss: 0.66436726
+Forward time: 0.025388345
+Gradient time: 0.06923492
+loss: 0.61645716
+Forward time: 0.027685779
+Gradient time: 0.069283864
+loss: 0.20991349
+Forward time: 0.028168315
+Gradient time: 0.069590718
+loss: 0.13762951
+Forward time: 0.02631867
+Gradient time: 0.070442921
+loss: 0.11181283
+Forward time: 0.02672922
+Gradient time: 0.07048348
+loss: 0.08178699
+Forward time: 0.026851864
+Gradient time: 0.070346113
+loss: 0.069155455
+Forward time: 0.026472092
+Gradient time: 0.070488457
+loss: 0.055508792
+Forward time: 0.026542833
+Gradient time: 0.070401376
+loss: 0.04458171
+Forward time: 0.026600753
+Gradient time: 0.07032454
+loss: 0.03863603
+Forward time: 0.026473275
+Gradient time: 0.070321548
+loss: 0.034848094
+Forward time: 0.026700305
+Gradient time: 0.070197063
+loss: 0.033215046
+Forward time: 0.026468248
+Gradient time: 0.070527826
+loss: 0.031238794
+Forward time: 0.515931079
+Gradient time: 0.066623138
+loss: 0.029836953
+Forward time: 0.024640657
+Gradient time: 0.066958495
+loss: 0.028496087
+Forward time: 0.024312334
+Gradient time: 0.066916121
+loss: 0.027255237
+Forward time: 0.024409303
+Gradient time: 0.066437994
+loss: 0.026353002
+Forward time: 0.024612226
+Gradient time: 0.066261047
+loss: 0.02586162
+Forward time: 0.024342413
+Gradient time: 0.06613009
+loss: 0.024821699
+Forward time: 0.024410299
+Gradient time: 0.066007604
+loss: 0.024518907
+Forward time: 0.02437763
+Gradient time: 0.066133938
+loss: 0.023941934
+Forward time: 0.024352534
+Gradient time: 0.065900015
+loss: 0.023441792
+Forward time: 0.024346106
+Gradient time: 0.065800837
+loss: 0.022853494
+Forward time: 0.024323548
+Gradient time: 0.065918603
+loss: 0.02249384
+Forward time: 0.024261328
+Gradient time: 0.065999204
+loss: 0.02217555
+Forward time: 0.02440621
+Gradient time: 0.066010805
+loss: 0.02177167
+Forward time: 0.024390641
+Gradient time: 0.066073324
+loss: 0.021365583
+Forward time: 0.024407174
+Gradient time: 0.065950693
+loss: 0.021094203
+Forward time: 0.0244873
+Gradient time: 0.065947868
+loss: 0.020786941
+Forward time: 0.024528629
+Gradient time: 0.066101104
+loss: 0.020550013
+Forward time: 0.024408909
+Gradient time: 0.06618898
+loss: 0.020354986
+Forward time: 0.024304966
+Gradient time: 0.065878001
+loss: 0.020354867
+Forward time: 0.02425368
+Gradient time: 0.066177329
+loss: 0.020254135
+Forward time: 0.024140006
+Gradient time: 0.06589365
+loss: 0.020205498
+Forward time: 0.024168694
+Gradient time: 0.065738471
+loss: 0.02021128
+Forward time: 0.023948162
+Gradient time: 0.06600954
+loss: 0.020129383
+Forward time: 0.024155866
+Gradient time: 0.066717627
+loss: 0.020129383
+Forward time: 0.024022559
+Gradient time: 0.065941411
+loss: 0.02009964
+Forward time: 0.024034635
+Gradient time: 0.065615918
+loss: 0.02009964
+Forward time: 0.02403373
+Gradient time: 0.073431852
+loss: 0.020074427
+Forward time: 0.024755165
+Gradient time: 0.067179265
+loss: 0.01999265
+Forward time: 0.024604025
+Gradient time: 0.067255745
+loss: 0.01999265
+Forward time: 0.024695891
+Gradient time: 0.067367368
+loss: 0.020210803
+Forward time: 0.024661151
+Gradient time: 0.067043267
+loss: 0.019964159
+Forward time: 0.024636583
+Gradient time: 0.06698015
+loss: 0.019964159
+Forward time: 0.024566818
+Gradient time: 0.067055811
+loss: 0.019940317
+Forward time: 0.02454626
+Gradient time: 0.066888001
+loss: 0.019940317
+Forward time: 0.024561828
+Gradient time: 0.067137703
+loss: 0.019918025
+Forward time: 0.024527884
+Gradient time: 0.067113568
+loss: 0.019897401
+Forward time: 0.024674508
+Gradient time: 0.067069341
+loss: 0.019897401
+Forward time: 0.024552514
+Gradient time: 0.067170485
+loss: 0.019877672
+Forward time: 0.024551506
+Gradient time: 0.067035198
+loss: 0.019877672
+Forward time: 0.024570647
+Gradient time: 0.067071322
+loss: 0.01985842
+Forward time: 0.024534342
+Gradient time: 0.067034479
+loss: 0.019839585
+Forward time: 0.024511926
+Gradient time: 0.067117696
+loss: 0.019783735
+Forward time: 0.024509716
+Gradient time: 0.066994421
+loss: 0.019783735
+Forward time: 0.024536093
+Gradient time: 0.066959899
+loss: 0.020515919
+Forward time: 0.024601576
+Gradient time: 0.066976393
+loss: 0.019759655
+Forward time: 0.024592058
+Gradient time: 0.067217824
+loss: 0.019746542
+Forward time: 0.024526578
+Gradient time: 0.066993935
+loss: 0.019746542
+Forward time: 0.024525254
+Gradient time: 0.067041704
+loss: 0.01973486
+Forward time: 0.024576239
+Gradient time: 0.066260229
+loss: 0.019695103
+Forward time: 0.024043424
+Gradient time: 0.065929806
+loss: 0.019695103
+Forward time: 0.024114505
+Gradient time: 0.066110338
+loss: 0.019805789
+Forward time: 0.024068403
+Gradient time: 0.066334959
+loss: 0.019679844
+Forward time: 0.024635105
+Gradient time: 0.06895102
+loss: 0.019679844
+Forward time: 0.025294498
+Gradient time: 0.068902813
+loss: 0.019664526
+Forward time: 0.025192043
+Gradient time: 0.068717606
+loss: 0.019664526
+Forward time: 0.02537468
+Gradient time: 0.071274287
+loss: 0.019649863
+Forward time: 0.026760081
+Gradient time: 0.071265153
+loss: 0.019649863
+Forward time: 0.026710997
+Gradient time: 0.070872127
+loss: 0.01963681
+Forward time: 0.025701198
+Gradient time: 0.068807225
+loss: 0.019623816
+Forward time: 0.025487267
+Gradient time: 0.076032121
+loss: 0.019610465
+Forward time: 0.026217097
+Gradient time: 0.070112791
+loss: 0.019597948
+Forward time: 0.026328542
+Gradient time: 0.069985535
+loss: 0.019559443
+Forward time: 0.026209969
+Gradient time: 1.08606569
+loss: 0.019559443
+Forward time: 0.024578623
+Gradient time: 0.066480299
+loss: 0.020180345
+Forward time: 0.024399834
+Gradient time: 0.066661631
+loss: 0.01954037
+Forward time: 0.024420542
+Gradient time: 0.066626429
+loss: 0.01954037
+Forward time: 0.0243485
+Gradient time: 0.066194881
+loss: 0.019531488
+Forward time: 0.024326248
+Gradient time: 0.06621636
+loss: 0.019523323
+Forward time: 0.024372584
+Gradient time: 0.066121165
+loss: 0.01949209
+Forward time: 0.024147326
+Gradient time: 0.065878744
+loss: 0.019524395
+Forward time: 0.024352524
+Gradient time: 0.065955879
+loss: 0.019479215
+Forward time: 0.02416097
+Gradient time: 0.066011306
+loss: 0.019479215
+Forward time: 0.024205669
+Gradient time: 0.065955841
+loss: 0.019467652
+Forward time: 0.024150677
+Gradient time: 0.066001248
+loss: 0.019456804
+Forward time: 0.024384412
+Gradient time: 0.066139576
+loss: 0.019456804
+Forward time: 0.024304684
+Gradient time: 0.066166096
+loss: 0.019448519
+Forward time: 0.024256474
+Gradient time: 0.066029634
+loss: 0.019448519
+Forward time: 0.024214676
+Gradient time: 0.066190677
+loss: 0.019443572
+Forward time: 0.024152906
+Gradient time: 0.065986431
+loss: 0.019427836
+Forward time: 0.02423357
+Gradient time: 0.066197596
+loss: 0.019427836
+Forward time: 0.024399532
+Gradient time: 0.066522942
+loss: 0.019427717
+Forward time: 0.024486596
+Gradient time: 0.066684899
+loss: 0.01941228
+Forward time: 0.024351768
+Gradient time: 0.074539374
+loss: 0.019373536
+Forward time: 0.024829339
+Gradient time: 0.067477421
+loss: 0.01919645
+Forward time: 0.024610557
+Gradient time: 0.066655659
+loss: 0.018924534
+Forward time: 0.024821713
+Gradient time: 0.067643927
+loss: 0.018567085
+Forward time: 0.024713853
+Gradient time: 0.067162058
+loss: 0.018773794
+Forward time: 0.024820788
+Gradient time: 0.067391108
+loss: 0.01845479
+Forward time: 0.024591219
+Gradient time: 0.067805493
+loss: 0.01845479
+Forward time: 0.024699606
+Gradient time: 0.068319508
+loss: 0.018248796
+Forward time: 0.024957967
+Gradient time: 0.068290974
+loss: 0.018189192
+Forward time: 0.025036082
+Gradient time: 0.067562084
+loss: 0.018148303
+Forward time: 0.024728684
+Gradient time: 0.067245985
+loss: 0.018042803
+Forward time: 0.024809481
+Gradient time: 0.067770395
+loss: 0.017948687
+Forward time: 0.024850135
+Gradient time: 0.067735547
+loss: 0.01788938
+Forward time: 0.024871655
+Gradient time: 0.067512088
+loss: 0.017846584
+Forward time: 0.024891241
+Gradient time: 0.067370587
+loss: 0.017815769
+Forward time: 0.02478122
+Gradient time: 0.067176822
+loss: 0.017767787
+Forward time: 0.024986366
+Gradient time: 0.067423485
+loss: 0.01772362
+Forward time: 0.02465987
+Gradient time: 0.066921452
+loss: 0.01765269
+Forward time: 0.024676625
+Gradient time: 0.067196849
+loss: 0.017610073
+Forward time: 0.02455392
+Gradient time: 0.066808191
+loss: 0.017570853
+Forward time: 0.024615796
+Gradient time: 0.067298121
+loss: 0.017515779
+Forward time: 0.024566007
+Gradient time: 0.06703365
+loss: 0.017506182
+Forward time: 0.024538628
+Gradient time: 0.066781802
+loss: 0.017468631
+Forward time: 0.024263302
+Gradient time: 0.066530535
+loss: 0.017468631
+Forward time: 0.024312701
+Gradient time: 0.066973187
+loss: 0.01739937
+Forward time: 0.024655657
+Gradient time: 0.066807847
+loss: 0.017345607
+Forward time: 0.024483425
+Gradient time: 0.066644189
+loss: 0.017289102
+Forward time: 0.024562495
+Gradient time: 0.066643102
+loss: 0.017231226
+Forward time: 0.024539322
+Gradient time: 0.066951668
+loss: 0.01717037
+Forward time: 0.024583709
+Gradient time: 0.066502026
+loss: 0.01709646
+Forward time: 0.024669601
+Gradient time: 0.067019246
+loss: 0.017056644
+Forward time: 0.02479331
+Gradient time: 0.067327116
+loss: 0.017010808
+Forward time: 0.024800442
+Gradient time: 0.066921212
+loss: 0.01695323
+Forward time: 0.024827043
+Gradient time: 0.06800626
+loss: 0.9122517
+Forward time: 0.024955278
+Gradient time: 0.074183889
+loss: 0.66436905
+Forward time: 0.024896144
+Gradient time: 0.068352347
+loss: 0.61645424
+Forward time: 0.025368606
+Gradient time: 0.067618042
+loss: 0.20991415
+Forward time: 0.025062126
+Gradient time: 0.067294694
+loss: 0.13762754
+Forward time: 0.024979013
+Gradient time: 0.068642003
+loss: 0.11181128
+Forward time: 0.025552844
+Gradient time: 0.069177288
+loss: 0.081786096
+Forward time: 0.025341981
+Gradient time: 0.069272794
+loss: 0.069155216
+Forward time: 0.025547829
+Gradient time: 0.069182231
+loss: 0.055507958
+Forward time: 0.025488169
+Gradient time: 0.069162666
+loss: 0.044582605
+Forward time: 0.0259645
+Gradient time: 0.070046995
+loss: 0.0386343
+Forward time: 0.026056913
+Gradient time: 0.069884407
+loss: 0.034847736
+Forward time: 0.02599574
+Gradient time: 0.069637182
+loss: 0.033214808
+Forward time: 0.025881305
+Gradient time: 0.069264306
+loss: 0.031238556
+Forward time: 0.026147106
+Gradient time: 0.07034742
+loss: 0.029836714
+Forward time: 0.02662479
+Gradient time: 0.07055049
+loss: 0.028495848
+Forward time: 0.026414568
+Gradient time: 0.070387685
+loss: 0.027253807
+Forward time: 0.026465595
+Gradient time: 0.070430983
+loss: 0.026351929
+Forward time: 0.026591522
+Gradient time: 0.07047103
+loss: 0.025856912
+Forward time: 0.026666531
+Gradient time: 0.07031622
+loss: 0.024820983
+Forward time: 0.026503933
+Gradient time: 0.070268046
+loss: 0.024517596
+Forward time: 0.026375107
+Gradient time: 0.070006471
+loss: 0.02394098
+Forward time: 0.026378912
+Gradient time: 0.070198836
+loss: 0.02344215
+Forward time: 0.026388687
+Gradient time: 0.070303686
+loss: 0.02285254
+Forward time: 0.02651956
+Gradient time: 0.070017283
+loss: 0.022494614
+Forward time: 0.026295611
+Gradient time: 0.070194462
+loss: 0.022176147
+Forward time: 0.02634117
+Gradient time: 0.070081974
+loss: 0.021769643
+Forward time: 0.026220427
+Gradient time: 0.070030514
+loss: 0.021363318
+Forward time: 0.026519685
+Gradient time: 0.672206198
+loss: 0.021092772
+Forward time: 0.024845901
+Gradient time: 0.067663238
+loss: 0.020784676
+Forward time: 0.024497402
+Gradient time: 0.067231036
+loss: 0.02054745
+Forward time: 0.024548124
+Gradient time: 0.06662378
+loss: 0.020354152
+Forward time: 0.024488596
+Gradient time: 0.066604238
+loss: 0.02035451
+Forward time: 0.02458252
+Gradient time: 0.06661868
+loss: 0.020255208
+Forward time: 0.024331849
+Gradient time: 0.06625012
+loss: 0.020209491
+Forward time: 0.024244332
+Gradient time: 0.066010174
+loss: 0.02022332
+Forward time: 0.024213386
+Gradient time: 0.065943704
+loss: 0.020130217
+Forward time: 0.024174818
+Gradient time: 0.065926322
+loss: 0.020130217
+Forward time: 0.024074865
+Gradient time: 0.06601993
+loss: 0.020101428
+Forward time: 0.024115307
+Gradient time: 0.065939488
+loss: 0.020076275
+Forward time: 0.024334235
+Gradient time: 0.066055923
+loss: 0.01999414
+Forward time: 0.024275975
+Gradient time: 0.066113581
+loss: 0.01999414
+Forward time: 0.024333893
+Gradient time: 0.066599058
+loss: 0.020142019
+Forward time: 0.024337571
+Gradient time: 0.066524755
+loss: 0.019967616
+Forward time: 0.02438758
+Gradient time: 0.066781713
+loss: 0.019967616
+Forward time: 0.024366328
+Gradient time: 0.066547957
+loss: 0.019941628
+Forward time: 0.024767464
+Gradient time: 0.066611061
+loss: 0.019941628
+Forward time: 0.024527594
+Gradient time: 0.066867345
+loss: 0.019917667
+Forward time: 0.024461299
+Gradient time: 0.067038074
+loss: 0.019917667
+Forward time: 0.024365497
+Gradient time: 0.066855615
+loss: 0.019895256
+Forward time: 0.024298438
+Gradient time: 0.066923761
+loss: 0.019873917
+Forward time: 0.024439356
+Gradient time: 0.066678053
+loss: 0.019873917
+Forward time: 0.02444822
+Gradient time: 0.066914752
+loss: 0.019852638
+Forward time: 0.024625145
+Gradient time: 0.066801031
+loss: 0.019852638
+Forward time: 0.024549494
+Gradient time: 0.066963442
+loss: 0.019833088
+Forward time: 0.024526026
+Gradient time: 0.067132283
+loss: 0.019833088
+Forward time: 0.024426413
+Gradient time: 0.0667487
+loss: 0.019813597
+Forward time: 0.024267697
+Gradient time: 0.06661034
+loss: 0.019813597
+Forward time: 0.024407029
+Gradient time: 0.066820198
+loss: 0.01979506
+Forward time: 0.024446946
+Gradient time: 0.067001783
+loss: 0.019777
+Forward time: 0.024503334
+Gradient time: 0.066837372
+loss: 0.019777
+Forward time: 0.028813383
+Gradient time: 0.067395943
+loss: 0.01975894
+Forward time: 0.024516094
+Gradient time: 0.066788362
+loss: 0.01975894
+Forward time: 0.024331972
+Gradient time: 0.066649321
+loss: 0.01974219
+Forward time: 0.024280068
+Gradient time: 0.066815023
+loss: 0.01974219
+Forward time: 0.024351284
+Gradient time: 0.066850466
+loss: 0.019725084
+Forward time: 0.02431911
+Gradient time: 0.066817609
+loss: 0.019725084
+Forward time: 0.02430621
+Gradient time: 0.066792707
+loss: 0.019709468
+Forward time: 0.024234126
+Gradient time: 0.066372672
+loss: 0.019709468
+Forward time: 0.024297851
+Gradient time: 0.066447257
+loss: 0.019692957
+Forward time: 0.024304077
+Gradient time: 0.066503448
+loss: 0.019692957
+Forward time: 0.024353921
+Gradient time: 0.066624349
+loss: 0.019677281
+Forward time: 0.024320056
+Gradient time: 0.066950221
+loss: 0.0196625
+Forward time: 0.024604798
+Gradient time: 0.066760927
+loss: 0.0196625
+Forward time: 0.024360652
+Gradient time: 0.066506175
+loss: 0.0196473
+Forward time: 0.024239688
+Gradient time: 0.066532947
+loss: 0.0196473
+Forward time: 0.02434507
+Gradient time: 0.066553279
+loss: 0.019632876
+Forward time: 0.024423476
+Gradient time: 0.066299391
+loss: 0.01961863
+Forward time: 0.024220097
+Gradient time: 0.066098037
+loss: 0.019603968
+Forward time: 0.024218137
+Gradient time: 0.066224586
+loss: 0.019603968
+Forward time: 0.024356588
+Gradient time: 0.06627751
+loss: 0.019590259
+Forward time: 0.024272679
+Gradient time: 0.06638666
+loss: 0.019590259
+Forward time: 0.024438535
+Gradient time: 0.066645776
+loss: 0.01957661
+Forward time: 0.024674729
+Gradient time: 0.067373636
+loss: 0.01957661
+Forward time: 0.024668988
+Gradient time: 0.067475044
+loss: 0.019563377
+Forward time: 0.024874579
+Gradient time: 0.067649657
+loss: 0.019549549
+Forward time: 0.024689656
+Gradient time: 0.067683232
+loss: 0.019549906
+Forward time: 0.024833119
+Gradient time: 0.067919541
+loss: 0.01953137
+Forward time: 0.024817384
+Gradient time: 0.067662626
+loss: 0.019437075
+Forward time: 0.024858032
+Gradient time: 0.067699395
+loss: 0.019225538
+Forward time: 0.024862904
+Gradient time: 0.067773316
+loss: 0.018895984
+Forward time: 0.024868376
+Gradient time: 0.067755753
+loss: 0.018536747
+Forward time: 0.024901541
+Gradient time: 0.067592889
+loss: 0.018410265
+Forward time: 0.025043599
+Gradient time: 0.067496135
+loss: 0.018351555
+Forward time: 0.024928234
+Gradient time: 0.067599951
+loss: 0.018243253
+Forward time: 0.024906255
+Gradient time: 0.067626435
+loss: 0.018164933
+Forward time: 0.024921398
+Gradient time: 0.067411767
+loss: 0.018065155
+Forward time: 0.024855858
+Gradient time: 0.067305107
+loss: 0.018016815
+Forward time: 0.024964472
+Gradient time: 0.0677829
+loss: 0.017990947
+Forward time: 0.024894331
+Gradient time: 0.067658981
+loss: 0.017946899
+Forward time: 0.024934659
+Gradient time: 0.067552719
+loss: 0.017873049
+Forward time: 0.024939559
+Gradient time: 0.067548073
+loss: 0.017837822
+Forward time: 0.024914271
+Gradient time: 0.067700542
+loss: 0.017767072
+Forward time: 0.025007915
+Gradient time: 0.068361809
+loss: 0.017736018
+Forward time: 0.025531116
+Gradient time: 0.06937217
+loss: 0.017704487
+Forward time: 0.025662348
+Gradient time: 0.069416188
+loss: 0.017640531
+Forward time: 0.025777065
+Gradient time: 0.06956723
+loss: 0.017578125
+Forward time: 0.025659271
+Gradient time: 0.069584245
+loss: 0.017527342
+Forward time: 0.025646312
+Gradient time: 0.069555478
+loss: 0.01746875
+Forward time: 0.025595787
+Gradient time: 0.069431284
+loss: 0.017431498
+Forward time: 0.025995537
+Gradient time: 0.069705105
+loss: 0.017380834
+Forward time: 0.026020555
+Gradient time: 0.791973331
+loss: 0.017291605
+Forward time: 0.024874177
+Gradient time: 0.06661655
+loss: 0.017250359
+Forward time: 0.024757473
+Gradient time: 0.06620596
+loss: 0.017192304
+Forward time: 0.02451875
+Gradient time: 0.066072022
+loss: 0.01712972
+Forward time: 0.024590609
+Gradient time: 0.066183513
+loss: 0.01706469
+Forward time: 0.0245715
+Gradient time: 0.066133983
+loss: 0.017027438
+Forward time: 0.02453815
+Gradient time: 0.072438287
+loss: 0.91225183
+Forward time: 0.024763499
+Gradient time: 0.06769682
+loss: 0.6643692
+Forward time: 0.024844527
+Gradient time: 0.067687322
+loss: 0.6164533
+Forward time: 0.02477874
+Gradient time: 0.067354949
+loss: 0.20991361
+Forward time: 0.024861769
+Gradient time: 0.067488537
+loss: 0.13762629
+Forward time: 0.024859906
+Gradient time: 0.06751189
+loss: 0.11181104
+Forward time: 0.024905957
+Gradient time: 0.068146605
+loss: 0.08178532
+Forward time: 0.024862378
+Gradient time: 0.067360026
+loss: 0.0691545
+Forward time: 0.02487275
+Gradient time: 0.067367758
+loss: 0.055507958
+Forward time: 0.024796644
+Gradient time: 0.070133995
+loss: 0.044582248
+Forward time: 0.024889468
+Gradient time: 0.071530565
+loss: 0.038633585
+Forward time: 0.024955734
+Gradient time: 0.067519436
+loss: 0.034847975
+Forward time: 0.024868474
+Gradient time: 0.067478454
+loss: 0.03321457
+Forward time: 0.024805086
+Gradient time: 0.067598011
+loss: 0.031238675
+Forward time: 0.02473638
+Gradient time: 0.06739925
+loss: 0.029836357
+Forward time: 0.024738782
+Gradient time: 0.067322586
+loss: 0.028495848
+Forward time: 0.024735012
+Gradient time: 0.067304759
+loss: 0.027253926
+Forward time: 0.02468644
+Gradient time: 0.067587038
+loss: 0.026351333
+Forward time: 0.024912552
+Gradient time: 0.067261694
+loss: 0.025855005
+Forward time: 0.024793485
+Gradient time: 0.067541172
+loss: 0.024820864
+Forward time: 0.024704743
+Gradient time: 0.066450674
+loss: 0.024517238
+Forward time: 0.024611196
+Gradient time: 0.066579973
+loss: 0.023940623
+Forward time: 0.024626133
+Gradient time: 0.067230795
+loss: 0.023441672
+Forward time: 0.024499753
+Gradient time: 0.066039256
+loss: 0.022852898
+Forward time: 0.024527412
+Gradient time: 0.06605836
+loss: 0.022494078
+Forward time: 0.024492015
+Gradient time: 0.066110196
+loss: 0.022175789
+Forward time: 0.024520958
+Gradient time: 0.065920758
+loss: 0.02176869
+Forward time: 0.024420494
+Gradient time: 0.06622253
+loss: 0.02136296
+Forward time: 0.024670379
+Gradient time: 0.066819477
+loss: 0.021092534
+Forward time: 0.024657638
+Gradient time: 0.066524353
+loss: 0.020783722
+Forward time: 0.024638176
+Gradient time: 0.066443066
+loss: 0.020546973
+Forward time: 0.024619718
+Gradient time: 0.066781665
+loss: 0.020353794
+Forward time: 0.024577769
+Gradient time: 0.066440336
+loss: 0.020354629
+Forward time: 0.024508445
+Gradient time: 0.066644205
+loss: 0.020255625
+Forward time: 0.024472253
+Gradient time: 0.066473403
+loss: 0.020210326
+Forward time: 0.024508929
+Gradient time: 0.066551507
+loss: 0.020225942
+Forward time: 0.024603595
+Gradient time: 0.066481119
+loss: 0.020130575
+Forward time: 0.03124928
+Gradient time: 0.06683985
+loss: 0.020130575
+Forward time: 0.024542452
+Gradient time: 0.066624449
+loss: 0.020101428
+Forward time: 0.024479597
+Gradient time: 0.066945499
+loss: 0.020101428
+Forward time: 0.024319819
+Gradient time: 0.067312819
+loss: 0.02007687
+Forward time: 0.024678853
+Gradient time: 0.067824034
+loss: 0.019995093
+Forward time: 0.024781359
+Gradient time: 0.067923449
+loss: 0.019995093
+Forward time: 0.024420776
+Gradient time: 0.067680655
+loss: 0.020130336
+Forward time: 0.02488929
+Gradient time: 0.067751512
+loss: 0.019967496
+Forward time: 0.024788084
+Gradient time: 0.067705504
+loss: 0.019967496
+Forward time: 0.024865983
+Gradient time: 0.067685019
+loss: 0.019941986
+Forward time: 0.024715893
+Gradient time: 0.067546998
+loss: 0.019941986
+Forward time: 0.024914847
+Gradient time: 0.0676321
+loss: 0.019918025
+Forward time: 0.024868923
+Gradient time: 0.068069042
+loss: 0.019918025
+Forward time: 0.026089789
+Gradient time: 0.067945976
+loss: 0.019894898
+Forward time: 0.025017293
+Gradient time: 0.068043561
+loss: 0.01987344
+Forward time: 0.025119053
+Gradient time: 0.068178033
+loss: 0.01987344
+Forward time: 0.025038721
+Gradient time: 0.068121331
+loss: 0.019851923
+Forward time: 0.025055973
+Gradient time: 0.068256807
+loss: 0.019851923
+Forward time: 0.025125746
+Gradient time: 0.068124994
+loss: 0.019832373
+Forward time: 0.025185755
+Gradient time: 0.068059049
+loss: 0.019832373
+Forward time: 0.025103857
+Gradient time: 0.068163951
+loss: 0.019812763
+Forward time: 0.025137634
+Gradient time: 0.069384274
+loss: 0.01979351
+Forward time: 0.025598095
+Gradient time: 0.06928289
+loss: 0.01979351
+Forward time: 0.025657778
+Gradient time: 0.068253989
+loss: 0.01977557
+Forward time: 0.025155772
+Gradient time: 0.068266294
+loss: 0.019757628
+Forward time: 0.025193998
+Gradient time: 0.068404867
+loss: 0.019757628
+Forward time: 0.025251524
+Gradient time: 0.068836265
+loss: 0.019740164
+Forward time: 0.025362135
+Gradient time: 0.068597454
+loss: 0.019740164
+Forward time: 0.025310627
+Gradient time: 0.068737193
+loss: 0.019723654
+Forward time: 0.025333506
+Gradient time: 0.06874049
+loss: 0.019723654
+Forward time: 0.025463579
+Gradient time: 0.068933653
+loss: 0.019706786
+Forward time: 0.025482401
+Gradient time: 0.06919842
+loss: 0.019691288
+Forward time: 0.025424154
+Gradient time: 0.069243281
+loss: 0.019675255
+Forward time: 0.025476929
+Gradient time: 0.068604869
+loss: 0.019675255
+Forward time: 0.025152734
+Gradient time: 0.06863566
+loss: 0.019659698
+Forward time: 0.025187553
+Gradient time: 0.068706717
+loss: 0.019659698
+Forward time: 0.025391275
+Gradient time: 0.076095472
+loss: 0.019644916
+Forward time: 0.025630551
+Gradient time: 0.069260815
+loss: 0.019644916
+Forward time: 0.025472167
+Gradient time: 0.069477404
+loss: 0.019629478
+Forward time: 0.025411031
+Gradient time: 0.068149667
+loss: 0.019629478
+Forward time: 0.024575605
+Gradient time: 0.0662695
+loss: 0.019615531
+Forward time: 0.024228503
+Gradient time: 0.066085931
+loss: 0.019615531
+Forward time: 0.024248478
+Gradient time: 0.066142189
+loss: 0.019600928
+Forward time: 0.024454718
+Gradient time: 0.066054488
+loss: 0.019586504
+Forward time: 0.024295982
+Gradient time: 0.065989478
+loss: 0.019586504
+Forward time: 0.024279307
+Gradient time: 0.065999362
+loss: 0.019572675
+Forward time: 0.024328509
+Gradient time: 0.06607088
+loss: 0.019558668
+Forward time: 0.024426548
+Gradient time: 0.066039279
+loss: 0.019558668
+Forward time: 0.024176218
+Gradient time: 0.065929849
+loss: 0.019545436
+Forward time: 0.024102292
+Gradient time: 0.065786581
+loss: 0.019545436
+Forward time: 0.024282357
+Gradient time: 0.065893582
+loss: 0.019545436
+Forward time: 0.024246543
+Gradient time: 0.066292932
+loss: 0.019534111
+Forward time: 0.024174279
+Gradient time: 0.066156158
+loss: 0.019517422
+Forward time: 0.024267116
+Gradient time: 0.06614845
+loss: 0.019363523
+Forward time: 0.02439479
+Gradient time: 0.06650422
+loss: 0.019150078
+Forward time: 0.024608412
+Gradient time: 0.066599805
+loss: 0.018824875
+Forward time: 0.024514416
+Gradient time: 0.066536856
+loss: 0.018560946
+Forward time: 0.024632573
+Gradient time: 0.066468767
+loss: 0.018375933
+Forward time: 0.024608092
+Gradient time: 0.066456782
+loss: 0.0182482
+Forward time: 0.024475729
+Gradient time: 0.066362837
+loss: 0.018180668
+Forward time: 0.024429609
+Gradient time: 0.073302229
+loss: 0.018100679
+Forward time: 0.024552318
+Gradient time: 0.066290089
+loss: 0.01802969
+Forward time: 0.024475841
+Gradient time: 0.066355109
+loss: 0.01798457
+Forward time: 0.024507491
+Gradient time: 0.066393895
+loss: 0.017947972
+Forward time: 0.02443744
+Gradient time: 0.0664886
+loss: 0.017905295
+Forward time: 0.024450598
+Gradient time: 0.066440502
+loss: 0.017821312
+Forward time: 0.024522151
+Gradient time: 0.066426314
+loss: 0.017781377
+Forward time: 0.024398007
+Gradient time: 0.066404003
+loss: 0.017726898
+Forward time: 0.024469005
+Gradient time: 0.066282882
+loss: 0.017694414
+Forward time: 0.024518433
+Gradient time: 0.066687027
+loss: 0.017654955
+Forward time: 0.024729523
+Gradient time: 0.066769515
+loss: 0.017591596
+Forward time: 0.024419189
+Gradient time: 0.066298352
+loss: 0.017535508
+Forward time: 0.024454282
+Gradient time: 0.066296112
+loss: 0.017489076
+Forward time: 0.02446673
+Gradient time: 0.066584399
+loss: 0.01743555
+Forward time: 0.024639714
+Gradient time: 0.066573775
+loss: 0.017392278
+Forward time: 0.0244561
+Gradient time: 0.067144964
+loss: 0.01731807
+Forward time: 0.02428151
+Gradient time: 0.06594251
+loss: 0.017265499
+Forward time: 0.02420184
+Gradient time: 0.065972473
+loss: 0.017202497
+Forward time: 0.024253945
+Gradient time: 0.065971804
+loss: 0.017148852
+Forward time: 0.024648474
+Gradient time: 0.066340266
+loss: 0.017087996
+Forward time: 0.024548219
+Gradient time: 0.066676304
+loss: 0.017019331
+Forward time: 0.024606549
+Gradient time: 0.066892272
+loss: 0.91225207
+Forward time: 0.024444749
+Gradient time: 0.067142521
+loss: 0.66436994
+Forward time: 0.024449236
+Gradient time: 0.066937912
+loss: 0.61645234
+Forward time: 0.024392301
+Gradient time: 0.066901595
+loss: 0.20991373
+Forward time: 0.024704769
+Gradient time: 0.066827762
+loss: 0.13762587
+Forward time: 0.024541579
+Gradient time: 0.067166025
+loss: 0.11181027
+Forward time: 0.024663523
+Gradient time: 0.066993449
+loss: 0.0817852
+Forward time: 0.024404535
+Gradient time: 0.067502701
+loss: 0.0691545
+Forward time: 0.0251513
+Gradient time: 0.067005127
+loss: 0.05550784
+Forward time: 0.024446382
+Gradient time: 0.066801868
+loss: 0.044582605
+Forward time: 0.02454861
+Gradient time: 0.06654126
+loss: 0.038633943
+Forward time: 0.024426508
+Gradient time: 0.066467373
+loss: 0.034847498
+Forward time: 0.02454994
+Gradient time: 0.066875734
+loss: 0.03321457
+Forward time: 0.024651136
+Gradient time: 0.066912211
+loss: 0.031238437
+Forward time: 0.024704875
+Gradient time: 0.066779357
+loss: 0.029836059
+Forward time: 0.024673413
+Gradient time: 0.066834003
+loss: 0.028496087
+Forward time: 0.024668087
+Gradient time: 0.07453279
+loss: 0.027253687
+Forward time: 0.02497784
+Gradient time: 0.067247768
+loss: 0.02635169
+Forward time: 0.024772388
+Gradient time: 0.067302852
+loss: 0.02585429
+Forward time: 0.024802777
+Gradient time: 0.067239896
+loss: 0.024820507
+Forward time: 0.024836767
+Gradient time: 0.067243698
+loss: 0.024516702
+Forward time: 0.024881201
+Gradient time: 0.067501851
+loss: 0.023940265
+Forward time: 0.024769874
+Gradient time: 0.067167262
+loss: 0.02344203
+Forward time: 0.024760771
+Gradient time: 0.067224496
+loss: 0.022852302
+Forward time: 0.024891945
+Gradient time: 0.067451101
+loss: 0.022494197
+Forward time: 0.024802103
+Gradient time: 0.067312306
+loss: 0.022175908
+Forward time: 0.024839631
+Gradient time: 0.067279166
+loss: 0.021769166
+Forward time: 0.024825778
+Gradient time: 0.067570909
+loss: 0.021362603
+Forward time: 0.02476987
+Gradient time: 0.06731859
+loss: 0.021092296
+Forward time: 0.024830962
+Gradient time: 0.067608415
+loss: 0.020783722
+Forward time: 0.024906365
+Gradient time: 0.067549743
+loss: 0.020546615
+Forward time: 0.024965986
+Gradient time: 0.06763147
+loss: 0.020353913
+Forward time: 0.024989651
+Gradient time: 0.067294326
+loss: 0.020354271
+Forward time: 0.024771845
+Gradient time: 0.067665239
+loss: 0.020255446
+Forward time: 0.024689781
+Gradient time: 0.067653895
+loss: 0.020210922
+Forward time: 0.025519524
+Gradient time: 0.069295513
+loss: 0.02022779
+Forward time: 0.025544221
+Gradient time: 0.069206163
+loss: 0.020130217
+Forward time: 0.025348797
+Gradient time: 0.069325025
+loss: 0.020130217
+Forward time: 0.025335833
+Gradient time: 0.069285583
+loss: 0.020101905
+Forward time: 0.02529883
+Gradient time: 0.069804696
+loss: 0.02007687
+Forward time: 0.025713122
+Gradient time: 0.06982975
+loss: 0.01999557
+Forward time: 0.02585667
+Gradient time: 0.069721398
+loss: 0.01999557
+Forward time: 0.025710869
+Gradient time: 0.069572776
+loss: 0.02012229
+Forward time: 0.025605798
+Gradient time: 0.069412265
+loss: 0.01996833
+Forward time: 0.025829801
+Gradient time: 0.069501541
+loss: 0.01996833
+Forward time: 0.025863597
+Gradient time: 0.06975642
+loss: 0.019942462
+Forward time: 0.026202469
+Gradient time: 0.070271716
+loss: 0.019942462
+Forward time: 0.026278719
+Gradient time: 0.711781914
+loss: 0.01991874
+Forward time: 0.024601895
+Gradient time: 0.066511775
+loss: 0.01991874
+Forward time: 0.024395597
+Gradient time: 0.066296473
+loss: 0.019895613
+Forward time: 0.0243108
+Gradient time: 0.066179802
+loss: 0.019895613
+Forward time: 0.024289957
+Gradient time: 0.066449263
+loss: 0.019873321
+Forward time: 0.024380516
+Gradient time: 0.066549521
+loss: 0.019852638
+Forward time: 0.024304323
+Gradient time: 0.066259411
+loss: 0.019852638
+Forward time: 0.024312829
+Gradient time: 0.06614176
+loss: 0.019832373
+Forward time: 0.024393053
+Gradient time: 0.065972394
+loss: 0.019832373
+Forward time: 0.024198305
+Gradient time: 0.066074941
+loss: 0.019812524
+Forward time: 0.024204639
+Gradient time: 0.065774426
+loss: 0.019812524
+Forward time: 0.024145801
+Gradient time: 0.066005028
+loss: 0.01979363
+Forward time: 0.024130738
+Gradient time: 0.066287032
+loss: 0.019775808
+Forward time: 0.024331273
+Gradient time: 0.066058029
+loss: 0.019775808
+Forward time: 0.024104283
+Gradient time: 0.065996632
+loss: 0.019757986
+Forward time: 0.024106404
+Gradient time: 0.065988698
+loss: 0.019757986
+Forward time: 0.024201388
+Gradient time: 0.066076258
+loss: 0.019740522
+Forward time: 0.024238508
+Gradient time: 0.066132782
+loss: 0.019740522
+Forward time: 0.024332044
+Gradient time: 0.066120913
+loss: 0.019724011
+Forward time: 0.024199276
+Gradient time: 0.066080241
+loss: 0.019724011
+Forward time: 0.024233029
+Gradient time: 0.066038403
+loss: 0.019707859
+Forward time: 0.024101374
+Gradient time: 0.065660485
+loss: 0.019707859
+Forward time: 0.024125951
+Gradient time: 0.065732629
+loss: 0.019691765
+Forward time: 0.023995416
+Gradient time: 0.065576791
+loss: 0.019676924
+Forward time: 0.023980999
+Gradient time: 0.065659396
+loss: 0.019676924
+Forward time: 0.02412609
+Gradient time: 0.065789674
+loss: 0.019661188
+Forward time: 0.023988654
+Gradient time: 0.065642373
+loss: 0.019661188
+Forward time: 0.0241104
+Gradient time: 0.065696664
+loss: 0.01964575
+Forward time: 0.024073169
+Gradient time: 0.065721178
+loss: 0.019631684
+Forward time: 0.024113544
+Gradient time: 0.066012531
+loss: 0.019631684
+Forward time: 0.024326391
+Gradient time: 0.065856756
+loss: 0.01961708
+Forward time: 0.024102444
+Gradient time: 0.065810706
+loss: 0.01961708
+Forward time: 0.024128636
+Gradient time: 0.065972514
+loss: 0.019603133
+Forward time: 0.024222731
+Gradient time: 0.065957052
+loss: 0.019603133
+Forward time: 0.024189218
+Gradient time: 0.066086286
+loss: 0.019589424
+Forward time: 0.024114478
+Gradient time: 0.065860853
+loss: 0.019589424
+Forward time: 0.024122686
+Gradient time: 0.065858497
+loss: 0.019576013
+Forward time: 0.024068702
+Gradient time: 0.06568184
+loss: 0.019576013
+Forward time: 0.024106892
+Gradient time: 0.065887004
+loss: 0.01956302
+Forward time: 0.024151087
+Gradient time: 0.065827159
+loss: 0.01956302
+Forward time: 0.024110174
+Gradient time: 0.066288356
+loss: 0.019549906
+Forward time: 0.024245264
+Gradient time: 0.066333796
+loss: 0.019549906
+Forward time: 0.024206109
+Gradient time: 0.066383751
+loss: 0.019549549
+Forward time: 0.024279981
+Gradient time: 0.06643935
+loss: 0.01955992
+Forward time: 0.024304491
+Gradient time: 0.066402367
+loss: 0.01953125
+Forward time: 0.024227776
+Gradient time: 0.066499361
+loss: 0.01953125
+Forward time: 0.024251571
+Gradient time: 0.06655361
+loss: 0.019522429
+Forward time: 0.024242437
+Gradient time: 0.066396874
+loss: 0.019488394
+Forward time: 0.024320676
+Gradient time: 0.066374387
+loss: 0.019330561
+Forward time: 0.024326301
+Gradient time: 0.066593648
+loss: 0.019330561
+Forward time: 0.02422531
+Gradient time: 0.066481479
+loss: 0.028905869
+Forward time: 0.024372057
+Gradient time: 0.066411993
+loss: 0.019159973
+Forward time: 0.024299413
+Gradient time: 0.066436379
+loss: 0.019159973
+Forward time: 0.024315529
+Gradient time: 0.066514355
+loss: 0.018540084
+Forward time: 0.024381541
+Gradient time: 0.06652822
+loss: 0.018447101
+Forward time: 0.024767388
+Gradient time: 0.067187409
+loss: 0.01827985
+Forward time: 0.024764882
+Gradient time: 0.067325345
+loss: 0.01817584
+Forward time: 0.024796485
+Gradient time: 0.067407407
+loss: 0.018104732
+Forward time: 0.024841583
+Gradient time: 0.06730446
+loss: 0.018081665
+Forward time: 0.02490021
+Gradient time: 0.067459191
+loss: 0.018013299
+Forward time: 0.024861176
+Gradient time: 0.067510611
+loss: 0.017975092
+Forward time: 0.024858002
+Gradient time: 0.067411045
+loss: 0.017922103
+Forward time: 0.024765582
+Gradient time: 0.067142024
+loss: 0.01784128
+Forward time: 0.024771452
+Gradient time: 0.067161409
+loss: 0.017839968
+Forward time: 0.024763618
+Gradient time: 0.067340358
+loss: 0.017792106
+Forward time: 0.024543634
+Gradient time: 0.067025922
+loss: 0.017792106
+Forward time: 0.024627355
+Gradient time: 0.067048955
+loss: 0.01771462
+Forward time: 0.02477679
+Gradient time: 0.066981687
+loss: 0.017671406
+Forward time: 0.024668884
+Gradient time: 0.067195946
+loss: 0.017626464
+Forward time: 0.024797767
+Gradient time: 0.067089571
+loss: 0.017582536
+Forward time: 0.030545064
+Gradient time: 0.067404804
+loss: 0.017526746
+Forward time: 0.024846918
+Gradient time: 0.067416985
+loss: 0.017480433
+Forward time: 0.024783592
+Gradient time: 0.068170171
+loss: 0.017435193
+Forward time: 0.025311916
+Gradient time: 0.068406381
+loss: 0.017372072
+Forward time: 0.025232904
+Gradient time: 0.068228697
+loss: 0.017311335
+Forward time: 0.025226425
+Gradient time: 0.068150922
+loss: 0.017243266
+Forward time: 0.025209372
+Gradient time: 0.068197292
+loss: 0.017189503
+Forward time: 0.02532229
+Gradient time: 0.068175806
+loss: 0.017123342
+Forward time: 0.025270125
+Gradient time: 0.068183995
+loss: 0.017063022
+Forward time: 0.025332641
+Gradient time: 0.068139915
+loss: 0.016994357
+Forward time: 0.025308214
+Gradient time: 0.068136239
+loss: 0.0169366
+Forward time: 0.02505148
+Gradient time: 0.067199832
+loss: 0.016896844
+Forward time: 0.02480817
+Gradient time: 0.067177298
+Selected best candidate with loss=0.016896843910217285
+Running main optimization step 1 with LBFGS (maxiters=100, use_gpu=true)...
+loss: 0.016896844
+Forward time: 0.025519598
+Gradient time: 0.069435108
+loss: 0.016882896
+Forward time: 0.026101436
+Gradient time: 0.069629059
+loss: 0.016867995
+Forward time: 0.02576064
+Gradient time: 0.810936962
+loss: 0.016838849
+Forward time: 0.024871647
+Gradient time: 0.068880898
+loss: 0.016818702
+Forward time: 0.024551068
+Gradient time: 0.068706741
+loss: 0.016780913
+Forward time: 0.02455443
+Gradient time: 0.066259008
+loss: 0.016773224
+Forward time: 0.024591477
+Gradient time: 0.066260511
+loss: 0.016754925
+Forward time: 0.024365591
+Gradient time: 0.066355528
+loss: 0.016754925
+Forward time: 0.024233667
+Gradient time: 0.070934264
+loss: 0.016733646
+Forward time: 0.024609498
+Gradient time: 0.066825989
+loss: 0.016715527
+Forward time: 0.024897622
+Gradient time: 0.067558303
+loss: 0.016699314
+Forward time: 0.024916103
+Gradient time: 0.067068422
+loss: 0.01667428
+Forward time: 0.024513201
+Gradient time: 0.066008913
+loss: 0.01665479
+Forward time: 0.024483888
+Gradient time: 0.066155835
+loss: 0.016636074
+Forward time: 0.024576663
+Gradient time: 0.066669641
+loss: 0.016624153
+Forward time: 0.02459698
+Gradient time: 0.066555018
+loss: 0.016602993
+Forward time: 0.024558835
+Gradient time: 0.066485002
+loss: 0.016591668
+Forward time: 0.024601741
+Gradient time: 0.066420504
+loss: 0.01656127
+Forward time: 0.024746536
+Gradient time: 0.066192962
+loss: 0.016548634
+Forward time: 0.024522447
+Gradient time: 0.066225657
+loss: 0.016533613
+Forward time: 0.024443439
+Gradient time: 0.066206814
+loss: 0.016512215
+Forward time: 0.024432513
+Gradient time: 0.066286686
+loss: 0.016510427
+Forward time: 0.024532049
+Gradient time: 0.066235563
+loss: 0.016496718
+Forward time: 0.024373956
+Gradient time: 0.065924238
+loss: 0.016496718
+Forward time: 0.024270929
+Gradient time: 0.066437785
+loss: 0.016481817
+Forward time: 0.024487137
+Gradient time: 0.066384624
+loss: 0.016471684
+Forward time: 0.024546316
+Gradient time: 0.067204359
+loss: 0.016460538
+Forward time: 0.024793672
+Gradient time: 0.067600254
+loss: 0.016447067
+Forward time: 0.024754339
+Gradient time: 0.067056377
+loss: 0.016433
+Forward time: 0.024848077
+Gradient time: 0.066292115
+loss: 0.016419888
+Forward time: 0.024582237
+Gradient time: 0.067103061
+loss: 0.016408503
+Forward time: 0.024407407
+Gradient time: 0.065809311
+loss: 0.016400397
+Forward time: 0.024282171
+Gradient time: 0.06622106
+loss: 0.01638949
+Forward time: 0.024251657
+Gradient time: 0.066727675
+loss: 0.016382754
+Forward time: 0.024858023
+Gradient time: 0.067361865
+loss: 0.016371727
+Forward time: 0.024893441
+Gradient time: 0.067041907
+loss: 0.01636219
+Forward time: 0.024437985
+Gradient time: 0.066030287
+loss: 0.016355574
+Forward time: 0.024325853
+Gradient time: 0.066052435
+loss: 0.016341269
+Forward time: 0.024381217
+Gradient time: 0.066067674
+loss: 0.016361475
+Forward time: 0.024567044
+Gradient time: 0.066775497
+loss: 0.016334414
+Forward time: 0.024349275
+Gradient time: 0.066130158
+loss: 0.016334414
+Forward time: 0.024422139
+Gradient time: 0.067419862
+loss: 0.016321063
+Forward time: 0.024869198
+Gradient time: 0.066771814
+loss: 0.016311705
+Forward time: 0.024521227
+Gradient time: 0.066112489
+loss: 0.016302228
+Forward time: 0.024580254
+Gradient time: 0.067228392
+loss: 0.016295016
+Forward time: 0.024885658
+Gradient time: 0.067043434
+loss: 0.01628995
+Forward time: 0.024842911
+Gradient time: 0.067238241
+loss: 0.016279519
+Forward time: 0.024852332
+Gradient time: 0.06721828
+loss: 0.016272068
+Forward time: 0.024831114
+Gradient time: 0.072992651
+loss: 0.016264975
+Forward time: 0.024990861
+Gradient time: 0.069634372
+loss: 0.01625681
+Forward time: 0.024512961
+Gradient time: 0.070584645
+loss: 0.01625079
+Forward time: 0.024584499
+Gradient time: 0.067490425
+loss: 0.016246319
+Forward time: 0.025001607
+Gradient time: 0.067529494
+loss: 0.01623416
+Forward time: 0.024960431
+Gradient time: 0.067460489
+loss: 0.016238868
+Forward time: 0.024993524
+Gradient time: 0.067654754
+loss: 0.016230345
+Forward time: 0.02470452
+Gradient time: 0.06686371
+loss: 0.016230345
+Forward time: 0.024429738
+Gradient time: 0.066849454
+loss: 0.016224205
+Forward time: 0.024782145
+Gradient time: 0.068399542
+loss: 0.016217113
+Forward time: 0.025490021
+Gradient time: 0.068733826
+loss: 0.01621294
+Forward time: 0.025434894
+Gradient time: 0.068795606
+loss: 0.01620847
+Forward time: 0.025532113
+Gradient time: 0.068120602
+loss: 0.01620531
+Forward time: 0.025201908
+Gradient time: 0.068231239
+loss: 0.01620233
+Forward time: 0.025257719
+Gradient time: 0.068002945
+loss: 0.016198516
+Forward time: 0.025198268
+Gradient time: 0.068148891
+loss: 0.016194046
+Forward time: 0.025186596
+Gradient time: 0.068230043
+loss: 0.01619029
+Forward time: 0.025180234
+Gradient time: 0.068612717
+loss: 0.016186714
+Forward time: 0.025514877
+Gradient time: 0.068777102
+loss: 0.01618296
+Forward time: 0.025567669
+Gradient time: 0.069232891
+loss: 0.016179144
+Forward time: 0.025549001
+Gradient time: 0.068187189
+loss: 0.016174436
+Forward time: 0.025150726
+Gradient time: 0.06817472
+loss: 0.016171813
+Forward time: 0.025174033
+Gradient time: 0.068251886
+loss: 0.016167343
+Forward time: 0.025240592
+Gradient time: 0.069048268
+loss: 0.016163766
+Forward time: 0.02554157
+Gradient time: 0.068164862
+loss: 0.016160011
+Forward time: 0.02511583
+Gradient time: 0.068356939
+loss: 0.016156554
+Forward time: 0.025201237
+Gradient time: 0.068594194
+loss: 0.016151726
+Forward time: 0.025498289
+Gradient time: 0.068928115
+loss: 0.016151726
+Forward time: 0.025640025
+Gradient time: 0.068938656
+loss: 0.016148865
+Forward time: 0.025411117
+Gradient time: 0.068988241
+loss: 0.016148865
+Forward time: 0.025508455
+Gradient time: 0.068590617
+loss: 0.016144633
+Forward time: 0.025086013
+Gradient time: 0.06783798
+loss: 0.016139865
+Forward time: 0.025020853
+Gradient time: 0.068256559
+loss: 0.016135752
+Forward time: 0.025101572
+Gradient time: 0.068505023
+loss: 0.016132355
+Forward time: 0.025359296
+Gradient time: 0.070003679
+loss: 0.016128302
+Forward time: 0.026015317
+Gradient time: 0.07018808
+loss: 0.016123116
+Forward time: 0.026050332
+Gradient time: 0.06999444
+loss: 0.01611942
+Forward time: 0.026040531
+Gradient time: 0.070014424
+loss: 0.016116023
+Forward time: 1.201604925
+Gradient time: 0.066817574
+loss: 0.01610893
+Forward time: 0.024747869
+Gradient time: 0.066404856
+loss: 0.0161044
+Forward time: 0.024539686
+Gradient time: 0.066258479
+loss: 0.016097903
+Forward time: 0.024536232
+Gradient time: 0.066286372
+loss: 0.016094029
+Forward time: 0.024741262
+Gradient time: 0.066398532
+loss: 0.016089857
+Forward time: 0.024488226
+Gradient time: 0.066055484
+loss: 0.016085863
+Forward time: 0.024455146
+Gradient time: 0.066159211
+loss: 0.016082168
+Forward time: 0.024614593
+Gradient time: 0.066511356
+loss: 0.016076148
+Forward time: 0.024582484
+Gradient time: 0.066274651
+loss: 0.016070485
+Forward time: 0.024531258
+Gradient time: 0.066294743
+loss: 0.016067266
+Forward time: 0.024517606
+Gradient time: 0.066213185
+loss: 0.016062677
+Forward time: 0.024595875
+Gradient time: 0.066463485
+loss: 0.016058922
+Forward time: 0.024625121
+Gradient time: 0.066886075
+loss: 0.016054034
+Forward time: 0.024585869
+Gradient time: 0.066627711
+loss: 0.016048133
+Forward time: 0.024639952
+Gradient time: 0.066642562
+loss: 0.016043067
+Forward time: 0.024605527
+Gradient time: 0.06668855
+loss: 0.016039133
+Forward time: 0.024609221
+Gradient time: 0.066730005
+loss: 0.016032279
+Forward time: 0.024722258
+Gradient time: 0.066632963
+loss: 0.016026378
+Forward time: 0.02459424
+Gradient time: 0.066410069
+loss: 0.016019404
+Forward time: 0.024436434
+Gradient time: 0.066488825
+loss: 0.016013145
+Forward time: 0.024597402
+Gradient time: 0.066328829
+loss: 0.016007364
+Forward time: 0.024473514
+Gradient time: 0.065897352
+loss: 0.016002119
+Forward time: 0.02434827
+Gradient time: 0.065748171
+loss: 0.01599598
+Forward time: 0.024290297
+Gradient time: 0.065890699
+loss: 0.015989125
+Forward time: 0.024283004
+Gradient time: 0.066418667
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 100, Final |g|: 0.0003640800714492798)
+Running main optimization step 2 with GradientDescent (maxiters=100, use_gpu=true)...
+loss: 0.015989006
+Forward time: 0.02579162
+Gradient time: 0.067470726
+loss: 0.015986264
+Forward time: 0.024590805
+Gradient time: 0.067012197
+loss: 0.015985489
+Forward time: 0.024639845
+Gradient time: 0.067040009
+loss: 0.015988648
+Forward time: 0.024762806
+Gradient time: 0.06667752
+loss: 0.015982628
+Forward time: 0.024481833
+Gradient time: 0.067518569
+loss: 0.015981913
+Forward time: 0.024856647
+Gradient time: 0.066799304
+loss: 0.015981793
+Forward time: 0.024461898
+Gradient time: 0.066834856
+loss: 0.015979767
+Forward time: 0.024356758
+Gradient time: 0.067429797
+loss: 0.015979767
+Forward time: 0.024538074
+Gradient time: 0.067060098
+loss: 0.015978515
+Forward time: 0.024559461
+Gradient time: 0.067000717
+loss: 0.015995622
+Forward time: 0.024557661
+Gradient time: 0.066907113
+loss: 0.015976965
+Forward time: 0.024514407
+Gradient time: 0.066945697
+loss: 0.015976846
+Forward time: 0.025055436
+Gradient time: 0.066853762
+loss: 0.01597625
+Forward time: 0.024397404
+Gradient time: 0.067596972
+loss: 0.015975296
+Forward time: 0.024663317
+Gradient time: 0.067192725
+loss: 0.015975296
+Forward time: 0.024841756
+Gradient time: 0.066785766
+loss: 0.015974581
+Forward time: 0.024525976
+Gradient time: 0.066740488
+loss: 0.016007006
+Forward time: 0.024592867
+Gradient time: 0.067259917
+loss: 0.015973866
+Forward time: 0.024565238
+Gradient time: 0.067178605
+loss: 0.01597327
+Forward time: 0.024614942
+Gradient time: 0.067023405
+loss: 0.015973032
+Forward time: 0.024663395
+Gradient time: 0.066506943
+loss: 0.015972435
+Forward time: 0.024257907
+Gradient time: 0.066511257
+loss: 0.015967846
+Forward time: 0.0245154
+Gradient time: 0.066660951
+loss: 0.015967846
+Forward time: 0.024404605
+Gradient time: 0.066805606
+loss: 0.016011
+Forward time: 0.024352258
+Gradient time: 0.066503142
+loss: 0.015967607
+Forward time: 0.024261952
+Gradient time: 0.066601143
+loss: 0.015967965
+Forward time: 0.0244416
+Gradient time: 0.066532809
+loss: 0.015967727
+Forward time: 0.024465747
+Gradient time: 0.066819799
+loss: 0.015967727
+Forward time: 0.024311355
+Gradient time: 0.066962355
+loss: 0.015967607
+Forward time: 0.024669063
+Gradient time: 0.06732943
+loss: 0.015967846
+Forward time: 0.024531505
+Gradient time: 0.067097628
+loss: 0.015967727
+Forward time: 0.024598275
+Gradient time: 0.067155069
+loss: 0.015967488
+Forward time: 0.02469921
+Gradient time: 0.067321168
+loss: 0.015967011
+Forward time: 0.024705607
+Gradient time: 0.067406005
+loss: 0.01596737
+Forward time: 0.02466899
+Gradient time: 0.067234895
+loss: 0.01596713
+Forward time: 0.024582728
+Gradient time: 0.06722765
+loss: 0.015967488
+Forward time: 0.024673408
+Gradient time: 0.074175091
+loss: 0.015967727
+Forward time: 0.024895155
+Gradient time: 0.067426958
+loss: 0.015967727
+Forward time: 0.024660766
+Gradient time: 0.067317768
+loss: 0.015967488
+Forward time: 0.024586973
+Gradient time: 0.067089039
+loss: 0.015967607
+Forward time: 0.024576824
+Gradient time: 0.066990516
+loss: 0.015967607
+Forward time: 0.024667099
+Gradient time: 0.066905114
+loss: 0.015967488
+Forward time: 0.024619896
+Gradient time: 0.067016603
+loss: 0.015967607
+Forward time: 0.024561975
+Gradient time: 0.067023485
+loss: 0.015967488
+Forward time: 0.024547433
+Gradient time: 0.0671898
+loss: 0.015967488
+Forward time: 0.024646032
+Gradient time: 0.067121991
+loss: 0.015967727
+Forward time: 0.024608696
+Gradient time: 0.067264079
+loss: 0.015967727
+Forward time: 0.024649733
+Gradient time: 0.067529584
+loss: 0.015967727
+Forward time: 0.024589992
+Gradient time: 0.067126562
+loss: 0.015967488
+Forward time: 0.024587533
+Gradient time: 0.067325844
+loss: 0.015967488
+Forward time: 0.024510138
+Gradient time: 0.067365348
+loss: 0.015967488
+Forward time: 0.024743501
+Gradient time: 0.067001718
+loss: 0.015967727
+Forward time: 0.024611081
+Gradient time: 0.067224351
+loss: 0.015967727
+Forward time: 0.024926374
+Gradient time: 0.068822253
+loss: 0.015967488
+Forward time: 0.025253287
+Gradient time: 0.068976036
+loss: 0.015967727
+Forward time: 0.025209554
+Gradient time: 0.069222362
+loss: 0.015967727
+Forward time: 0.025675478
+Gradient time: 0.070132704
+loss: 0.015967727
+Forward time: 0.025865323
+Gradient time: 0.069706021
+loss: 0.015967488
+Forward time: 0.025514974
+Gradient time: 0.069577911
+loss: 0.015967727
+Forward time: 0.025743797
+Gradient time: 0.069718584
+loss: 0.015967727
+Forward time: 0.025811067
+Gradient time: 0.069613694
+loss: 0.015967727
+Forward time: 0.025677837
+Gradient time: 0.069319702
+loss: 0.015967488
+Forward time: 0.025765631
+Gradient time: 0.069376225
+loss: 0.015967488
+Forward time: 0.689227673
+Gradient time: 0.066992664
+loss: 0.015967488
+Forward time: 0.024519743
+Gradient time: 0.066310934
+loss: 0.015967727
+Forward time: 0.024222753
+Gradient time: 0.066212255
+loss: 0.015967727
+Forward time: 0.024413005
+Gradient time: 0.066064379
+loss: 0.015967488
+Forward time: 0.024348938
+Gradient time: 0.066419802
+loss: 0.015967727
+Forward time: 0.024282654
+Gradient time: 0.066370143
+loss: 0.015967488
+Forward time: 0.03136096
+Gradient time: 0.066422252
+loss: 0.015967727
+Forward time: 0.02432649
+Gradient time: 0.06604545
+loss: 0.015967727
+Forward time: 0.02430508
+Gradient time: 0.065905755
+loss: 0.015967488
+Forward time: 0.02421575
+Gradient time: 0.065926101
+loss: 0.015967488
+Forward time: 0.024266641
+Gradient time: 0.065973979
+loss: 0.015967727
+Forward time: 0.024165873
+Gradient time: 0.066020236
+loss: 0.015967488
+Forward time: 0.024246203
+Gradient time: 0.066339409
+loss: 0.015967488
+Forward time: 0.024253441
+Gradient time: 0.066259981
+loss: 0.015967727
+Forward time: 0.024285498
+Gradient time: 0.065978206
+loss: 0.015967727
+Forward time: 0.024104396
+Gradient time: 0.066105295
+loss: 0.015967727
+Forward time: 0.024257982
+Gradient time: 0.066428719
+loss: 0.015967488
+Forward time: 0.024180269
+Gradient time: 0.066067166
+loss: 0.015967727
+Forward time: 0.024228203
+Gradient time: 0.066283767
+loss: 0.015967488
+Forward time: 0.024471329
+Gradient time: 0.066913872
+loss: 0.015967488
+Forward time: 0.024369393
+Gradient time: 0.066668585
+loss: 0.01596713
+Forward time: 0.024432102
+Gradient time: 0.066541598
+loss: 0.01596582
+Forward time: 0.024311529
+Gradient time: 0.066458858
+loss: 0.015960157
+Forward time: 0.024327995
+Gradient time: 0.066407953
+loss: 0.015960157
+Forward time: 0.02434853
+Gradient time: 0.066729212
+loss: 0.017194688
+Forward time: 0.024588693
+Gradient time: 0.066889645
+loss: 0.01595956
+Forward time: 0.024590633
+Gradient time: 0.067104061
+loss: 0.015959442
+Forward time: 0.024486722
+Gradient time: 0.067154803
+loss: 0.015959442
+Forward time: 0.024615996
+Gradient time: 0.066681728
+loss: 0.015958726
+Forward time: 0.024498181
+Gradient time: 0.066816418
+loss: 0.015956163
+Forward time: 0.024386243
+Gradient time: 0.067142644
+loss: 0.015956163
+Forward time: 0.02438999
+Gradient time: 0.066756752
+loss: 0.016089737
+Forward time: 0.024404728
+Gradient time: 0.0667697
+loss: 0.015955925
+Forward time: 0.024342713
+Gradient time: 0.066701568
+loss: 0.015956402
+Forward time: 0.024287853
+Gradient time: 0.066505662
+loss: 0.015956044
+Forward time: 0.024445929
+Gradient time: 0.067082507
+loss: 0.015955925
+Forward time: 0.024455362
+Gradient time: 0.067186397
+loss: 0.015955925
+Forward time: 0.024679911
+Gradient time: 0.066895026
+loss: 0.015955925
+Forward time: 0.024285058
+Gradient time: 0.067030998
+loss: 0.015955687
+Forward time: 0.024479386
+Gradient time: 0.067683443
+loss: 0.015955448
+Forward time: 0.02467059
+Gradient time: 0.066812207
+loss: 0.015955567
+Forward time: 0.024378964
+Gradient time: 0.067209663
+loss: 0.01595509
+Forward time: 0.024455904
+Gradient time: 0.066815032
+loss: 0.015955687
+Forward time: 0.024610678
+Gradient time: 0.066984842
+loss: 0.015955687
+Forward time: 0.024497633
+Gradient time: 0.067057965
+loss: 0.015955925
+Forward time: 0.024302841
+Gradient time: 0.066638123
+loss: 0.015955806
+Forward time: 0.024367819
+Gradient time: 0.069506711
+loss: 0.015955687
+Forward time: 0.024471655
+Gradient time: 0.066969461
+loss: 0.015955448
+Forward time: 0.024437597
+Gradient time: 0.066841014
+loss: 0.01595521
+Forward time: 0.024482447
+Gradient time: 0.066763455
+loss: 0.015955329
+Forward time: 0.024154588
+Gradient time: 0.065787643
+loss: 0.01595509
+Forward time: 0.024129995
+Gradient time: 0.065927745
+loss: 0.01595509
+Forward time: 0.024122232
+Gradient time: 0.066540976
+loss: 0.01595509
+Forward time: 0.02438529
+Gradient time: 0.066570397
+loss: 0.01595509
+Forward time: 0.024414782
+Gradient time: 0.067037231
+loss: 0.01595509
+Forward time: 0.024428011
+Gradient time: 0.067290167
+loss: 0.01595509
+Forward time: 0.024696441
+Gradient time: 0.067404594
+loss: 0.01595509
+Forward time: 0.024776752
+Gradient time: 0.067360827
+loss: 0.015955329
+Forward time: 0.024746687
+Gradient time: 0.067483663
+loss: 0.015955329
+Forward time: 0.024741271
+Gradient time: 0.067539068
+loss: 0.01595509
+Forward time: 0.02487144
+Gradient time: 0.067416848
+loss: 0.015955329
+Forward time: 0.024707643
+Gradient time: 0.06752507
+loss: 0.01595509
+Forward time: 0.024744055
+Gradient time: 0.067399759
+loss: 0.01595509
+Forward time: 0.024732544
+Gradient time: 0.067683066
+loss: 0.015955329
+Forward time: 0.024714262
+Gradient time: 0.067422758
+loss: 0.01595509
+Forward time: 0.024747225
+Gradient time: 0.067929897
+loss: 0.01595509
+Forward time: 0.024863037
+Gradient time: 0.067680069
+loss: 0.015955329
+Forward time: 0.024741383
+Gradient time: 0.067448548
+loss: 0.015955329
+Forward time: 0.024703275
+Gradient time: 0.067407789
+loss: 0.01595509
+Forward time: 0.024810813
+Gradient time: 0.067439519
+loss: 0.015955329
+Forward time: 0.024719777
+Gradient time: 0.067321348
+loss: 0.01595509
+Forward time: 0.024790892
+Gradient time: 0.067450029
+loss: 0.015955329
+Forward time: 0.024673124
+Gradient time: 0.067413589
+loss: 0.015955329
+Forward time: 0.024679596
+Gradient time: 0.067434694
+loss: 0.01595509
+Forward time: 0.024826571
+Gradient time: 0.067473769
+loss: 0.015955329
+Forward time: 0.024731918
+Gradient time: 0.067621705
+loss: 0.01595509
+Forward time: 0.024650397
+Gradient time: 0.067086472
+loss: 0.01595509
+Forward time: 0.024652391
+Gradient time: 0.067040606
+loss: 0.015955329
+Forward time: 0.024548013
+Gradient time: 0.067163365
+loss: 0.01595509
+Forward time: 0.024593344
+Gradient time: 0.066944684
+loss: 0.01595509
+Forward time: 0.024551425
+Gradient time: 0.066894564
+loss: 0.01595509
+Forward time: 0.024609485
+Gradient time: 0.067039202
+loss: 0.01595509
+Forward time: 0.024507391
+Gradient time: 0.067856127
+loss: 0.015955329
+Forward time: 0.025251541
+Gradient time: 0.069063895
+loss: 0.01595509
+Forward time: 0.025256992
+Gradient time: 0.069167398
+loss: 0.015955329
+Forward time: 0.025434616
+Gradient time: 0.06928593
+loss: 0.015955329
+Forward time: 0.025351719
+Gradient time: 0.069061857
+loss: 0.015955329
+Forward time: 0.025552244
+Gradient time: 0.06905182
+loss: 0.01595509
+Forward time: 0.025225608
+Gradient time: 0.068883927
+loss: 0.015955329
+Forward time: 0.026598151
+Gradient time: 0.06634947
+loss: 0.015955329
+Forward time: 0.024419537
+Gradient time: 0.066240068
+loss: 0.015955329
+Forward time: 0.024189993
+Gradient time: 0.066146686
+loss: 0.015955329
+Forward time: 0.02434736
+Gradient time: 0.066138828
+loss: 0.01595509
+Forward time: 0.024476885
+Gradient time: 0.066290327
+loss: 0.015955329
+Forward time: 0.024271996
+Gradient time: 0.06619251
+loss: 0.01595509
+Forward time: 0.024182627
+Gradient time: 0.065988535
+loss: 0.015955329
+Forward time: 0.024196577
+Gradient time: 0.06605867
+loss: 0.01595509
+Forward time: 0.024176895
+Gradient time: 0.065897478
+loss: 0.01595521
+Forward time: 0.02406927
+Gradient time: 0.065882858
+loss: 0.015955448
+Forward time: 0.024226606
+Gradient time: 0.065840181
+loss: 0.01595509
+Forward time: 0.024282371
+Gradient time: 0.06590422
+loss: 0.01595521
+Forward time: 0.02434841
+Gradient time: 0.06625173
+loss: 0.01595521
+Forward time: 0.024377679
+Gradient time: 0.066331946
+loss: 0.01595521
+Forward time: 0.024263818
+Gradient time: 0.066071519
+loss: 0.01595509
+Forward time: 0.024288546
+Gradient time: 0.066026311
+loss: 0.01595509
+Forward time: 0.024124435
+Gradient time: 0.065968539
+loss: 0.01595509
+Forward time: 0.024215074
+Gradient time: 0.065993104
+loss: 0.01595521
+Forward time: 0.024381913
+Gradient time: 0.065993706
+loss: 0.01595509
+Forward time: 0.024183174
+Gradient time: 0.065778742
+loss: 0.01595509
+Forward time: 0.024128193
+Gradient time: 0.065760347
+loss: 0.01595521
+Forward time: 0.02412066
+Gradient time: 0.065970728
+loss: 0.01595521
+Forward time: 0.024155679
+Gradient time: 0.065684977
+loss: 0.01595509
+Forward time: 0.024076072
+Gradient time: 0.065702555
+loss: 0.01595521
+Forward time: 0.024063596
+Gradient time: 0.065879742
+loss: 0.01595521
+Forward time: 0.024150558
+Gradient time: 0.065788605
+loss: 0.01595509
+Forward time: 0.02402489
+Gradient time: 0.065827818
+loss: 0.01595521
+Forward time: 0.030419055
+Gradient time: 0.065959889
+loss: 0.01595521
+Forward time: 0.024149753
+Gradient time: 0.067179323
+loss: 0.01595521
+Forward time: 0.024221823
+Gradient time: 0.065857427
+loss: 0.01595509
+Forward time: 0.024103492
+Gradient time: 0.067002436
+loss: 0.01595521
+Forward time: 0.024593079
+Gradient time: 0.06718972
+loss: 0.01595509
+Forward time: 0.024565365
+Gradient time: 0.066988195
+loss: 0.01595509
+Forward time: 0.024165352
+Gradient time: 0.065770847
+loss: 0.01595521
+Forward time: 0.024095746
+Gradient time: 0.067188792
+loss: 0.01595521
+Forward time: 0.024194506
+Gradient time: 0.066396737
+loss: 0.01595509
+Forward time: 0.024557111
+Gradient time: 0.06705679
+loss: 0.01595521
+Forward time: 0.024229434
+Gradient time: 0.065697993
+loss: 0.01595521
+Forward time: 0.024005179
+Gradient time: 0.066783786
+loss: 0.01595509
+Forward time: 0.024553502
+Gradient time: 0.067163538
+loss: 0.01595521
+Forward time: 0.024554885
+Gradient time: 0.067069012
+loss: 0.01595509
+Forward time: 0.024616986
+Gradient time: 0.066192522
+loss: 0.01595509
+Forward time: 0.024117977
+Gradient time: 0.065783435
+loss: 0.01595509
+Forward time: 0.024016823
+Gradient time: 0.065881679
+loss: 0.01595521
+Forward time: 0.024027451
+Gradient time: 0.06581624
+loss: 0.01595521
+Forward time: 0.024056229
+Gradient time: 0.065888927
+loss: 0.01595521
+Forward time: 0.023963286
+Gradient time: 0.065824344
+loss: 0.01595509
+Forward time: 0.024068728
+Gradient time: 0.065824556
+loss: 0.01595509
+Forward time: 0.024023204
+Gradient time: 0.065703621
+loss: 0.01595521
+Forward time: 0.02409175
+Gradient time: 0.065787201
+loss: 0.01595509
+Forward time: 0.023994488
+Gradient time: 0.065868581
+loss: 0.01595521
+Forward time: 0.024076504
+Gradient time: 0.066615737
+loss: 0.01595509
+Forward time: 0.024596483
+Gradient time: 0.067101016
+loss: 0.01595521
+Forward time: 0.024680301
+Gradient time: 0.067184286
+loss: 0.01595509
+Forward time: 0.024654637
+Gradient time: 0.067157418
+loss: 0.01595521
+Forward time: 0.024730219
+Gradient time: 0.067852291
+loss: 0.01595509
+Forward time: 0.024991284
+Gradient time: 0.067859784
+loss: 0.01595521
+Forward time: 0.02496613
+Gradient time: 0.067990357
+loss: 0.01595509
+Forward time: 0.025020592
+Gradient time: 0.068068426
+    Step 2 (GradientDescent) stopped by: Function tolerance met (|Δf| <= f_tol) (Iterations: 27, Final |g|: 0.00012960401363670826)
+Running main optimization step 3 with LBFGS (maxiters=100, use_gpu=true)...
+loss: 0.015955567
+Forward time: 0.025013753
+Gradient time: 0.067227934
+loss: 0.015954733
+Forward time: 0.024584961
+Gradient time: 0.067018557
+loss: 0.015954375
+Forward time: 0.025018595
+Gradient time: 0.068027772
+loss: 0.01594925
+Forward time: 0.025097497
+Gradient time: 0.067943592
+loss: 0.015935898
+Forward time: 0.025100285
+Gradient time: 0.067961829
+loss: 0.015921235
+Forward time: 0.024822267
+Gradient time: 0.066910119
+loss: 0.015950799
+Forward time: 0.024619656
+Gradient time: 0.066652189
+loss: 0.015917838
+Forward time: 0.024482139
+Gradient time: 0.06672394
+loss: 0.01591283
+Forward time: 0.024694278
+Gradient time: 0.066697601
+loss: 0.015911996
+Forward time: 0.024713982
+Gradient time: 0.066813742
+loss: 0.015910745
+Forward time: 0.024653605
+Gradient time: 0.066868392
+loss: 0.015908599
+Forward time: 0.024665663
+Gradient time: 0.066744773
+loss: 0.015905857
+Forward time: 0.024622299
+Gradient time: 0.066876171
+loss: 0.01590103
+Forward time: 0.024662238
+Gradient time: 0.066884661
+loss: 0.015895247
+Forward time: 0.024644662
+Gradient time: 0.072519041
+loss: 0.015888512
+Forward time: 0.027518474
+Gradient time: 0.068243579
+loss: 0.015881062
+Forward time: 0.025166968
+Gradient time: 0.071948801
+loss: 0.015884459
+Forward time: 0.025167382
+Gradient time: 0.067958023
+loss: 0.015876412
+Forward time: 0.02501494
+Gradient time: 0.068889109
+loss: 0.015876412
+Forward time: 0.02536046
+Gradient time: 0.069102507
+loss: 0.015871823
+Forward time: 0.025551774
+Gradient time: 0.068606332
+loss: 0.015868723
+Forward time: 0.025262591
+Gradient time: 0.068011457
+loss: 0.01586765
+Forward time: 0.025170317
+Gradient time: 0.067846885
+loss: 0.015866041
+Forward time: 0.025370303
+Gradient time: 0.068590679
+loss: 0.015862942
+Forward time: 0.025132615
+Gradient time: 0.069827971
+loss: 0.015858471
+Forward time: 0.02580882
+Gradient time: 1.233406095
+loss: 0.015852332
+Forward time: 0.024768671
+Gradient time: 0.066491856
+loss: 0.015846372
+Forward time: 0.024509299
+Gradient time: 0.066210174
+loss: 0.015840113
+Forward time: 0.024282371
+Gradient time: 0.066131926
+loss: 0.015837193
+Forward time: 0.02440836
+Gradient time: 0.066155182
+loss: 0.015833259
+Forward time: 0.024600734
+Gradient time: 0.066252512
+loss: 0.015829623
+Forward time: 0.024434508
+Gradient time: 0.066161424
+loss: 0.015828192
+Forward time: 0.024415257
+Gradient time: 0.066088251
+loss: 0.015824854
+Forward time: 0.024379824
+Gradient time: 0.066204134
+loss: 0.015820503
+Forward time: 0.02442646
+Gradient time: 0.065747976
+loss: 0.015817046
+Forward time: 0.024307932
+Gradient time: 0.065835648
+loss: 0.015811265
+Forward time: 0.024236641
+Gradient time: 0.065921162
+loss: 0.01580888
+Forward time: 0.024315794
+Gradient time: 0.06578191
+loss: 0.015803576
+Forward time: 0.024450059
+Gradient time: 0.066652908
+loss: 0.015798986
+Forward time: 0.02430704
+Gradient time: 0.066605994
+loss: 0.015795887
+Forward time: 0.02456706
+Gradient time: 0.06659388
+loss: 0.015788078
+Forward time: 0.024418395
+Gradient time: 0.066516536
+loss: 0.015798867
+Forward time: 0.024501931
+Gradient time: 0.06643247
+loss: 0.015784442
+Forward time: 0.024253398
+Gradient time: 0.066095063
+loss: 0.015784442
+Forward time: 0.024197667
+Gradient time: 0.066176517
+loss: 0.015777826
+Forward time: 0.024337202
+Gradient time: 0.066053603
+loss: 0.015773416
+Forward time: 0.024246461
+Gradient time: 0.065877374
+loss: 0.015768468
+Forward time: 0.024232951
+Gradient time: 0.06582846
+loss: 0.015763462
+Forward time: 0.024257915
+Gradient time: 0.065611966
+loss: 0.015760541
+Forward time: 0.024177263
+Gradient time: 0.071915569
+loss: 0.015757084
+Forward time: 0.024355434
+Gradient time: 0.066365094
+loss: 0.015755117
+Forward time: 0.024420264
+Gradient time: 0.066670617
+loss: 0.015752852
+Forward time: 0.024390216
+Gradient time: 0.066641859
+loss: 0.015748024
+Forward time: 0.024343128
+Gradient time: 0.066358024
+loss: 0.015745878
+Forward time: 0.024938726
+Gradient time: 0.066566943
+loss: 0.015741348
+Forward time: 0.024899478
+Gradient time: 0.067168124
+loss: 0.015737832
+Forward time: 0.02444788
+Gradient time: 0.066480981
+loss: 0.015734136
+Forward time: 0.024398392
+Gradient time: 0.066280647
+loss: 0.01573217
+Forward time: 0.024477675
+Gradient time: 0.066371824
+loss: 0.01572895
+Forward time: 0.02433229
+Gradient time: 0.066105008
+loss: 0.015726566
+Forward time: 0.024219414
+Gradient time: 0.066066222
+loss: 0.015723884
+Forward time: 0.024363412
+Gradient time: 0.066215719
+loss: 0.015720308
+Forward time: 0.024369745
+Gradient time: 0.066180249
+loss: 0.01571834
+Forward time: 0.02437542
+Gradient time: 0.066147561
+loss: 0.015717149
+Forward time: 0.024332774
+Gradient time: 0.066151509
+loss: 0.015711665
+Forward time: 0.024424932
+Gradient time: 0.066465271
+loss: 0.015710771
+Forward time: 0.024474962
+Gradient time: 0.0666387
+loss: 0.015708387
+Forward time: 0.024569922
+Gradient time: 0.066640827
+loss: 0.015705526
+Forward time: 0.0246645
+Gradient time: 0.066479537
+loss: 0.015702844
+Forward time: 0.024596774
+Gradient time: 0.066514921
+loss: 0.01570046
+Forward time: 0.024628469
+Gradient time: 0.066331747
+loss: 0.015698314
+Forward time: 0.024614409
+Gradient time: 0.066463519
+loss: 0.015696526
+Forward time: 0.024504151
+Gradient time: 0.066380712
+loss: 0.015694797
+Forward time: 0.024527102
+Gradient time: 0.066460745
+loss: 0.015693128
+Forward time: 0.024588545
+Gradient time: 0.066406729
+loss: 0.015690744
+Forward time: 0.024623169
+Gradient time: 0.066595254
+loss: 0.015689433
+Forward time: 0.024604966
+Gradient time: 0.066371477
+loss: 0.015686989
+Forward time: 0.025043828
+Gradient time: 0.066647129
+loss: 0.015686274
+Forward time: 0.024472032
+Gradient time: 0.066804362
+loss: 0.015684605
+Forward time: 0.024603392
+Gradient time: 0.067641778
+loss: 0.01568222
+Forward time: 0.0247838
+Gradient time: 0.067687272
+loss: 0.015680492
+Forward time: 0.02493949
+Gradient time: 0.068140695
+loss: 0.015679419
+Forward time: 0.025145121
+Gradient time: 0.068143043
+loss: 0.015677989
+Forward time: 0.02510714
+Gradient time: 0.068247244
+loss: 0.015676677
+Forward time: 0.025108126
+Gradient time: 0.068091255
+loss: 0.01567489
+Forward time: 0.025097537
+Gradient time: 0.068226248
+loss: 0.01567316
+Forward time: 0.025111495
+Gradient time: 0.068014689
+loss: 0.015673041
+Forward time: 0.025207194
+Gradient time: 0.068170951
+loss: 0.015671015
+Forward time: 0.025140619
+Gradient time: 0.068001768
+loss: 0.015669584
+Forward time: 0.025163353
+Gradient time: 0.068126338
+loss: 0.01566875
+Forward time: 0.025135895
+Gradient time: 0.068247531
+loss: 0.015666723
+Forward time: 0.025102619
+Gradient time: 0.067963658
+loss: 0.015664995
+Forward time: 0.02509098
+Gradient time: 0.068065065
+loss: 0.015663922
+Forward time: 0.025190198
+Gradient time: 0.068005543
+loss: 0.01566273
+Forward time: 0.025087141
+Gradient time: 0.067984546
+loss: 0.01566118
+Forward time: 0.025080305
+Gradient time: 0.067924541
+loss: 0.015660226
+Forward time: 0.025070585
+Gradient time: 0.067979548
+loss: 0.015658557
+Forward time: 0.025184605
+Gradient time: 0.075191939
+loss: 0.01565814
+Forward time: 0.025368625
+Gradient time: 0.068484508
+loss: 0.01565659
+Forward time: 0.02519465
+Gradient time: 0.06845335
+loss: 0.01565516
+Forward time: 0.025025643
+Gradient time: 0.067712474
+loss: 0.015654325
+Forward time: 0.025054477
+Gradient time: 0.068456247
+loss: 0.01565218
+Forward time: 0.025361481
+Gradient time: 0.068534597
+loss: 0.015652299
+Forward time: 0.025238454
+Gradient time: 0.068658876
+loss: 0.015651822
+Forward time: 0.02511853
+Gradient time: 0.068560044
+loss: 0.015651822
+Forward time: 0.025171356
+Gradient time: 0.068556922
+loss: 0.01564926
+Forward time: 0.025667803
+Gradient time: 0.069496765
+loss: 0.01564759
+Forward time: 0.025644144
+Gradient time: 0.069776398
+loss: 0.01564604
+Forward time: 0.025626567
+Gradient time: 0.069566537
+    Step 3 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 100, Final |g|: 0.0009756684303283691)
+  Optimization Complete:
+    Final Loss (overlap): 0.015646040439605713
+    Stopping Reason (Stage 1 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 100, Final |g|: 0.0003640800714492798)
+    Stopping Reason (Stage 2 - GradientDescent): Function tolerance met (|Δf| <= f_tol) (Iterations: 27, Final |g|: 0.00012960401363670826)
+    Stopping Reason (Stage 3 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 100, Final |g|: 0.0009756684303283691)
+    Exact ED Ground Energy: -6.743213928195932
+    Trotter Evolved Energy: -6.458511222775881
+    Energy Difference:      0.2847027054200506
+    Fidelity (Overlap^2):   0.9843540196077679
+
+Run finished successfully.

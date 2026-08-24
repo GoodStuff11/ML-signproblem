@@ -1,0 +1,500 @@
+================================================================================
+Timestamp: 2026-08-19T14:12:50.575
+Command run: julia testing/verify_initial_loss_continuity.jl 
+================================================================================
+================================================================================
+STARTING VERIFICATION OF INITIAL LOSS CONTINUITY & DATATYPE HANDLING
+================================================================================
+Computing slater ground state for sector 0
+
+--- TEST 1: Initial Optimization (num_exponentials=1, maxiters=10) ---
+Sampling 5 initial configurations for multi-start...┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+
+loss: 0.86203617
+Forward time: 9.759229826
+Gradient time: 1.041481296
+loss: 0.86255616
+Forward time: 0.025776108
+Gradient time: 0.071385473
+loss: 0.8623913
+Forward time: 0.02542417
+Gradient time: 0.071385352
+loss: 0.87125987
+Forward time: 0.025286577
+Gradient time: 0.071076742
+loss: 0.8625574
+Forward time: 0.025287457
+Gradient time: 0.069028961
+Performing quick optimization on top 5 candidates...
+┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+loss: 0.86203617
+Forward time: 0.025845803
+Gradient time: 0.071528568
+loss: 0.40086794
+Forward time: 0.02692491
+Gradient time: 0.072815668
+loss: 0.81691474
+Forward time: 0.026023441
+Gradient time: 0.182531526
+loss: 0.5904355
+Forward time: 0.025115148
+Gradient time: 0.069840972
+loss: 0.39778346
+Forward time: 0.025051679
+Gradient time: 0.069997596
+loss: 0.43197238
+Forward time: 0.025273998
+Gradient time: 0.069748563
+loss: 0.2628501
+Forward time: 0.025067982
+Gradient time: 0.06838587
+loss: 0.2628501
+Forward time: 0.025759623
+Gradient time: 0.068397095
+loss: 0.23999149
+Forward time: 0.025005698
+Gradient time: 0.067973202
+loss: 0.2470681
+Forward time: 0.025317916
+Gradient time: 0.068104857
+loss: 0.21625143
+Forward time: 0.025017608
+Gradient time: 0.068086192
+loss: 0.21625143
+Forward time: 0.025071431
+Gradient time: 0.069177785
+loss: 0.20775467
+Forward time: 0.02534139
+Gradient time: 0.068061283
+loss: 0.19922149
+Forward time: 0.02529664
+Gradient time: 0.067948784
+loss: 0.19185269
+Forward time: 0.025395671
+Gradient time: 0.068285472
+loss: 0.17477763
+Forward time: 0.025298132
+Gradient time: 0.068013331
+loss: 0.8623913
+Forward time: 0.025516491
+Gradient time: 0.067980789
+loss: 0.4019217
+Forward time: 0.025200249
+Gradient time: 0.074096408
+loss: 0.81609255
+Forward time: 0.026260034
+Gradient time: 0.069600916
+loss: 0.58995664
+Forward time: 0.025967875
+Gradient time: 0.069240975
+loss: 0.39900643
+Forward time: 0.02575258
+Gradient time: 0.069660588
+loss: 0.41727298
+Forward time: 0.026473768
+Gradient time: 0.073926952
+loss: 0.26571232
+Forward time: 0.027609134
+Gradient time: 0.073018529
+loss: 0.26571232
+Forward time: 0.027134271
+Gradient time: 0.072574382
+loss: 0.24957502
+Forward time: 0.02670419
+Gradient time: 0.071240646
+loss: 0.24056977
+Forward time: 0.026728478
+Gradient time: 0.271958703
+loss: 0.21701765
+Forward time: 0.025180665
+Gradient time: 0.068748714
+loss: 0.21701765
+Forward time: 0.025076366
+Gradient time: 0.068644263
+loss: 0.20871401
+Forward time: 0.025268836
+Gradient time: 0.068192686
+loss: 0.19936496
+Forward time: 0.025314433
+Gradient time: 0.067918424
+loss: 0.19186956
+Forward time: 0.025022805
+Gradient time: 0.067920359
+loss: 0.17423463
+Forward time: 0.025068169
+Gradient time: 0.067820809
+loss: 0.86255616
+Forward time: 0.025009187
+Gradient time: 0.067869119
+loss: 0.40263188
+Forward time: 0.024812349
+Gradient time: 0.067946109
+loss: 0.81558484
+Forward time: 0.025088491
+Gradient time: 0.067962237
+loss: 0.588987
+Forward time: 0.024927142
+Gradient time: 0.067842451
+loss: 0.39898425
+Forward time: 0.024905618
+Gradient time: 0.067745593
+loss: 0.40921456
+Forward time: 0.024963865
+Gradient time: 0.067636986
+loss: 0.26659137
+Forward time: 0.024794043
+Gradient time: 0.067347397
+loss: 0.26659137
+Forward time: 0.024702013
+Gradient time: 0.067126066
+loss: 0.25374514
+Forward time: 0.024695479
+Gradient time: 0.067411072
+loss: 0.23751074
+Forward time: 0.024875502
+Gradient time: 0.067315452
+loss: 0.21045804
+Forward time: 0.024817255
+Gradient time: 0.067304671
+loss: 0.20033884
+Forward time: 0.031992429
+Gradient time: 0.068146651
+loss: 0.19488972
+Forward time: 0.0255238
+Gradient time: 0.069000169
+loss: 0.17426652
+Forward time: 0.025043301
+Gradient time: 0.068701561
+loss: 0.8625574
+Forward time: 0.024982836
+Gradient time: 0.069594246
+loss: 0.40263563
+Forward time: 0.025760426
+Gradient time: 0.070731779
+loss: 0.81558037
+Forward time: 0.026583537
+Gradient time: 0.071842571
+loss: 0.5889851
+Forward time: 0.027131835
+Gradient time: 0.071974337
+loss: 0.3989871
+Forward time: 0.027075195
+Gradient time: 0.071748802
+loss: 0.40917993
+Forward time: 0.026996071
+Gradient time: 0.071753474
+loss: 0.2665981
+Forward time: 0.026890879
+Gradient time: 0.072188779
+loss: 0.2665981
+Forward time: 0.027153803
+Gradient time: 0.072089275
+loss: 0.2537716
+Forward time: 0.027354608
+Gradient time: 0.072096697
+loss: 0.23749387
+Forward time: 0.027088908
+Gradient time: 0.07170917
+loss: 0.21046126
+Forward time: 0.027070703
+Gradient time: 0.071756327
+loss: 0.20033902
+Forward time: 0.027098661
+Gradient time: 0.071707233
+loss: 0.1948893
+Forward time: 0.027016669
+Gradient time: 0.071818574
+loss: 0.17426348
+Forward time: 0.026963908
+Gradient time: 0.071774564
+loss: 0.87125987
+Forward time: 0.027137825
+Gradient time: 0.071812986
+loss: 0.4450835
+Forward time: 0.026972744
+Gradient time: 0.071932734
+loss: 0.7682316
+Forward time: 0.026504321
+Gradient time: 0.068881571
+loss: 0.5144323
+Forward time: 0.025168449
+Gradient time: 0.068471738
+loss: 0.35573858
+Forward time: 0.025171606
+Gradient time: 0.068526446
+loss: 0.31730008
+Forward time: 0.025276069
+Gradient time: 0.068006102
+loss: 0.20867479
+Forward time: 0.02533692
+Gradient time: 0.074617093
+loss: 0.13092178
+Forward time: 0.025242163
+Gradient time: 0.068465352
+loss: 0.26041782
+Forward time: 0.02517991
+Gradient time: 0.069084344
+loss: 0.10988653
+Forward time: 0.025105114
+Gradient time: 0.068454814
+loss: 0.10988653
+Forward time: 0.025049318
+Gradient time: 0.068656155
+loss: 0.07586986
+Forward time: 0.025120657
+Gradient time: 0.068605888
+loss: 0.05511391
+Forward time: 0.025182278
+Gradient time: 0.068986239
+loss: 0.046034396
+Forward time: 0.025535343
+Gradient time: 0.069826807
+Selected best candidate with loss=0.046034395694732666
+Initial loss (overlap): 0.046034396
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.046034396
+Forward time: 0.025683291
+Gradient time: 0.068736252
+loss: 0.047237694
+Forward time: 0.025930784
+Gradient time: 0.070454737
+loss: 0.04383135
+Forward time: 0.024961808
+Gradient time: 0.070368335
+loss: 0.04383135
+Forward time: 0.024900366
+Gradient time: 0.069306847
+loss: 0.0429492
+Forward time: 0.024777838
+Gradient time: 0.069155702
+loss: 0.03960687
+Forward time: 0.025559629
+Gradient time: 0.067906859
+loss: 0.035357714
+Forward time: 0.024971349
+Gradient time: 0.068013439
+loss: 0.029585302
+Forward time: 0.024975661
+Gradient time: 0.067870943
+loss: 0.031490445
+Forward time: 0.025015825
+Gradient time: 0.072887296
+loss: 0.0267936
+Forward time: 0.024925068
+Gradient time: 0.068156637
+loss: 0.0267936
+Forward time: 0.024947708
+Gradient time: 0.06804303
+loss: 0.022353888
+Forward time: 0.024960769
+Gradient time: 0.068556999
+loss: 0.019751728
+Forward time: 0.02505887
+Gradient time: 0.06852558
+loss: 0.01892656
+Forward time: 0.025085244
+Gradient time: 0.068207385
+loss: 0.017472386
+Forward time: 0.025050011
+Gradient time: 0.068121201
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.013065713457763195)
+Stage 0 Final Loss: 0.017472386360168457
+
+--- TEST 2: Resume Optimization (num_exponentials=1 from A_opt_1) ---
+Initial loss (overlap): 0.017472386
+Running main optimization step 1 with LBFGS (maxiters=5, use_gpu=true)...
+loss: 0.017472386
+Forward time: 0.02536088
+Gradient time: 0.068745589
+loss: 0.016931713
+Forward time: 0.025387471
+Gradient time: 0.06925822
+loss: 0.01645261
+Forward time: 0.02557807
+Gradient time: 0.069549891
+loss: 0.015718639
+Forward time: 0.026191112
+Gradient time: 0.071177034
+loss: 0.015042305
+Forward time: 0.026069734
+Gradient time: 0.071100412
+loss: 0.014167428
+Forward time: 0.026573968
+Gradient time: 0.071170229
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 5, Final |g|: 0.01842889003455639)
+Resumed Initial Loss (first step of callback): 0.017472386360168457
+Previous Final Loss:                          0.017472386360168457
+Difference: 0.0
+✓ TEST 2 PASSED: Resumed initial loss matches previous final loss!
+
+--- TEST 3: Grow Mode Chain (num_exponentials=1 -> 2 from A_opt_1) ---
+A_grown length: 864 (expected 864)
+Initial loss (overlap): 0.017472386
+Running main optimization step 1 with LBFGS (maxiters=5, use_gpu=true)...
+loss: 0.017472386
+Forward time: 0.052898565
+Gradient time: 0.47327537
+loss: 0.010487199
+Forward time: 0.049718091
+Gradient time: 0.136766151
+loss: 0.0077582
+Forward time: 0.04972318
+Gradient time: 0.135637786
+loss: 0.0060215592
+Forward time: 0.04988707
+Gradient time: 0.135625246
+loss: 0.005261302
+Forward time: 0.049493077
+Gradient time: 0.135036927
+loss: 0.00406754
+Forward time: 0.049117777
+Gradient time: 0.134858656
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 5, Final |g|: 0.012089950032532215)
+Grown Initial Loss (first step of callback): 0.017472386360168457
+Previous Final Loss (from 1 exponential):   0.017472386360168457
+Difference: 0.0
+✓ TEST 3 PASSED: Grown initial loss matches previous final loss!
+
+--- TEST 4: Datatype Override & Conversion Safety ---
+Testing Hermitian mode with datatype=Float32 (expecting override to ComplexF64)...
+
+--- Scanning U index: 33 (U = 8.0) ---
+┌ Warning: Hermitian optimization requires complex arithmetic. Overriding datatype Float32 to ComplexF64.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/trotter_scan.jl:182
+Sampling 2 initial configurations for multi-start...
+loss: 0.8625561371528659
+Forward time: 2.524279936
+Gradient time: 0.776486429
+loss: 0.8625560978371891
+Forward time: 0.034204074
+Gradient time: 0.095613017
+Performing quick optimization on top 2 candidates...
+loss: 0.8625561371528659
+Forward time: 0.034486035
+Gradient time: 0.09576516
+loss: 0.8625559803677272
+Forward time: 0.03432791
+Gradient time: 0.097916668
+loss: 0.8625552027476198
+Forward time: 0.033487167
+Gradient time: 0.093131958
+loss: 0.8625477036296685
+Forward time: 0.033051424
+Gradient time: 0.09317469
+loss: 0.8624201042603165
+Forward time: 0.033357877
+Gradient time: 0.090398515
+loss: 0.8596196224316351
+Forward time: 0.033567638
+Gradient time: 0.091618308
+loss: 0.8385436143158179
+Forward time: 0.034289647
+Gradient time: 0.098615759
+loss: 0.8385436143158178
+Forward time: 0.03505369
+Gradient time: 0.092297928
+loss: 0.8624662695196996
+Forward time: 0.034456822
+Gradient time: 0.844422097
+loss: 0.8605975281918756
+Forward time: 0.033414622
+Gradient time: 0.09013342
+loss: 0.8437658575064176
+Forward time: 0.033000401
+Gradient time: 0.089898255
+loss: 0.8366615125136451
+Forward time: 0.03309858
+Gradient time: 0.089665054
+loss: 0.8366615125136451
+Forward time: 0.033076767
+Gradient time: 0.089568203
+loss: 0.7640647097071043
+Forward time: 0.032894023
+Gradient time: 0.089503288
+loss: 0.6419459910913886
+Forward time: 0.032885849
+Gradient time: 0.089610213
+loss: 0.6419459910913885
+Forward time: 0.032942141
+Gradient time: 0.090094865
+loss: 0.8625560978371891
+Forward time: 0.033619831
+Gradient time: 0.090512014
+loss: 0.8625560967412531
+Forward time: 0.033102037
+Gradient time: 0.09019602
+loss: 0.8625560858225666
+Forward time: 0.033003172
+Gradient time: 0.090099266
+loss: 0.8625558743906308
+Forward time: 0.033429415
+Gradient time: 0.090567291
+loss: 0.8625508963299666
+Forward time: 0.03409468
+Gradient time: 0.090173256
+loss: 0.8624280215560751
+Forward time: 0.033814158
+Gradient time: 0.090257986
+loss: 0.8593876956323184
+Forward time: 0.033593703
+Gradient time: 0.090495412
+loss: 0.7973053604622057
+Forward time: 0.033553655
+Gradient time: 0.089651205
+loss: 0.9514540445834417
+Forward time: 0.033751901
+Gradient time: 0.089586992
+loss: 0.7572598997953208
+Forward time: 0.033624113
+Gradient time: 0.098443545
+loss: 0.7572598997953208
+Forward time: 0.034290358
+Gradient time: 0.091287906
+loss: 0.8625560493469149
+Forward time: 0.034416603
+Gradient time: 0.092297421
+loss: 0.8625546887663933
+Forward time: 0.034579133
+Gradient time: 0.091149865
+loss: 0.7717987487829564
+Forward time: 0.034027665
+Gradient time: 0.091077728
+loss: 0.7325110586179718
+Forward time: 0.033952382
+Gradient time: 0.09192717
+loss: 0.7325110586179717
+Forward time: 0.034983732
+Gradient time: 0.092532809
+loss: 0.42372923199476065
+Forward time: 0.034865817
+Gradient time: 0.092318907
+Selected best candidate with loss=0.42372923199476065
+Initial loss (overlap): 0.42372923199476065
+Running main optimization step 1 with LBFGS (maxiters=3, use_gpu=true)...
+loss: 0.42372923199476065
+Forward time: 0.035655843
+Gradient time: 0.09384017
+loss: 0.25489161554059814
+Forward time: 0.035562989
+Gradient time: 0.095808207
+loss: 0.1549667154313683
+Forward time: 0.035120977
+Gradient time: 0.096698325
+loss: 0.14159255906187274
+Forward time: 0.036174971
+Gradient time: 0.096141731
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 3, Final |g|: 0.06832764702819205)
+  Optimization Complete:
+    Final Loss (overlap): 0.14159255906187274
+    Stopping Reason (Stage 1 - LBFGS): Maximum iterations reached (maxiters) (Iterations: 3, Final |g|: 0.06832764702819205)
+    Fidelity (Overlap^2):   0.8584074409381283
+Hermitian run completed successfully with final loss: 0.14159255906187274
+✓ TEST 4a PASSED: Hermitian mode cleanly handled datatype override!
+Converted vector type: CuArray{Float32, 1, CUDACore.DeviceMemory}, eltype: Float32, norm: 1.0
+✓ TEST 4b PASSED: to_device_vector successfully converts Complex to Float32 without InexactError!
+
+================================================================================
+ALL VERIFICATIONS COMPLETED SUCCESSFULLY AND PASSED!
+================================================================================

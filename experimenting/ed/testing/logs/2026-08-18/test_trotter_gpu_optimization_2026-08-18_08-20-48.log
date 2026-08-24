@@ -1,0 +1,26 @@
+================================================================================
+Timestamp: 2026-08-18T08:20:48.762
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+GPU Device:        Tesla T4
+Threads available: 1
+
+--- Setting up test system (2x2 lattice) ---
+Basis dimension: 256
+Number of gates: 58, total parameters M: 116
+
+--- Test 3: CPU vs GPU Adjoint Loss Value Match ---
+CPU Loss: 0.5013041039613871
+GPU Loss: 0.9999999333583519
+Loss Absolute Difference: 0.4986958293969648
+Test Failed at /home/jek354/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_optimization.jl:136
+  Expression: loss_diff < 1.0e-12
+   Evaluated: 0.4986958293969648 < 1.0e-12
+ERROR: There was an error during testing
+

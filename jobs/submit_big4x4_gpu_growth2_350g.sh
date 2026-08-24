@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --job-name=(6,6)_4x4_gpu_growth2
-#SBATCH --output=/home/jek354/research/ML-signproblem/jobs/logs/N=(6,6)_4x4_gpu_growth2_%j.out
-#SBATCH --error=/home/jek354/research/ML-signproblem/jobs/logs/N=(6,6)_4x4_gpu_growth2_%j.err
-#SBATCH --mem=600g
+#SBATCH --job-name=(6,6)_4x4_gpu_growth2_350g
+#SBATCH --output=/home/jek354/research/ML-signproblem/jobs/logs/N=(6,6)_4x4_gpu_growth2_350g_%j.out
+#SBATCH --error=/home/jek354/research/ML-signproblem/jobs/logs/N=(6,6)_4x4_gpu_growth2_350g_%j.err
+#SBATCH --mem=350g
 #SBATCH --exclude=kim-compute-01
 #SBATCH --time=99-00:00:00
 #SBATCH --gres=gpu:1

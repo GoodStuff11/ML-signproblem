@@ -59,7 +59,8 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
 
     # Overlap computation
     overlap = dot(v2_typed, r[N_typed+1])
-    loss = 1 - abs2(overlap)
+    norm_sq = real(dot(r[N_typed+1], r[N_typed+1]))
+    loss = 1.0 - abs2(overlap) / norm_sq
     # println(loss)
     # Return early if gradient is not required
     if grad === nothing
@@ -112,7 +113,7 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
     # Note: grads is currently d_overlap * N (accumulated sum).
     # So d_overlap = grads / N
 
-    scale_factor = -2 * conj(overlap) / N_typed
+    scale_factor = -2 * conj(overlap) / (N_typed * norm_sq)
 
     if antihermitian
         # dL/da = -2 * Real( d(overlap)/da * conj(overlap) )
@@ -165,7 +166,8 @@ function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping
                 psi = expv(1.0im, mat, psi)
             end
         end
-        loss = 1 - abs2(state2' * psi)
+        norm_sq = real(dot(psi, psi))
+        loss = 1.0 - abs2(state2' * psi) / norm_sq
     end
     println("time=$t loss=$loss")
     return loss
@@ -195,7 +197,8 @@ function zygote_loss(t_vals, rows, cols, signs, param_index_map, parameter_mappi
             psi = exp(1im * Matrix(mat)) * psi
         end
     end
-    loss = 1 - abs2(state2' * psi)
+    norm_sq = real(dot(psi, psi))
+    loss = 1.0 - abs2(state2' * psi) / norm_sq
     Zygote.@ignore println("loss=$loss")
     return loss
 end
@@ -687,7 +690,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
     dim = length(indexer.inv_comb_dict)
     metrics = Dict{String,Vector{Any}}()
-    loss = loss_type == :energy ? real(dot(state1, H * state1)) : (1 - abs2(state1' * state2))
+    loss = loss_type == :energy ? real(dot(state1, H * state1)) : max(0.0, 1 - abs2(state1' * state2))
     prev_loss = loss
     metrics["loss"] = Float64[loss]
     metrics["other"] = []
@@ -698,7 +701,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     if loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H) ? real(dot(state1, H * state1)) : NaN]
     elseif loss_type == :energy
-        metrics["overlap"] = Float64[1.0-abs2(dot(state1, state2))]
+        metrics["overlap"] = Float64[max(0.0, 1.0-abs2(dot(state1, state2)))]
     end
     for k in keys(metric_functions)
         metrics[k] = Any[]
@@ -706,8 +709,10 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
     println("Initial loss: $loss")
     println("Dimension: $dim")
-    if loss_type == :overlap && loss < 1e-15
+    if loss_type == :overlap && 0 <= loss < 1e-12
         println("States are already equal")
+        push!(metrics["loss"], loss)
+        push!(metrics["optimization_losses"], [loss])
         return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics, operator_cache
     end
 
@@ -1168,7 +1173,8 @@ function adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter
         end
     end
     overlap = dot(v1, psi)
-    return 1 - abs2(overlap)
+    norm_sq = real(dot(psi, psi))
+    return 1.0 - abs2(overlap) / norm_sq
 end
 
 function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, v1, v2, p, do_hermitian, antihermitian; num_exponentials::Int=1)
@@ -1203,7 +1209,8 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
         end
     end
     overlap = dot(v1, phis_layers[end])
-    y = 1 - abs2(overlap)
+    norm_sq = real(dot(phis_layers[end], phis_layers[end]))
+    y = 1.0 - abs2(overlap) / norm_sq
 
     function adjoint_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1216,7 +1223,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
         weights[end] = 1.0
         weights .*= (dt / 3.0)
 
-        conj_overlap_factor = conj(overlap) * ȳ
+        conj_overlap_factor = (conj(overlap) / norm_sq) * ȳ
 
         chis_layers = Vector{Vector{ComplexF64}}(undef, L + 1)
         chis_layers[L+1] = v1
@@ -1337,7 +1344,8 @@ function gpu_fast_loss(t_vals, ops_gpu, rows, cols, signs, param_index_map, para
                 psi_gpu, _ = KrylovKit.exponentiate(mat_gpu, 1.0im, psi_gpu; ishermitian=true, tol=1e-12)
             end
         end
-        loss = 1 - abs2(dot(state2_gpu, psi_gpu))
+        norm_sq_gpu = real(dot(psi_gpu, psi_gpu))
+        loss = 1.0 - abs2(dot(state2_gpu, psi_gpu)) / norm_sq_gpu
     end
     return loss
 end
@@ -1370,7 +1378,7 @@ function gpu_adjoint_loss(t_vals, ops_gpu, rows, cols, signs, param_index_map, p
         end
     end
     overlap = dot(v1_gpu, psi_gpu)
-    loss = 1 - abs2(overlap)
+    loss = 1.0 - abs2(overlap) / real(dot(psi_gpu, psi_gpu))
     return loss
 end
 
@@ -1408,7 +1416,8 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
         CUDA.synchronize()
     end
     overlap = dot(v1_gpu, phis_layers[end])
-    y = 1 - abs2(overlap)
+    norm_sq = real(dot(phis_layers[end], phis_layers[end]))
+    y = 1.0 - abs2(overlap) / norm_sq
 
     function gpu_adjoint_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1421,7 +1430,7 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
         weights[end] = 1.0
         weights .*= (dt / 3.0)
 
-        conj_overlap_factor = conj(overlap) * ȳ
+        conj_overlap_factor = (conj(overlap) / norm_sq) * ȳ
 
         chis_layers = Vector{typeof(v1_gpu)}(undef, L + 1)
         chis_layers[L+1] = copy(v1_gpu)

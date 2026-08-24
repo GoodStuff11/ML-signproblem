@@ -1,0 +1,16 @@
+================================================================================
+Timestamp: 2026-08-18T08:20:05.430
+Command run: julia testing/test_trotter_gpu_optimization.jl --use_gpu=false
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION GPU VERIFICATION & BENCHMARK TEST
+==========================================================
+Requested use_gpu: false
+Is CUDA loaded:    false
+Threads available: 32
+
+--- Test 1: CPU-only Execution & CUDA Bypassing ---
+PASSED: CUDA is NOT loaded when --use_gpu is omitted/false.
+
+--- Test 2: @safe_threads compatibility on CPU ---
+PASSED: @safe_threads executed cleanly without CUDA.

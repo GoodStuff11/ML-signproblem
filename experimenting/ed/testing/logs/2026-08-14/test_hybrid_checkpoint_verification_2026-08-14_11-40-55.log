@@ -1,0 +1,102 @@
+================================================================================
+Timestamp: 2026-08-14T11:40:55.100
+Command run: julia testing/test_hybrid_checkpoint_verification.jl 
+================================================================================
+================================================================================
+DYNAMIC HYBRID CHECKPOINTING VERIFICATION TEST
+================================================================================
+CUDA functional: true
+GPU Device: Tesla T4
+GPU Memory: 14.46 GiB free / 14.56 GiB total
+
+Problem setup: 4x3 lattice, d = 32670, 1092 gates
+
+=====================================================================================
+TESTING PRECISION: Float32 (Float32)
+=====================================================================================
+Evaluating Pure CPU gradient...
+loss: 0.11932665
+Forward time: 2.793135395
+Gradient time: 1.695555192
+Evaluating Full GPU (:gpu) gradient...
+loss: 0.119327426
+Forward time: 10.693836158
+Gradient time: 5.705045173
+Evaluating Host RAM (:host) gradient...
+loss: 0.119327426
+Forward time: 0.302599898
+Gradient time: 1.594828218
+Evaluating Hybrid (:hybrid, K=300/1093) gradient...
+loss: 0.119327426
+Forward time: 0.341581546
+Gradient time: 0.80742804
+Evaluating Auto-Budgeting (:auto) gradient...
+loss: 0.119327426
+Forward time: 0.119012312
+Gradient time: 0.52320543
+
+--- Numerical Verification Results (Float32) ---
+  ||g_gpu - g_cpu|| / ||g_cpu||:         6.01e-07
+  ||g_host - g_gpu|| / ||g_gpu||:       1.43e-16
+  ||g_hybrid - g_gpu|| / ||g_gpu||:     1.22e-16
+  ||g_auto - g_gpu|| / ||g_gpu||:       1.23e-16
+  -> ALL GRADIENT VERIFICATIONS PASSED SUCCESSFULLY!
+
+--- Benchmarking Step Times (5 iterations) ---
+--------------------------------------------------------------------------------
+Mode                       | Forward (ms)   | Backward (ms)  | Total Step (ms)
+--------------------------------------------------------------------------------
+Full GPU VRAM              |       117.03 ms |       308.67 ms |       425.70 ms
+Host RAM Streaming         |       391.66 ms |       273.77 ms |       665.43 ms
+Hybrid (K=300)             |       297.69 ms |       260.77 ms |       558.45 ms
+Auto VRAM Budget           |       110.67 ms |       229.88 ms |       340.54 ms
+--------------------------------------------------------------------------------
+
+=====================================================================================
+TESTING PRECISION: Float64 (Float64)
+=====================================================================================
+Evaluating Pure CPU gradient...
+loss: 0.11932765598853734
+Forward time: 2.138398657
+Gradient time: 1.474839437
+Evaluating Full GPU (:gpu) gradient...
+loss: 0.1193276559885369
+Forward time: 2.867008046
+Gradient time: 0.612038223
+Evaluating Host RAM (:host) gradient...
+loss: 0.1193276559885369
+Forward time: 0.352237898
+Gradient time: 0.335206897
+Evaluating Hybrid (:hybrid, K=300/1093) gradient...
+loss: 0.1193276559885369
+Forward time: 0.410014224
+Gradient time: 0.306849407
+Evaluating Auto-Budgeting (:auto) gradient...
+loss: 0.1193276559885369
+Forward time: 0.116444633
+Gradient time: 0.234315467
+
+--- Numerical Verification Results (Float64) ---
+  ||g_gpu - g_cpu|| / ||g_cpu||:         1.16e-15
+  ||g_host - g_gpu|| / ||g_gpu||:       0.00e+00
+  ||g_hybrid - g_gpu|| / ||g_gpu||:     0.00e+00
+  ||g_auto - g_gpu|| / ||g_gpu||:       0.00e+00
+  -> ALL GRADIENT VERIFICATIONS PASSED SUCCESSFULLY!
+
+--- Benchmarking Step Times (5 iterations) ---
+--------------------------------------------------------------------------------
+Mode                       | Forward (ms)   | Backward (ms)  | Total Step (ms)
+--------------------------------------------------------------------------------
+Full GPU VRAM              |       116.95 ms |       339.01 ms |       455.96 ms
+Host RAM Streaming         |       415.03 ms |       337.05 ms |       752.08 ms
+Hybrid (K=300)             |       444.30 ms |       308.29 ms |       752.59 ms
+Auto VRAM Budget           |       121.23 ms |       236.59 ms |       357.82 ms
+--------------------------------------------------------------------------------
+
+================================================================================
+TESTING 4x4 BUDGET DETERMINATION FUNCTION
+================================================================================
+  4x4 Float32 : Auto selected mode=:hybrid | Allocated  292/2713 checkpoints to GPU (4.36 GiB VRAM)
+  4x4 Float64 : Auto selected mode=:hybrid | Allocated  146/2713 checkpoints to GPU (4.36 GiB VRAM)
+
+Verification complete. All tests passed with 0 errors!

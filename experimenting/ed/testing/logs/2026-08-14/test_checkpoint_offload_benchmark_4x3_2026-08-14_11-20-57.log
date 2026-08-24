@@ -1,0 +1,72 @@
+================================================================================
+Timestamp: 2026-08-14T11:20:58.021
+Command run: julia testing/test_checkpoint_offload_benchmark_4x3.jl 
+================================================================================
+================================================================================
+CHECKPOINT OFFLOADING BENCHMARK (4x3 Lattice)
+Testing impact of removing state checkpoints from GPU VRAM to Host RAM
+================================================================================
+GPU Device: Tesla T4
+Total GPU VRAM: 14.56 GiB
+
+================================================================================
+>>> BENCHMARKING PRECISION: Float32 (Float32)
+================================================================================
+
+1. Running Full GPU (all 1092 checkpoints on VRAM)...
+2. Running Host RAM Checkpoints (checkpoints streamed to CPU RAM)...
+
+Gradient relative difference: 0.00e+00
+
+--- Summary for Float32 ---
+Hilbert dimension (d):               32670
+Number of gates (M):                 1092
+Single state vector size:            0.125 MiB
+Total Checkpoint VRAM (Full GPU):    136.22 MiB (0.13 GiB)
+Total Checkpoint VRAM (Host RAM):    0.125 MiB (Single buffer)
+----------------------------------------------------------------------
+Metric                         | Full GPU VRAM | Host RAM Offload | Overhead / Diff
+----------------------------------------------------------------------
+Forward Pass Time              |     102.03 ms |     287.70 ms |  +185.67 ms (+182.0%)
+Backward Pass Time             |     223.88 ms |     256.87 ms |   +32.99 ms (+14.7%)
+Total Step Time                |     325.91 ms |     544.57 ms |  +218.66 ms (+67.1%)
+----------------------------------------------------------------------
+
+================================================================================
+>>> BENCHMARKING PRECISION: Float64 (Float64)
+================================================================================
+
+1. Running Full GPU (all 1092 checkpoints on VRAM)...
+2. Running Host RAM Checkpoints (checkpoints streamed to CPU RAM)...
+
+Gradient relative difference: 0.00e+00
+
+--- Summary for Float64 ---
+Hilbert dimension (d):               32670
+Number of gates (M):                 1092
+Single state vector size:            0.249 MiB
+Total Checkpoint VRAM (Full GPU):    272.43 MiB (0.27 GiB)
+Total Checkpoint VRAM (Host RAM):    0.249 MiB (Single buffer)
+----------------------------------------------------------------------
+Metric                         | Full GPU VRAM | Host RAM Offload | Overhead / Diff
+----------------------------------------------------------------------
+Forward Pass Time              |     105.63 ms |     337.69 ms |  +232.06 ms (+219.7%)
+Backward Pass Time             |     219.34 ms |     286.83 ms |   +67.49 ms (+30.8%)
+Total Step Time                |     324.97 ms |     624.52 ms |  +299.55 ms (+92.2%)
+----------------------------------------------------------------------
+
+================================================================================
+PROJECTION TO 4x4 LATTICE (d = 4,008,004 states, M = 2,712 gates)
+================================================================================
+
+--- Float32 on 4x4 Lattice ---
+  Single State Vector:         0.01 GiB (15.3 MiB)
+  Full GPU VRAM for Checkpoints: 40.51 GiB (Exceeds 80GB A100 for Float64!)
+  Host RAM Checkpoint VRAM:     0.01 GiB on GPU (Single buffer), 40.51 GiB in Host RAM
+
+--- Float64 on 4x4 Lattice ---
+  Single State Vector:         0.03 GiB (30.6 MiB)
+  Full GPU VRAM for Checkpoints: 81.02 GiB (Exceeds 80GB A100 for Float64!)
+  Host RAM Checkpoint VRAM:     0.03 GiB on GPU (Single buffer), 81.02 GiB in Host RAM
+
+Benchmark completed successfully without saving or modifying any files.

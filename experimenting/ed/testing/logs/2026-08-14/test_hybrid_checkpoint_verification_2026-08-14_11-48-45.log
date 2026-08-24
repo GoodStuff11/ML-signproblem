@@ -1,0 +1,128 @@
+================================================================================
+Timestamp: 2026-08-14T11:48:45.271
+Command run: julia testing/test_hybrid_checkpoint_verification.jl 
+================================================================================
+================================================================================
+STRIDED GPU GRADIENT CHECKPOINTING (REMATERIALIZATION) TEST
+================================================================================
+CUDA functional: true
+GPU Device: Tesla T4
+GPU Memory: 14.46 GiB free / 14.56 GiB total
+
+Problem setup: 4x3 lattice, d = 32670, 1092 gates
+
+=====================================================================================
+TESTING PRECISION: Float32 (Float32)
+=====================================================================================
+Evaluating Pure CPU gradient...
+loss: 0.11932665
+Forward time: 2.695697214
+Gradient time: 1.584223253
+Evaluating Full GPU (K=1) gradient...
+loss: 0.119327426
+Forward time: 10.680164586
+Gradient time: 6.928463645
+Evaluating Strided GPU (K=4) gradient...
+loss: 0.119327426
+Forward time: 0.208578686
+Gradient time: 1.108207413
+Evaluating Strided GPU (K=8) gradient...
+loss: 0.119327426
+Forward time: 0.104049035
+Gradient time: 1.088962975
+Evaluating Strided GPU (K=16) gradient...
+loss: 0.119327426
+Forward time: 0.103004462
+Gradient time: 1.075566078
+Evaluating Strided GPU (K=32) gradient...
+loss: 0.119327426
+Forward time: 0.102700186
+Gradient time: 1.086167138
+Evaluating Auto Stride gradient...
+loss: 0.119327426
+Forward time: 0.118635661
+Gradient time: 1.085355775
+
+--- Numerical Verification Results (Float32) ---
+  ||g_gpu(K=1) - g_cpu|| / ||g_cpu||:         6.04e-07
+  ||g_strided(K= 4) - g_gpu|| / ||g_gpu||:     2.67e-08
+  ||g_strided(K= 8) - g_gpu|| / ||g_gpu||:     2.93e-08
+  ||g_strided(K=16) - g_gpu|| / ||g_gpu||:     3.87e-08
+  ||g_strided(K=32) - g_gpu|| / ||g_gpu||:     4.78e-08
+  ||g_auto - g_gpu|| / ||g_gpu||:             1.32e-16
+  -> ALL STRIDED GRADIENTS MATCH FULL GPU TO MACHINE PRECISION!
+
+--- Benchmarking Step Times (5 iterations) ---
+-------------------------------------------------------------------------------------
+Mode                       | Forward (ms)   | Backward (ms)  | Total Step (ms) | Speedup   
+-------------------------------------------------------------------------------------
+Pure CPU (1 core)          |      1131.51 ms |      1270.75 ms |      2402.25 ms |     1.00x
+Full GPU (K=1, all VRAM)   |       132.29 ms |       435.65 ms |       567.93 ms |     4.23x
+Strided GPU (K=4)          |       108.93 ms |       340.21 ms |       449.14 ms |     5.35x
+Strided GPU (K=8)          |       106.54 ms |       466.23 ms |       572.77 ms |     4.19x
+Strided GPU (K=16)         |       101.37 ms |       327.49 ms |       428.87 ms |     5.60x
+Strided GPU (K=32)         |       102.35 ms |       329.38 ms |       431.73 ms |     5.56x
+Auto Stride GPU            |       102.95 ms |       332.89 ms |       435.84 ms |     5.51x
+-------------------------------------------------------------------------------------
+
+=====================================================================================
+TESTING PRECISION: Float64 (Float64)
+=====================================================================================
+Evaluating Pure CPU gradient...
+loss: 0.11932765598853734
+Forward time: 1.985481352
+Gradient time: 1.346752569
+Evaluating Full GPU (K=1) gradient...
+loss: 0.1193276559885369
+Forward time: 2.824429753
+Gradient time: 0.77960329
+Evaluating Strided GPU (K=4) gradient...
+loss: 0.1193276559885369
+Forward time: 0.187767341
+Gradient time: 0.324668303
+Evaluating Strided GPU (K=8) gradient...
+loss: 0.1193276559885369
+Forward time: 0.104000152
+Gradient time: 0.324096797
+Evaluating Strided GPU (K=16) gradient...
+loss: 0.1193276559885369
+Forward time: 0.103439727
+Gradient time: 0.323527414
+Evaluating Strided GPU (K=32) gradient...
+loss: 0.1193276559885369
+Forward time: 0.10277822
+Gradient time: 0.326991919
+Evaluating Auto Stride gradient...
+loss: 0.1193276559885369
+Forward time: 0.107078163
+Gradient time: 0.331230918
+
+--- Numerical Verification Results (Float64) ---
+  ||g_gpu(K=1) - g_cpu|| / ||g_cpu||:         1.16e-15
+  ||g_strided(K= 4) - g_gpu|| / ||g_gpu||:     0.00e+00
+  ||g_strided(K= 8) - g_gpu|| / ||g_gpu||:     0.00e+00
+  ||g_strided(K=16) - g_gpu|| / ||g_gpu||:     0.00e+00
+  ||g_strided(K=32) - g_gpu|| / ||g_gpu||:     0.00e+00
+  ||g_auto - g_gpu|| / ||g_gpu||:             0.00e+00
+  -> ALL STRIDED GRADIENTS MATCH FULL GPU TO MACHINE PRECISION!
+
+--- Benchmarking Step Times (5 iterations) ---
+-------------------------------------------------------------------------------------
+Mode                       | Forward (ms)   | Backward (ms)  | Total Step (ms) | Speedup   
+-------------------------------------------------------------------------------------
+Pure CPU (1 core)          |      1225.43 ms |      1064.82 ms |      2290.25 ms |     1.00x
+Full GPU (K=1, all VRAM)   |       125.49 ms |       372.94 ms |       498.44 ms |     4.59x
+Strided GPU (K=4)          |       107.36 ms |       331.94 ms |       439.30 ms |     5.21x
+Strided GPU (K=8)          |       108.27 ms |       332.73 ms |       441.00 ms |     5.19x
+Strided GPU (K=16)         |       103.96 ms |       426.82 ms |       530.78 ms |     4.31x
+Strided GPU (K=32)         |       104.07 ms |       327.69 ms |       431.76 ms |     5.30x
+Auto Stride GPU            |       106.09 ms |       331.33 ms |       437.42 ms |     5.24x
+-------------------------------------------------------------------------------------
+
+================================================================================
+TESTING 4x4 AUTO STRIDE SELECTION
+================================================================================
+  4x4 Float32 : Auto selected stride K=53 | Stored checkpoints:   53 / 2713 (0.79 GiB VRAM)
+  4x4 Float64 : Auto selected stride K=53 | Stored checkpoints:   53 / 2713 (1.58 GiB VRAM)
+
+Verification complete. All tests passed with 0 errors!

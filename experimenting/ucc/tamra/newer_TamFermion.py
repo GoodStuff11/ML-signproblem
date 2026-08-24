@@ -458,7 +458,7 @@ def translOpnD(Lvec,dof='fermion',basis=None,DEBUG_MODE=False):
     signs = np.zeros((ndim,num_states),dtype=np.int8)
 
     # Precomputations ------------------------------------------------------------------------------------------------
-    masks = (dt_mb(1) << np.arange(N, dtype=dt_site))  # precompute masks for checking occupancy of each site; gives [2^i, i=0,...,N-1]
+    masks = (dt_mb(1) << np.arange(N, dtype=dt_mb))  # precompute masks for checking occupancy of each site; gives [2^i, i=0,...,N-1]
     site_idcs = np.arange(N,dtype=dt_site)
     sites = np.reshape(site_idcs, Lvec)
     strides= np.ones(ndim, dtype=np.uint32)
@@ -928,7 +928,7 @@ def fermionNNHopping(basis, edges, t, state2idx=None, DEBUG_MODE=False):
 # u: spin-density interaction strength
 # Note: n_up + n_down <= N
 def fermionOnSiteSpinDensity(N,ubasis,dbasis,u=1):
-    masks = (dt_mb(1) << np.arange(N, dtype=dt_site)) # [2^i for i in range(N)]
+    masks = (dt_mb(1) << np.arange(N, dtype=dt_mb)) # [2^i for i in range(N)]
     Mu = ((ubasis[:, np.newaxis] & masks) != 0).astype(np.float64)  # (nu, N); (Mu)_ai = 0 or 1 for whether ustate a has site i occupied
     Md = ((dbasis[:, np.newaxis] & masks) != 0).astype(np.float64)  # (nd, N); (Md)_bi = 0 or 1 for whether dstate b has site i occupied
     # sum_i (Mu)_ai (Md)_bi = number of bits ustate a and dstate b agree on
