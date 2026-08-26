@@ -1,7 +1,7 @@
 # Cluster Remote Workflow Runbook
 
 Quick-reference for the day-to-day habits and recovery steps from
-[docs/superpowers/specs/2026-08-26-cluster-remote-workflow-design.md](superpowers/specs/2026-08-26-cluster-remote-workflow-design.md).
+[superpowers/specs/2026-08-26-cluster-remote-workflow-design.md](superpowers/specs/2026-08-26-cluster-remote-workflow-design.md).
 
 ## When a VSCode Remote-SSH reconnect looks stuck
 
@@ -13,7 +13,12 @@ Instead:
 
 1. Run `fix-vscode-remote` in a local terminal (defined in `~/.zshrc`).
    This runs `ssh unicorn pkill -f vscode-server` to kill the stale
-   remote process directly.
+   remote process directly. Note: this matches *every* vscode-server
+   process you own on the login node, so it closes all of your remote
+   VSCode windows into `unicorn`, not just the stuck one — save work in
+   other remote windows first if you have any open. If nothing was
+   stuck, the command exits with a "no process found" status, which is
+   expected and not an error.
 2. Retry the VSCode Remote-SSH connection.
 3. If VSCode's command palette is reachable despite the stuck state,
    `Remote-SSH: Kill VS Code Server on Host...` does the same thing
@@ -35,9 +40,15 @@ dropped GUI connection:
 - `tm-jupyter` — attach/create the `jupyter` session, for the
   notebook/kernel server process.
 
-These aliases are defined in the login node's shell rc file. Detach
-with `Ctrl-b d`; the session and everything running in it keeps going
-after you disconnect.
+These aliases are defined in the login node's shell rc file (`tmux`'s
+default prefix key is `Ctrl-b`). Detach with `Ctrl-b d`; the session
+and everything running in it keeps going after you disconnect. To get
+back in after a dropped connection or a fresh SSH session, run the
+same alias again (e.g. `tm-agent`) — it reattaches to the existing
+session instead of starting a new one. If an alias isn't loaded (e.g.
+you're in a non-interactive shell), `tmux attach -t agent` (or `jobs`
+/ `jupyter`) does the same thing directly, and `tmux ls` lists what's
+currently running.
 
 Antigravity has no CLI mode and is not part of this — it stays a
 GUI-only tool in VSCode.
