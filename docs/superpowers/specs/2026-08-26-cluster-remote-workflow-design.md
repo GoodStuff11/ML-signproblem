@@ -89,9 +89,9 @@ touch the hung remote process):
 
 **Preventive VSCode settings:**
 
-- `remote.SSH.connectTimeout`: increase from the default (15s) so a
-  slow-but-working connection isn't abandoned and retried prematurely
-  in a way that compounds into a long hang.
+- `remote.SSH.connectTimeout`: increase from the default (15s) to `60`
+  so a slow-but-working connection isn't abandoned and retried
+  prematurely in a way that compounds into a long hang.
 - `remote.SSH.showLoginTerminal: true`: surfaces the SSH handshake
   output during connect, so a hang shows *why* (e.g. waiting on a
   stale process) instead of an opaque spinner.
@@ -106,7 +106,9 @@ die with the GUI connection runs inside a `tmux` session on the login
 node, so VSCode becomes a window into persistent state rather than the
 thing keeping that state alive.
 
-Named sessions (`tmux attach -t <name>`), not ad-hoc ones:
+Named sessions (`tmux new-session -A -s <name>`, which attaches if the
+session exists or creates it if not — strictly more convenient than
+plain `attach`), not ad-hoc ones:
 
 - `agent` — Claude Code CLI runs for anything expected to run long or
   unattended (job submission loops, long analysis tasks). The VSCode
