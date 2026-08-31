@@ -524,16 +524,17 @@ function enumerate_ferm_excitations(p::Integer, Lvec,
     # filter out hermitian conjugate
     filter!(g -> (g.cre_up, g.cre_dn) <= (g.ann_up, g.ann_dn), gates)
 
-    return gates
+    sorted_gates, _ = sortGatesByIJ(gates, N)
+    return sorted_gates
 end
 
 """
-    tau_g_operator_sector(g::FGate, N, basis; sortOrder=nothing, spec_mask=nothing)
+    tau_g_operator_sector(g, N, basis; sortOrder=nothing, spec_mask=nothing)
 Matrix-free representation of the excitation generator operator τ_g
 restricted to a symmetry sector defined by `basis`, where τ_g = C†_I C_J + C†_J C_I.
 Returns a `LinearMap{ComplexF64}` of size `(d × d)`.
 """
-function tau_g_operator_sector(g::FGate, N::Integer,
+function tau_g_operator_sector(g, N::Integer,
     basis::AbstractVector{<:Integer};
     sortOrder=nothing,
     spec_mask=nothing,
@@ -915,7 +916,7 @@ end
 
 Order gates by the 2N-bit integers (s_I, s_J): s_I varies SLOWEST, s_J FASTEST.
 """
-function sortGatesByIJ(gateLabels::AbstractVector{FGate}, N::Integer)
+function sortGatesByIJ(gateLabels::AbstractVector, N::Integer)
     s_I = [UInt64(g.cre_up) | (UInt64(g.cre_dn) << N) for g in gateLabels]
     s_J = [UInt64(g.ann_up) | (UInt64(g.ann_dn) << N) for g in gateLabels]
     order = sortperm(1:length(gateLabels); by=k -> (s_I[k], s_J[k]))

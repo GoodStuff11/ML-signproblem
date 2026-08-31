@@ -60,7 +60,7 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
     # Overlap computation
     overlap = dot(v2_typed, r[N_typed+1])
     norm_sq = real(dot(r[N_typed+1], r[N_typed+1]))
-    loss = 1.0 - abs2(overlap) / norm_sq
+    loss = 1.0 - abs2(overlap) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
     # println(loss)
     # Return early if gradient is not required
     if grad === nothing
@@ -120,11 +120,11 @@ function approximate_trotter_grad_loss(grad, t_vals, ops, rows, cols, signs, par
         # d(overlap)/da = <v2 | d/da exp(X) | v1>
         # X = sum a_i M_i (M_i are real anti-hermitian)
         # d(overlap)/da = <v2 | ... M_i ... | v1>
-        grad .= real.(grads .* scale_factor)
+        grad .= real.(grads .* scale_factor) .+ 1e-3 .* t_vals
     else
         # X = sum a_i (i M_i) (M_i are hermitian)
         # factor of i comes out
-        grad .= real.(grads .* scale_factor .* 1im)
+        grad .= real.(grads .* scale_factor .* 1im) .+ 1e-3 .* t_vals
     end
 
     return loss
@@ -167,7 +167,7 @@ function fast_loss(t_vals, rows, cols, signs, param_index_map, parameter_mapping
             end
         end
         norm_sq = real(dot(psi, psi))
-        loss = 1.0 - abs2(state2' * psi) / norm_sq
+        loss = 1.0 - abs2(state2' * psi) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
     end
     println("time=$t loss=$loss")
     return loss
@@ -198,7 +198,7 @@ function zygote_loss(t_vals, rows, cols, signs, param_index_map, parameter_mappi
         end
     end
     norm_sq = real(dot(psi, psi))
-    loss = 1.0 - abs2(state2' * psi) / norm_sq
+    loss = 1.0 - abs2(state2' * psi) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
     Zygote.@ignore println("loss=$loss")
     return loss
 end
@@ -257,6 +257,7 @@ function ensure_operator_structure!(order::Int, operator_cache::Dict, indexer::C
         rows, cols, signs, ops_list = struct_cache[:rows], struct_cache[:cols], struct_cache[:signs], struct_cache[:ops_list]
         t_keys, param_index_map = struct_cache[:t_keys], struct_cache[:param_index_map]
     else
+        # omits lower diagonal
         print_mem_usage("Before create_randomized_nth_order_operator")
         t_dict, t_keys = create_randomized_nth_order_operator(order, indexer, true; magnitude=init_mag, omit_H_conj=!use_symmetry, conserve_spin=spin_conserved, normalize_coefficients=false, conserve_momentum=momentum_basis)
         print_mem_usage("After create_randomized_nth_order_operator")
@@ -292,6 +293,7 @@ function ensure_operator_structure!(order::Int, operator_cache::Dict, indexer::C
         end
         sym_data = (inv_param_map, parameter_mapping, parity)
     else
+        # evaluates X + X'. Assumes upper diagonal matrix in (which is true)
         for i in 1:length(t_keys)
             idx = indices_by_param[i]
             rows_sub = Int[]
@@ -420,14 +422,15 @@ function execute_single_optimization(optf, current_t_vals, current_maxiters, opt
     tmp_losses = Float64[]
     function callback(state, loss_val)
         N = 20
+        unreg_loss = loss_val - 0.5 * 1e-3 * sum(abs2, state.u)
         grad_msg = if isnothing(state.grad)
             "gradient=N/A relative-change=N/A curvature=N/A"
         else
             "gradient=$(sum(abs, state.grad)) relative-change=$(sum(state.grad ./ state.u)) curvature=$(sum(state.grad .* state.u))"
         end
 
-        println("loss=$loss_val avg_coef=$(mean(abs.(state.u))) $grad_msg")
-        push!(tmp_losses, loss_val)
+        println("loss=$unreg_loss (true_loss=$loss_val) avg_coef=$(mean(abs.(state.u))) $grad_msg")
+        push!(tmp_losses, unreg_loss)
         if length(tmp_losses) > N && std(tmp_losses[end-N:end]) < 1e-8
             return true
         end
@@ -498,8 +501,9 @@ function execute_single_optimization(optf, current_t_vals, current_maxiters, opt
                 end
             end
 
+            unreg_loss = loss_val - 0.5 * 1e-3 * sum(abs2, state.u)
             push!(time_tracker[optimizer_sym], dt)
-            push!(loss_history, loss_val)
+            push!(loss_history, unreg_loss)
             return callback(state, loss_val)
         end
 
@@ -552,15 +556,16 @@ function run_multistart_initialization(
         l_tmp = res.val
         g_tmp = res.grad[1]
         gnorm = norm(g_tmp)
+        l_unreg = l_tmp - 0.5 * 1e-3 * sum(abs2, t_sample)
 
         is_good = (gnorm > 1e-8) && (loss_type == :energy ? (l_tmp < initial_loss + abs(initial_loss) / 5) : (l_tmp < initial_loss * 10))
 
         if is_good
-            push!(good_samples, (gnorm, l_tmp, copy(t_sample)))
+            push!(good_samples, (gnorm, l_unreg, copy(t_sample)))
         end
 
         if initialization_samples <= 50
-            println("Sample $s (mag=$(round(mag, sigdigits=3))): loss=$l_tmp grad_norm=$gnorm (GOOD: $is_good)")
+            println("Sample $s (mag=$(round(mag, sigdigits=3))): loss=$l_unreg (true_loss=$l_tmp) grad_norm=$gnorm (GOOD: $is_good)")
         end
     end
 
@@ -690,6 +695,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
     dim = length(indexer.inv_comb_dict)
     metrics = Dict{String,Vector{Any}}()
+    # Initialize the first element of metrics["loss"] to the loss at zero coefficients (identity unitary).
+    # This represents the overlap/energy loss between the target and reference state prior to any rotation.
     loss = loss_type == :energy ? real(dot(state1, H * state1)) : max(0.0, 1 - abs2(state1' * state2))
     prev_loss = loss
     metrics["loss"] = Float64[loss]
@@ -701,7 +708,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     if loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H) ? real(dot(state1, H * state1)) : NaN]
     elseif loss_type == :energy
-        metrics["overlap"] = Float64[max(0.0, 1.0-abs2(dot(state1, state2)))]
+        metrics["overlap"] = Float64[max(0.0, 1.0 - abs2(dot(state1, state2)))]
     end
     for k in keys(metric_functions)
         metrics[k] = Any[]
@@ -857,7 +864,6 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         print_mem_usage("After final sparse matrix construction for order $order")
 
         println("Finished order $order")
-        push!(metrics["loss"], loss)
         push!(metrics["optimization_losses"], final_history)
         if multistart_run
             push!(metrics["multistart_losses"], local_multistart_losses)
@@ -892,9 +898,16 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         end
 
         if loss_type == :overlap
+            # metrics["loss"] must reflect the true (unregularized) infidelity of the
+            # actually-reconstructed state, not the optimizer's regularized objective
+            # (which also penalizes coefficient magnitude and so overstates the loss).
+            true_loss = 1.0 - abs2(dot(psi_metric, state2))
+            push!(metrics["loss"], true_loss)
             final_energy = !isnothing(H) ? real(dot(psi_metric, H * psi_metric)) : NaN
             push!(metrics["energy"], final_energy)
         elseif loss_type == :energy
+            true_loss = real(dot(psi_metric, H * psi_metric))
+            push!(metrics["loss"], true_loss)
             final_overlap = 1.0 - abs2(dot(psi_metric, state2))
             push!(metrics["overlap"], final_overlap)
         end
@@ -1174,7 +1187,7 @@ function adjoint_loss(t_vals, ops, rows, cols, signs, param_index_map, parameter
     end
     overlap = dot(v1, psi)
     norm_sq = real(dot(psi, psi))
-    return 1.0 - abs2(overlap) / norm_sq
+    return 1.0 - abs2(overlap) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
 end
 
 function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, signs, param_index_map, parameter_mapping, parity, dim, v1, v2, p, do_hermitian, antihermitian; num_exponentials::Int=1)
@@ -1210,7 +1223,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
     end
     overlap = dot(v1, phis_layers[end])
     norm_sq = real(dot(phis_layers[end], phis_layers[end]))
-    y = 1.0 - abs2(overlap) / norm_sq
+    y = 1.0 - abs2(overlap) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
 
     function adjoint_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1260,13 +1273,13 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), t_vals, ops, rows, cols, s
             @safe_threads for i in eachindex(grad_l)
                 I, J, V = ops[i]
                 M = sparse(I, J, V, dim, dim)
-                if do_hermitian
-                    if antihermitian
-                        M = make_antihermitian(M)
-                    else
-                        M = make_hermitian(M)
-                    end
-                end
+                # if do_hermitian
+                #     if antihermitian
+                #         M = make_antihermitian(M)
+                #     else
+                #         M = make_hermitian(M)
+                #     end
+                # end
                 val = 0.0 + 0.0im
                 for k in 1:(N_steps+1)
                     term = dot(chis[k], M * phis[k])
@@ -1345,7 +1358,7 @@ function gpu_fast_loss(t_vals, ops_gpu, rows, cols, signs, param_index_map, para
             end
         end
         norm_sq_gpu = real(dot(psi_gpu, psi_gpu))
-        loss = 1.0 - abs2(dot(state2_gpu, psi_gpu)) / norm_sq_gpu
+        loss = 1.0 - abs2(dot(state2_gpu, psi_gpu)) / norm_sq_gpu + 0.5 * 1e-3 * sum(abs2, t_vals)
     end
     return loss
 end
@@ -1378,7 +1391,7 @@ function gpu_adjoint_loss(t_vals, ops_gpu, rows, cols, signs, param_index_map, p
         end
     end
     overlap = dot(v1_gpu, psi_gpu)
-    loss = 1.0 - abs2(overlap) / real(dot(psi_gpu, psi_gpu))
+    loss = 1.0 - abs2(overlap) / real(dot(psi_gpu, psi_gpu)) + 0.5 * 1e-3 * sum(abs2, t_vals)
     return loss
 end
 
@@ -1417,7 +1430,7 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
     end
     overlap = dot(v1_gpu, phis_layers[end])
     norm_sq = real(dot(phis_layers[end], phis_layers[end]))
-    y = 1.0 - abs2(overlap) / norm_sq
+    y = 1.0 - abs2(overlap) / norm_sq + 0.5 * 1e-3 * sum(abs2, t_vals)
 
     function gpu_adjoint_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1475,13 +1488,13 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_loss), t_vals, ops_gpu, rows,
             for i in eachindex(grad_l)
                 I, J, V = ops_gpu[i]
                 M_cpu = sparse(I, J, V, dim, dim)
-                if do_hermitian
-                    if antihermitian
-                        M_cpu = make_antihermitian(M_cpu)
-                    else
-                        M_cpu = make_hermitian(M_cpu)
-                    end
-                end
+                # if do_hermitian
+                #     if antihermitian
+                #         M_cpu = make_antihermitian(M_cpu)
+                #     else
+                #         M_cpu = make_hermitian(M_cpu)
+                #     end
+                # end
 
                 colptr_gpu_i = CUDA.CuArray{Cint}(M_cpu.colptr)
                 rowval_gpu_i = CUDA.CuArray(M_cpu.rowval)
@@ -1572,7 +1585,7 @@ function adjoint_energy_loss(t_vals, ops, rows, cols, signs, param_index_map, pa
             psi = expv(1.0im, B_l, psi)
         end
     end
-    loss = real(dot(psi, H * psi))
+    loss = real(dot(psi, H * psi)) + 0.5 * 1e-3 * sum(abs2, t_vals)
     return loss
 end
 
@@ -1608,7 +1621,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_energy_loss), t_vals, ops, rows, 
         end
     end
     psi = phis_layers[end]
-    y = real(dot(psi, H * psi))
+    y = real(dot(psi, H * psi)) + 0.5 * 1e-3 * sum(abs2, t_vals)
 
     function adjoint_energy_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1656,13 +1669,13 @@ function ChainRulesCore.rrule(::typeof(adjoint_energy_loss), t_vals, ops, rows, 
             @safe_threads for i in eachindex(grad_l)
                 I, J, V = ops[i]
                 M = sparse(I, J, V, dim, dim)
-                if do_hermitian
-                    if antihermitian
-                        M = make_antihermitian(M)
-                    else
-                        M = make_hermitian(M)
-                    end
-                end
+                # if do_hermitian
+                #     if antihermitian
+                #         M = make_antihermitian(M)
+                #     else
+                #         M = make_hermitian(M)
+                #     end
+                # end
                 val = 0.0 + 0.0im
                 for k in 1:(N_steps+1)
                     term = dot(chis[k], M * phis[k])
@@ -1712,7 +1725,7 @@ function gpu_adjoint_energy_loss(t_vals, ops_gpu, rows, cols, signs, param_index
             psi_gpu, _ = KrylovKit.exponentiate(B_gpu, 1.0im, psi_gpu; ishermitian=true, tol=1e-12)
         end
     end
-    loss = real(dot(psi_gpu, H_gpu * psi_gpu))
+    loss = real(dot(psi_gpu, H_gpu * psi_gpu)) + 0.5 * 1e-3 * sum(abs2, t_vals)
     return loss
 end
 
@@ -1750,7 +1763,7 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_energy_loss), t_vals, ops_gpu
         CUDA.synchronize()
     end
     psi_gpu = phis_layers[end]
-    y = real(dot(psi_gpu, H_gpu * psi_gpu))
+    y = real(dot(psi_gpu, H_gpu * psi_gpu)) + 0.5 * 1e-3 * sum(abs2, t_vals)
 
     function gpu_adjoint_energy_loss_pullback(ȳ)
         grad_t = Vector{Float64}(undef, length(t_vals))
@@ -1806,13 +1819,13 @@ function ChainRulesCore.rrule(::typeof(gpu_adjoint_energy_loss), t_vals, ops_gpu
             for i in eachindex(grad_l)
                 I, J, V = ops_gpu[i]
                 M_cpu = sparse(I, J, V, dim, dim)
-                if do_hermitian
-                    if antihermitian
-                        M_cpu = make_antihermitian(M_cpu)
-                    else
-                        M_cpu = make_hermitian(M_cpu)
-                    end
-                end
+                # if do_hermitian
+                #     if antihermitian
+                #         M_cpu = make_antihermitian(M_cpu)
+                #     else
+                #         M_cpu = make_hermitian(M_cpu)
+                #     end
+                # end
 
                 colptr_gpu_i = CUDA.CuArray{Cint}(M_cpu.colptr)
                 rowval_gpu_i = CUDA.CuArray(M_cpu.rowval)
