@@ -1,8 +1,8 @@
 using Test
 using LinearAlgebra
 using LinearMaps
-include("TamLib.jl")
-include("TamFermion.jl")
+include(joinpath(@__DIR__, "../TamLib.jl"))
+include(joinpath(@__DIR__, "../TamFermion.jl"))
 
 using .TamLib
 using .TamFermion
@@ -99,7 +99,7 @@ end
     # 6. fullSlaterMomBasis Dict return
     res_fsm = fullSlaterMomBasis([2], 1, 1)
     @test res_fsm isa Dict{String, Any}
-    @test issetequal(keys(res_fsm), ["ints", "qtot_up", "qtot_dn", "qtot", "qtot_unique", "counts", "sortOrder"])
+    @test issetequal(keys(res_fsm), ["ints", "ints_up", "ints_dn", "qtot_up", "qtot_dn", "qtot", "qtot_unique", "counts", "sortOrder"])
     
     # 7. translOpnD (Python style)
     Tops, signs = translOpnD([4], "fermion")

@@ -129,14 +129,14 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         target_u = isnothing(u_vals) ? nothing : u_vals[u_idx]
 
-        H = if loss_type == :energy
-            if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
-                H_hopping + target_u * H_interaction
-            else
-                error("H_hopping and H_interaction must be provided for energy loss optimization.")
-            end
+        H = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
+            H_hopping + target_u * H_interaction
         else
             nothing
+        end
+
+        if loss_type == :energy && isnothing(H)
+            error("H_hopping and H_interaction must be provided for energy loss optimization.")
         end
 
         opt_target = (loss_type == :energy) ? H : state2
@@ -164,9 +164,13 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
            (grow_mode == :per_u || (grow_mode == :chain && !grown_once))
             grow_file = joinpath(save_folder, "$(grow_from_save_name)_u_$(u_idx).jld2")
             if isfile(grow_file)
-                old_coeffs = JLD2.load(grow_file)["dict"]["coefficients"]
+                old_dict = JLD2.load(grow_file)["dict"]
+                old_coeffs = old_dict["coefficients"]
                 println("  Growing initial coefficients from num_exponentials=$(grow_from_num_exponentials) to $(num_exponentials) using $grow_file")
                 current_coeffs = grow_coefficients(old_coeffs, grow_from_num_exponentials, num_exponentials, num_gates)
+                if haskey(old_dict, "metrics")
+                    loaded_m = copy(old_dict["metrics"])
+                end
                 grown_once = true
             else
                 @warn "grow_from_num_exponentials set but no file found for u_idx=$u_idx: $grow_file. Falling back to default initialization."

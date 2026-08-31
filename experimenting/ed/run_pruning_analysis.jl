@@ -7,6 +7,9 @@ Supports both exact exponential (unitary map) and Trotterized optimizations.
 Usage:
   julia --project=.. run_pruning_analysis.jl [folder] [--type=<exact|trotter>] [--custom_ref_state=<value>] [--antihermitian] [--loss=<overlap|energy>] [--num_exponentials=<number>] [--use_gpu=<bool>] [--datatype=<type>]
 
+ex.
+  julia --project=.. run_pruning_analysis.jl "N=(3, 3)_3x2" --custom_ref_state=slater --antihermitian --type=trotter
+
 Arguments:
   folder (optional): The path to the folder containing optimization files. Default: "N=(4, 4)_3x3_2".
   --type (optional): Whether to use trotter or exact exponential coefficients. Default: "exact".
@@ -216,7 +219,11 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
     if type == :trotter
         println("Reconstructing basis sector and gates for Trotter...")
         basis_ints = Trotter.get_basis_sector(indexer, dim_parsed, N_sites)
-        gates = Trotter.enumerate_ferm_excitations(2, dim_parsed; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
+        gates = if haskey(shared_data, "gates")
+            [g isa Trotter.TamFermion.FGate ? g : Trotter.TamFermion.FGate(g.cre_up, g.ann_up, g.cre_dn, g.ann_dn) for g in shared_data["gates"]]
+        else
+            Trotter.enumerate_ferm_excitations(2, dim_parsed; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
+        end
     else#if type == :exact
         coefficient_labels = shared_data["coefficient_labels"]
         param_mapping = shared_data["param_mapping"]

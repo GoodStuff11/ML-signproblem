@@ -132,12 +132,8 @@ function test_matrix_free_gradients()
     println("CPU Matrix-Free Grad (first 5): $(grad_cpu[1:min(5, end)])")
     
     println("\n--- CPU Error ---")
-    # Note: the adjoint_loss_pullback includes L2 regularization: + 1e-3 * t_vals[i]
-    # zygote_loss does not have this regularization in the code.
-    # So we should subtract the regularization from grad_cpu to compare
-    grad_cpu_unreg = grad_cpu .- 1e-3 .* t_vals
-    
-    err_cpu = norm(grad_cpu_unreg .- grad_exact)
+    # Both zygote_loss and adjoint_loss now include L2 regularization (+ 0.5 * 1e-3 * sum(t^2))
+    err_cpu = norm(grad_cpu .- grad_exact)
     println("L2 Error between CPU and Exact: $err_cpu")
     
     if isdefined(Main, :CUDA) && CUDA.has_cuda_gpu()
@@ -158,8 +154,7 @@ function test_matrix_free_gradients()
         println("GPU Matrix-Free Grad (first 5): $(grad_gpu[1:min(5, end)])")
         
         println("\n--- GPU Error ---")
-        grad_gpu_unreg = grad_gpu .- 1e-3 .* t_vals
-        err_gpu = norm(grad_gpu_unreg .- grad_exact)
+        err_gpu = norm(grad_gpu .- grad_exact)
         println("L2 Error between GPU and Exact: $err_gpu")
         
         err_gpu_cpu = norm(grad_gpu .- grad_cpu)

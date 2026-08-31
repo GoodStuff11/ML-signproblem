@@ -301,6 +301,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     M = isnothing(active_indices) ? M_full : length(active_indices)
 
     state2_vec = target isa AbstractVector ? target : state2
+    state2_prep = !isnothing(state2_vec) ? ((datatype <: Real) ? strip_global_phase(state2_vec)[1] : state2_vec) : nothing
     H_mat = target isa AbstractMatrix ? target : H
 
     multistart_run = false
@@ -328,7 +329,10 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     if !isnothing(loaded_metrics) && haskey(loaded_metrics, "loss") && !isempty(loaded_metrics["loss"])
         metrics["loss"] = copy(loaded_metrics["loss"])
     else
-        metrics["loss"] = Float64[initial_loss]
+        # The first element of metrics["loss"] must be the loss at zero coefficients (identity unitary).
+        # This represents the overlap/energy loss between the target and reference state prior to any rotation.
+        zero_coeff_loss = f(zeros(eltype(A_init), M))
+        metrics["loss"] = Float64[zero_coeff_loss]
     end
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
@@ -345,7 +349,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     if !isnothing(loaded_metrics) && haskey(loaded_metrics, "overlap") && !isempty(loaded_metrics["overlap"])
         metrics["overlap"] = copy(loaded_metrics["overlap"])
     elseif loss_type == :energy
-        metrics["overlap"] = Float64[!isnothing(state2_vec) ? (1.0 - abs2(dot(target_prep, ref_prep))) : NaN]
+        metrics["overlap"] = Float64[!isnothing(state2_prep) ? max(0.0, 1.0 - abs2(dot(state2_prep, ref_prep))) : NaN]
     end
     for k in keys(metric_functions)
         metrics[k] = Any[]
@@ -359,6 +363,9 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         push!(metrics["optimization_losses"], [initial_loss])
         push!(metrics["convergence_info"], [Dict{String,Any}("optimizer" => "None", "stage" => 1, "primary_reason" => "States are already equal", "iterations" => 0, "g_residual" => 0.0)])
         push!(metrics["stopping_reasons"], ["States are already equal"])
+        if haskey(metrics, "energy") && !isempty(metrics["energy"])
+            push!(metrics["energy"], metrics["energy"][1])
+        end
         A_zero = zeros(Float64, M_full)
         return A_zero, initial_loss, metrics
     end
@@ -425,7 +432,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         final_energy = !isnothing(H_mat) ? real(dot(ref_evolved_cpu, H_mat * ref_evolved_cpu)) : NaN
         push!(metrics["energy"], final_energy)
     elseif loss_type == :energy
-        final_overlap = !isnothing(target_prep) ? (1.0 - abs2(dot(target_prep, ref_evolved_cpu))) : NaN
+        final_overlap = !isnothing(state2_prep) ? max(0.0, 1.0 - abs2(dot(state2_prep, ref_evolved_cpu))) : NaN
         push!(metrics["overlap"], final_overlap)
     end
 

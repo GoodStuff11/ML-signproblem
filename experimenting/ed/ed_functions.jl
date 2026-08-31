@@ -216,19 +216,27 @@ function parse_custom_ref(custom_ref)
 end
 
 """
-    compute_single_spin_energies(L::AbstractVector{<:Integer})
+    compute_single_spin_energies(L::AbstractVector{<:Integer}; ordering::Symbol=:column_major)
 
 Compute tight-binding model kinetic dispersion energies -2*(cos(kx) + cos(ky)) for single-particle momentum modes.
+
+# Arguments
+- `L`: Lattice dimensions vector `[Lx, Ly]`.
+- `ordering`: Ordering convention for flattening momentum coordinates:
+  - `:column_major` / `:f_order` / `:jld2` (default): Fortran/column-major order (kx is fastest, ky is slowest). Matches `.jld2` files.
+  - `:row_major` / `:c_order` / `:h5`: C/row-major order (ky is fastest, kx is slowest). Matches `.h5` files.
 """
-function compute_single_spin_energies(L::AbstractVector{<:Integer})
-    N_sites = L[1] * L[2]
-    energies = Vector{Float64}(undef, N_sites)
-    k_idx = 1
-    for j in 0:L[2]-1, i in 0:L[1]-1
-        energies[k_idx] = -2.0 * (cos(2 * pi * i / L[1]) + cos(2 * pi * j / L[2]))
-        k_idx += 1
+function compute_single_spin_energies(L::AbstractVector{<:Integer}; ordering::Symbol=:column_major)
+    Lx, Ly = L[1], L[2]
+    if ordering in (:row_major, :c_order, :h5, :c)
+        # C-order (row-major): ky is the fast inner index, kx is the slow outer index
+        return [-2.0 * (cos(2π * kx / Lx) + cos(2π * ky / Ly)) for kx in 0:Lx-1 for ky in 0:Ly-1]
+    elseif ordering in (:column_major, :f_order, :jld2, :fortran)
+        # Fortran-order (column-major): kx is the fast inner index, ky is the slow outer index
+        return [-2.0 * (cos(2π * kx / Lx) + cos(2π * ky / Ly)) for ky in 0:Ly-1 for kx in 0:Lx-1]
+    else
+        error("Unknown ordering '$ordering'. Expected :column_major or :row_major.")
     end
-    return energies
 end
 
 """
@@ -317,26 +325,25 @@ function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
     println("Computing slater ground state for sector $sector")
 
     L = read(data, "metadata/Lvec")
-    evecs_sec = read(data, "data/evecs/$sector")
-    gs_slice = 1
-    state_prob = abs.(evecs_sec[:, gs_slice, 1])
+    state_prob = abs.(read(data, "data/evecs/$sector")[:, 1, 1])
 
     labels_path = haskey(data, "metadata/basis_labels/$sector") ? "metadata/basis_labels/$sector" : "metadata/slater_labels/$sector"
     separate_spins_stored = (read(data, labels_path) isa Dict)
+
     if !separate_spins_stored
-        slater_labels = read(data, labels_path) # dim (Ne_up,H_dim,2)
+        slater_labels = read(data, labels_path)
         H_dim = size(slater_labels, 2)
     else
-        slater_labels_up = read(data, "$labels_path/up") # dim (Ne_up,H_dim)
-        slater_labels_down = read(data, "$labels_path/dn") # dim (Ne_down,H_dim)
+        slater_labels_up = read(data, "$labels_path/up")
+        slater_labels_down = read(data, "$labels_path/dn")
         H_dim = size(slater_labels_up, 2)
     end
 
     single_spin_energies = if haskey(data, "metadata/kvecs")
         kvecs = read(data, "metadata/kvecs")
-        [-2.0 * (cos(2 * pi * kvecs[1, o+1] / L[1]) + cos(2 * pi * kvecs[2, o+1] / L[2])) for o in 0:(size(kvecs, 2)-1)]
+        [-2.0 * sum(cos(2π * kvecs[a, o+1] / L[a]) for a in 1:length(L)) for o in 0:(size(kvecs, 2)-1)]
     else
-        compute_single_spin_energies(L)
+        compute_single_spin_energies(L; ordering=:row_major)
     end
 
     idx = find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
@@ -354,6 +361,7 @@ function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
         end
         return E_up + E_dn
     end)
+
     println("best slater ground state: $idx")
     return idx
 end
@@ -382,23 +390,20 @@ function is_doubly_occupied(data, sector::Int, slater_index::Int)
         up_set, dn_set = idxr.inv_comb_dict[slater_index]
         return up_set == dn_set
     else
-        separate_spins_stored = (read(data, "metadata/slater_labels/$sector") isa Dict)
+        labels_path = haskey(data, "metadata/basis_labels/$sector") ? "metadata/basis_labels/$sector" : "metadata/slater_labels/$sector"
+        separate_spins_stored = (read(data, labels_path) isa Dict)
         if !separate_spins_stored
-            slater_labels = read(data, "metadata/slater_labels/$sector")
+            slater_labels = read(data, labels_path)
             if slater_labels[1] isa UInt
-                up_val = slater_labels[1, slater_index]
-                dn_val = slater_labels[2, slater_index]
-                return up_val == dn_val
+                return slater_labels[1, slater_index] == slater_labels[2, slater_index]
             else
                 up_set = Set(slater_labels[:, slater_index, 1])
                 dn_set = Set(slater_labels[:, slater_index, 2])
                 return up_set == dn_set
             end
         else
-            slater_labels_up = read(data, "metadata/slater_labels/$sector/up")
-            slater_labels_down = read(data, "metadata/slater_labels/$sector/dn")
-            up_set = Set(slater_labels_up[:, slater_index])
-            dn_set = Set(slater_labels_down[:, slater_index])
+            up_set = Set(read(data, "$labels_path/up")[:, slater_index])
+            dn_set = Set(read(data, "$labels_path/dn")[:, slater_index])
             return up_set == dn_set
         end
     end
@@ -504,27 +509,22 @@ function get_su2_ground_state(
 )
     # --- Step 1: Tight-binding single-particle energies ---
     L = read(data, "metadata/Lvec")
-    Ne_up = read(data, "metadata/nup")
-    Ne_dn = read(data, "metadata/ndown")
-    N_orbitals = L[1] * L[2]
+    Ne_up = haskey(data, "metadata/nup") ? read(data, "metadata/nup") : (haskey(data, "metadata/nu") ? read(data, "metadata/nu") : read(data, "metadata/Ne_up"))
+    Ne_dn = haskey(data, "metadata/ndown") ? read(data, "metadata/ndown") : (haskey(data, "metadata/nd") ? read(data, "metadata/nd") : read(data, "metadata/Ne_down"))
+    N_orbitals = prod(L)
 
-    single_spin_energies = zeros(Float64, N_orbitals)
-    momenta = [[i, j] for j in 0:L[2]-1 for i in 0:L[1]-1]
-    for (k_idx, k) in enumerate(momenta)
-        i = k[1]
-        j = k[2]
-        single_spin_energies[k_idx] = -2 * (cos(2 * pi * i / L[1]) + cos(2 * pi * j / L[2]))
-    end
+    single_spin_energies = compute_single_spin_energies(L; ordering=:row_major)
 
     # --- Step 2: Find degenerate ground-state configurations in a single pass ---
-    separate_spins_stored = (read(data, "metadata/slater_labels/$sector") isa Dict)
+    labels_path = haskey(data, "metadata/basis_labels/$sector") ? "metadata/basis_labels/$sector" : "metadata/slater_labels/$sector"
+    separate_spins_stored = (read(data, labels_path) isa Dict)
     if !separate_spins_stored
-        slater_labels = read(data, "metadata/slater_labels/$sector")
+        slater_labels = read(data, labels_path)
         H_dim = size(slater_labels, 2)
         is_uint = (slater_labels[1] isa UInt)
     else
-        slater_labels_up = read(data, "metadata/slater_labels/$sector/up")
-        slater_labels_down = read(data, "metadata/slater_labels/$sector/dn")
+        slater_labels_up = read(data, "$labels_path/up")
+        slater_labels_down = read(data, "$labels_path/dn")
         H_dim = size(slater_labels_up, 2)
     end
 

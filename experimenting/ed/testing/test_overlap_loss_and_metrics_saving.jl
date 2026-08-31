@@ -111,9 +111,15 @@ using .Trotter
         @test metrics["stopping_reasons"][1] == ["States are already equal"]
         println("  [PASS] Identical states early exit stores 2-element metrics[\"loss\"]: $(metrics["loss"])")
         
-        # Case B: Nearby states (u=13 to u=12)
+        # Case B: Nearby states (u=13 to u=12) with Hamiltonian passed for energy metric
         state_13 = state_vecs[13, :]
         state_12 = state_vecs[12, :]
+        
+        # Build Hamiltonian for U=12
+        n_up, n_dn = N_elec
+        H_hop_sec, _, _ = Trotter.TamFermion.HubbardMomentumBasis(1.0, 0.0, Lvec, (n_up, n_dn); indexer=indexer)
+        H_int_sec, _, _ = Trotter.TamFermion.HubbardMomentumBasis(0.0, 1.0, Lvec, (n_up, n_dn); indexer=indexer)
+        H_12 = H_hop_sec + U_values[12] * H_int_sec
         
         A_opt_12, final_loss_12, metrics_12 = Trotter.optimize_unitary(
             gates,
@@ -123,6 +129,7 @@ using .Trotter
             basis_sector,
             N_sites;
             loss_type=:overlap,
+            H=H_12,
             num_exponentials=1,
             antihermitian=true,
             initial_coefficients=zeros(length(gates)),
@@ -136,6 +143,69 @@ using .Trotter
         @test metrics_12["loss"][1] >= 0.0
         @test metrics_12["loss"][2] >= 0.0
         @test metrics_12["loss"][2] <= metrics_12["loss"][1] + 1e-10
+        @test isapprox(metrics_12["loss"][1], max(0.0, 1.0 - abs2(dot(state_12, state_13))); atol=1e-10)
+        
+        @test haskey(metrics_12, "energy")
+        @test length(metrics_12["energy"]) == 2
+        @test isapprox(metrics_12["energy"][1], real(dot(state_13, H_12 * state_13)); atol=1e-10)
+        @test !isnan(metrics_12["energy"][2])
         println("  [PASS] Standard optimization stores 2-element non-negative metrics[\"loss\"]: $(metrics_12["loss"])")
+        println("  [PASS] Energy metric correctly computed at start and end: $(metrics_12["energy"])")
+        
+        # Case C: Energy loss optimization
+        A_opt_e, final_loss_e, metrics_e = Trotter.optimize_unitary(
+            gates,
+            tau_terms,
+            state_13,
+            H_12,
+            basis_sector,
+            N_sites;
+            loss_type=:energy,
+            state2=state_12,
+            num_exponentials=1,
+            antihermitian=true,
+            initial_coefficients=zeros(length(gates)),
+            initialization_samples=0,
+            maxiters=5,
+            optimizer=:LBFGS,
+            use_gpu=false
+        )
+        
+        @test length(metrics_e["loss"]) == 2
+        @test isapprox(metrics_e["loss"][1], real(dot(state_13, H_12 * state_13)); atol=1e-10)
+        @test haskey(metrics_e, "overlap")
+        @test length(metrics_e["overlap"]) == 2
+        @test isapprox(metrics_e["overlap"][1], max(0.0, 1.0 - abs2(dot(state_12, state_13))); atol=1e-10)
+        println("  [PASS] Energy loss optimization tracks loss (energy) and overlap metric correctly: energy=$(metrics_e["loss"]), overlap=$(metrics_e["overlap"])")
+        
+        # Case D: Multi-layer growth (num_exponentials: 1 -> 2)
+        A_init_2 = Trotter.grow_coefficients(A_opt_12, 1, 2, length(gates))
+        A_opt_layer2, final_loss_layer2, metrics_layer2 = Trotter.optimize_unitary(
+            gates,
+            tau_terms,
+            state_13,
+            state_12,
+            basis_sector,
+            N_sites;
+            loss_type=:overlap,
+            H=H_12,
+            num_exponentials=2,
+            antihermitian=true,
+            initial_coefficients=A_init_2,
+            initialization_samples=0,
+            loaded_metrics=metrics_12,
+            maxiters=5,
+            optimizer=:LBFGS,
+            use_gpu=false
+        )
+        
+        @test length(metrics_layer2["loss"]) == 3
+        @test length(metrics_layer2["energy"]) == 3
+        @test metrics_layer2["loss"][1] == metrics_12["loss"][1]
+        @test metrics_layer2["loss"][2] == metrics_12["loss"][2]
+        @test metrics_layer2["energy"][1] == metrics_12["energy"][1]
+        @test metrics_layer2["energy"][2] == metrics_12["energy"][2]
+        println("  [PASS] Layer growth carries forward intermediate metrics to 3 elements: loss=$(metrics_layer2["loss"]), energy=$(metrics_layer2["energy"])")
     end
 end
+

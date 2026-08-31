@@ -75,20 +75,20 @@ using OptimizationOptimJL
 using Combinatorics
 
 if !isdefined(Main, :UtilityFunctions)
-    include("utility_functions.jl")
+    include("../utility_functions.jl")
 end
 using .UtilityFunctions
 if !isdefined(Main, :Trotter)
-    include("trotter.jl")
+    include("../trotter.jl")
 end
 using .Trotter
-include("data_path.jl")
-include("logging.jl")
-include("nn_strategy.jl")
+include("../data_path.jl")
+include("../logging.jl")
+include("../nn_strategy.jl")
 
-include("ed_objects.jl")
-include("ed_functions.jl")
-include("ed_optimization.jl")
+include("../ed_objects.jl")
+include("../ed_functions.jl")
+include("../ed_optimization.jl")
 
 cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
 cmap2(L) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
@@ -1430,105 +1430,4 @@ function build_system_size_comparison_plot(
     axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
 
     return fig
-end
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN ENTRY POINT
-# ═══════════════════════════════════════════════════════════════════════════════
-
-function (@main)(ARGS)
-    log_path = make_log_path(@__DIR__, "trotter_exp_testing")
-    with_logging(log_path) do
-        folders, trotter_orders, n_up, n_dn, lvec, output_file, antihermitian, loss_type, custom_ref_state_arg, u_val = parse_arguments(ARGS)
-
-        println("=== Trotter experiment testing ===")
-        println("  folders        = $folders")
-        println("  trotter_orders = $trotter_orders")
-        println("  loss_type      = $loss_type")
-        println("  custom_ref     = $custom_ref_state_arg")
-        println("  u_val          = $u_val")
-        println()
-
-        if !isnothing(u_val)
-            # Run system size computation for the given folders
-            system_names, num_sites, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies =
-                compute_trotterized_energies_system_size(
-                    folders, u_val, trotter_orders, custom_ref_state_arg, antihermitian, loss_type
-                )
-
-            # Plot the results
-            println("\nBuilding and saving system size comparison plot...")
-            fig = build_system_size_comparison_plot(
-                system_names, num_sites, gs_energies, exact_exp_energies,
-                trotter_energies, trotter_opt_energies,
-                trotter_orders, u_val, loss_type
-            )
-
-            # Save the plot in the first folder (or a default path)
-            out_png = joinpath(folders[1], "$(output_file)_system_size.png")
-            out_pdf = joinpath(folders[1], "$(output_file)_system_size.pdf")
-            save(out_png, fig)
-            save(out_pdf, fig)
-            println("  Saved → $out_png, $out_pdf")
-        else
-            # Run U sweep for the single folder
-            U_values, gs_energies, exact_exp_energies, exact_exp_overlaps, trotter_energies, trotter_overlaps, trotter_opt_energies, trotter_opt_overlaps, trotter_to_exact_overlaps, n_up_loaded, n_dn_loaded, lvec =
-                compute_trotterized_energies_u_sweep(
-                    folders[1], trotter_orders, custom_ref_state_arg, antihermitian, loss_type
-                )
-
-            # Plot energy comparison
-            println("\nBuilding and saving energy comparison plot...")
-            fig_energy = build_comparison_plot(
-                U_values, gs_energies, exact_exp_energies,
-                trotter_energies, trotter_opt_energies,
-                trotter_orders, n_up_loaded, n_dn_loaded, lvec;
-                custom_ref_state_arg=custom_ref_state_arg,
-                loss_type=loss_type
-            )
-
-            out_png = joinpath(folders[1], "$output_file.png")
-            out_pdf = joinpath(folders[1], "$output_file.pdf")
-            save(out_png, fig_energy)
-            save(out_pdf, fig_energy)
-            println("  Saved energy plot → $out_png, $out_pdf")
-
-            # Plot overlap comparison (ground state infidelity)
-            println("\nBuilding and saving overlap comparison plot...")
-            fig_overlap = build_overlap_comparison_plot(
-                U_values, exact_exp_overlaps,
-                trotter_overlaps, trotter_opt_overlaps,
-                trotter_orders, n_up_loaded, n_dn_loaded, lvec;
-                trotter_to_exact_overlaps=trotter_to_exact_overlaps,
-                custom_ref_state_arg=custom_ref_state_arg,
-                loss_type=loss_type,
-                metric=:infidelity
-            )
-
-            out_ovlp_png = joinpath(folders[1], "$(output_file)_overlap.png")
-            out_ovlp_pdf = joinpath(folders[1], "$(output_file)_overlap.pdf")
-            save(out_ovlp_png, fig_overlap)
-            save(out_ovlp_pdf, fig_overlap)
-            println("  Saved overlap plot → $out_ovlp_png, $out_ovlp_pdf")
-
-            # Also save Trotter discretization error plot
-            fig_trotter_err = build_overlap_comparison_plot(
-                U_values, exact_exp_overlaps,
-                trotter_overlaps, trotter_opt_overlaps,
-                trotter_orders, n_up_loaded, n_dn_loaded, lvec;
-                trotter_to_exact_overlaps=trotter_to_exact_overlaps,
-                custom_ref_state_arg=custom_ref_state_arg,
-                loss_type=loss_type,
-                metric=:trotter_error,
-                legend_position=:rb
-            )
-            out_err_png = joinpath(folders[1], "$(output_file)_trotter_error.png")
-            out_err_pdf = joinpath(folders[1], "$(output_file)_trotter_error.pdf")
-            save(out_err_png, fig_trotter_err)
-            save(out_err_pdf, fig_trotter_err)
-            println("  Saved trotter error plot → $out_err_png, $out_err_pdf")
-        end
-
-        return 0
-    end
 end

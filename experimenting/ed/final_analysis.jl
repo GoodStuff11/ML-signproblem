@@ -27,6 +27,7 @@ using OptimizationOptimJL
 using JLD2
 using ExponentialUtilities
 using LsqFit
+# using CUDA
 using HDF5
 
 if !isdefined(Main, :UtilityFunctions)
@@ -39,17 +40,88 @@ include("data_path.jl")
 include("logging.jl")
 
 # ---------------------------------------------------------------------------
-# Global Theme — equivalent to Plots.jl thickness_scaling = 1.3
+# Colormap Helpers
 # ---------------------------------------------------------------------------
+
+"""
+    cmap1(L::Int) -> Vector{RGBAf}
+
+Return `L` evenly-spaced colors from the `:roma` colormap.
+"""
+cmap1(L::Int) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
+
+"""
+    cmap2(L::Int) -> Vector{RGBAf}
+
+Return `L` evenly-spaced colors from the `:managua` colormap.
+"""
+cmap2(L::Int) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
+
+# ---------------------------------------------------------------------------
+# System Configurations: (Display Label, Data Subfolder, Electron Counts)
+# ---------------------------------------------------------------------------
+const FILE_LABEL_PAIRS = [
+    (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2, 2)),
+    (L"3\times 2,\;(3,2)",  "N=(3, 2)_3x2", (3, 2)),
+    (L"3\times 2,\;(3,3)",  "N=(3, 3)_3x2", (3, 3)),
+    (L"3\times3,\;(3,2)",   "N=(3, 2)_3x3", (3, 2)),
+    (L"4\times2,\;(3,3)",   "N=(3, 3)_4x2", (3, 3)),
+    (L"3\times3,\;(3,3)",   "N=(3, 3)_3x3", (3, 3)),
+    (L"3\times3,\;(4,3)",   "N=(4, 3)_3x3", (4, 3)),
+    (L"3\times3,\;(4,4)",   "N=(4, 4)_3x3", (4, 4)),
+    (L"3\times3,\;(5,4)",   "N=(5, 4)_3x3", (5, 4)),
+    # (L"4\times3,\;(4,4)",   "N=(4, 4)_4x3", (4, 4)),
+    (L"4\times3,\;(5,4)",   "N=(5, 4)_4x3", (5, 4)),
+]
+
+const FOLDER = get_data_root()
+
 const THICKNESS_SCALE = 1.3
-const BASE_FONTSIZE   = 16
-const BASE_LINEWIDTH  = 1.5
-const BASE_MARKERSIZE = 12
+const BASE_FONTSIZE   = 16    # Makie default
+const BASE_LINEWIDTH  = 1.5   # Makie default
+const BASE_MARKERSIZE = 12    # Makie default
+
+# ---------------------------------------------------------------------------
+# Authentic LaTeX Typography (CMSY10 Calligraphic Font for \mathcal)
+# ---------------------------------------------------------------------------
+import CairoMakie.MathTeXEngine as MTE
+import Makie.FreeTypeAbstraction as FreeTypeAbstraction
+
+const CMSY_FONT_PATHS = [
+    "/usr/share/texlive/texmf-dist/fonts/type1/public/amsfonts/cm/cmsy10.pfb",
+    "/usr/share/fonts/type1/texlive-fonts-recommended/cmsy10.pfb"
+]
+const CMSY_FONT_PATH = first(filter(isfile, CMSY_FONT_PATHS))
+
+if isfile(CMSY_FONT_PATH)
+    const CMSY_FONT = FreeTypeAbstraction.FTFont(CMSY_FONT_PATH)
+    const MATHCAL_INV_MAP = Dict{Char, Char}(v => k for (k, v) in MTE.latex_symbols[raw"\mathcal"])
+
+    const _orig_texelements = MTE.texelements
+
+    function MTE.texelements(doc::LaTeXString, fontinfo)
+        elements, bbox = _orig_texelements(doc, fontinfo)
+        new_elements = MTE.TeXElement[]
+        for el in elements
+            if el isa MTE.TeXChar && haskey(MATHCAL_INV_MAP, el.represented_char)
+                ascii_char = MATHCAL_INV_MAP[el.represented_char] # 'U'
+                push!(new_elements, MTE.TeXChar(ascii_char, el.position, CMSY_FONT, el.scale, :cal))
+            else
+                push!(new_elements, el)
+            end
+        end
+        return new_elements, bbox
+    end
+
+    function MTE.texelements(doc::LaTeXString)
+        MTE.texelements(doc, MTE.default_fonts())
+    end
+end
 
 set_theme!(
-    fontsize    = round(Int, BASE_FONTSIZE * THICKNESS_SCALE),
-    linewidth   = BASE_LINEWIDTH * THICKNESS_SCALE,
-    markersize  = BASE_MARKERSIZE * THICKNESS_SCALE,
+    fontsize       = round(Int, BASE_FONTSIZE * THICKNESS_SCALE),
+    linewidth      = BASE_LINEWIDTH * THICKNESS_SCALE,
+    markersize     = BASE_MARKERSIZE * THICKNESS_SCALE,
     Axis = (
         xticksize      = 6 * THICKNESS_SCALE,
         yticksize      = 6 * THICKNESS_SCALE,
@@ -58,42 +130,6 @@ set_theme!(
         spinewidth     = 1 * THICKNESS_SCALE,
     ),
 )
-
-# ---------------------------------------------------------------------------
-# Colormap Helpers
-# ---------------------------------------------------------------------------
-
-"""
-    cmap1(num_colors::Int) -> Vector{RGBAf}
-
-Return `num_colors` evenly-spaced colors from the `:linear_blue_5_95_c73_n256` colormap.
-"""
-function cmap1(num_colors::Int)
-    return [Makie.ColorSchemes.linear_blue_5_95_c73_n256[z] for z in range(0, 1, length=num_colors)]
-end
-
-"""
-    cmap2(num_colors::Int) -> Vector{RGBAf}
-
-Return `num_colors` evenly-spaced colors from the `:managua` colormap.
-"""
-function cmap2(num_colors::Int)
-    return [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=num_colors)]
-end
-
-# ---------------------------------------------------------------------------
-# System Configurations: (Display Label, Data Subfolder, Electron Counts)
-# ---------------------------------------------------------------------------
-const FILE_LABEL_PAIRS = [
-    (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2, 2)),
-    (L"3\times 2,\;(3,2)",  "N=(3, 2)_3x2", (3, 2)),
-    (L"3\times3,\;(3,2)",   "N=(3, 2)_3x3", (3, 2)),
-    (L"3\times3,\;(3,3)",   "N=(3, 3)_3x3", (3, 3)),
-    (L"4\times2,\;(3,3)",   "N=(3, 3)_4x2", (3, 3)),
-    (L"3\times3,\;(4,3)",   "N=(4, 3)_3x3", (4, 3)),
-    (L"3\times3,\;(4,4)",   "N=(4, 4)_3x3", (4, 4)),
-    (L"4\times3,\;(4,4)",   "N=(4, 4)_4x3", (5, 4)),
-]
 
 # ---------------------------------------------------------------------------
 # Figure 1: Loss curves — reused vs. random initial coefficients
@@ -169,23 +205,19 @@ end
     plot_main_analysis()
 
 Plot state overlaps and overlap improvement ratios across interaction strengths U
-for all system configurations in `FILE_LABEL_PAIRS`. Also generates coefficient histograms
-and trajectory plots.
+for all system configurations in `FILE_LABEL_PAIRS`. Also generates coefficient trajectory plots.
 """
 function plot_main_analysis()
-    data_root = get_data_root()
-
-    fig_overlap = Figure()
+    fig_overlap = Figure(size=(1200, 500))
     ax_overlap = Axis(fig_overlap[1, 1];
         xlabel = L"U",
-        ylabel = L"|\langle E_0(U)|\mathcal{U}|E_0(\epsilon)\rangle|^2",
-        limits = ((0, 15), nothing),
+        ylabel = L"|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
+        limits = ((0, 15), (-0.05, 1.05)),
     )
 
-    fig_improvement = Figure()
-    ax_improvement = Axis(fig_improvement[1, 1];
+    ax_improvement = Axis(fig_overlap[1, 2];
         xlabel = L"U",
-        ylabel = L"\frac{|\langle E_0(U)|\mathcal{U}|E_0(\epsilon)\rangle|^2}{|\langle E_0(U)|E_0(\epsilon)\rangle|^2}",
+        ylabel = L"\frac{|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2}{|\langle E_0(U)|E_0(0)\rangle|^2}",
         limits = ((0, 15), (1, 15)),
     )
 
@@ -194,10 +226,13 @@ function plot_main_analysis()
     num_tuning_parameters = []
 
     u_indices = 2:60
-    palette_colors = cmap1(length(FILE_LABEL_PAIRS))
+    palette_colors = cmap2(length(FILE_LABEL_PAIRS))
+
+    selected_u_indices = [20, 30, 45]
+    palette_colors2 = cmap2(length(selected_u_indices))
 
     for (sys_idx, (display_label, file_label, electron_counts)) in enumerate(FILE_LABEL_PAIRS)
-        sys_dir = joinpath(data_root, file_label)
+        sys_dir = joinpath(FOLDER, file_label)
         if !isdir(sys_dir)
             @warn "Directory for system $file_label does not exist: $sys_dir. Skipping."
             continue
@@ -210,9 +245,16 @@ function plot_main_analysis()
 
         meta_file = joinpath(sys_dir, "meta_data_and_E.jld2")
         if isfile(meta_file)
-            metadata_dict = load(meta_file)["dict"]
-            hilbert_space_size = size(metadata_dict["all_full_eig_vecs"][1], 2)
-            interaction_data = metadata_dict["meta_data"]["U_values"]
+            interaction_data = nothing
+            hilbert_space_size = nothing
+            jldopen(meta_file, "r") do f
+                interaction_data = f["dict/meta_data/U_values"]
+                if haskey(f["dict"], "all_E")
+                    hilbert_space_size = size(f["dict/all_E"], 1)
+                elseif haskey(f["dict"], "all_full_eig_vecs")
+                    hilbert_space_size = size(f["dict/all_full_eig_vecs"][1], 2)
+                end
+            end
         else
             valid_files = [f for f in readdir(sys_dir) if occursin("HubbardED", f)]
             if isempty(valid_files)
@@ -256,8 +298,6 @@ function plot_main_analysis()
 
         coef_matrix = reduce(hcat, coefficients_list)
 
-        selected_u_indices = [20, 30, 45]
-
         # Coefficient trajectory plot
         fig_trajectory = Figure()
         ax_trajectory = Axis(fig_trajectory[1, 1];
@@ -271,7 +311,7 @@ function plot_main_analysis()
         for (color_idx, u_idx) in enumerate(selected_u_indices)
             if u_idx in valid_u_indices
                 vlines!(ax_trajectory, [interaction_data[u_idx]];
-                    color = palette_colors[color_idx], linestyle = :dash,
+                    color = palette_colors2[color_idx], linestyle = :dash,
                     label = L"U=%$(round(interaction_data[u_idx], digits=2))")
             end
         end
@@ -279,15 +319,15 @@ function plot_main_analysis()
 
         # Main overlap curves
         lines!(ax_overlap, interaction_data[valid_u_indices], baseline_overlaps;
-            linewidth = 1, color = palette_colors[sys_idx], linestyle = :dash)
+            color = palette_colors[sys_idx], linestyle = :dash)
         lines!(ax_overlap, interaction_data[valid_u_indices], optimized_overlaps;
-            linewidth = 1, color = palette_colors[sys_idx], label = string(display_label))
+            color = palette_colors[sys_idx])
 
         # Improvement ratios
         overlap_improvement_ratios = optimized_overlaps ./ baseline_overlaps
         target_u_val = 10
-        scatterlines!(ax_improvement, interaction_data[valid_u_indices], overlap_improvement_ratios;
-            color = palette_colors[sys_idx], marker = :circle, label = string(display_label))
+        lines!(ax_improvement, interaction_data[valid_u_indices], overlap_improvement_ratios;
+            color = palette_colors[sys_idx], label = string(display_label))
 
         target_idx = argmin(abs.(interaction_data .- target_u_val)) + valid_u_indices[1] - 1
         push!(final_performances, overlap_improvement_ratios[min(target_idx, length(overlap_improvement_ratios))])
@@ -298,65 +338,33 @@ function plot_main_analysis()
             parse(Int, dimension_match[:N]),
             parse(Int, dimension_match[:M])
         ))
-
-        # Histogram at selected U values
-        for (color_idx, u_idx) in enumerate(selected_u_indices)
-            filepath = joinpath(sys_dir, "$(prefix)_u_$(u_idx).jld2")
-            if !isfile(filepath)
-                continue
-            end
-            result_dict = load_saved_dict(filepath)
-            coef_values = result_dict["coefficients"]
-            if length(coef_values) < 5
-                coef_values = coef_values[2]
-            end
-
-            fig_histogram = Figure()
-            ax_histogram = Axis(fig_histogram[1, 1];
-                xlabel = L"A^{(2)}\;\textrm{value}",
-                ylabel = L"\textrm{Count}",
-                limits = ((-0.5, 0.5), nothing),
-            )
-            hist!(ax_histogram, coef_values;
-                bins = LinRange(-0.5, 0.5, 50),
-                color = palette_colors[color_idx],
-                label = L"U=%$(round(interaction_data[u_idx], digits=2))")
-            axislegend(ax_histogram; position = :rt, backgroundcolor = (:white, 0.8))
-            display(fig_histogram)
-
-            mkpath("good_images/antihermitian")
-            save("good_images/antihermitian/U=$(round(interaction_data[u_idx], digits=2))_$(file_label)_histogram.png", fig_histogram)
-            save("good_images/antihermitian/U=$(round(interaction_data[u_idx], digits=2))_$(file_label)_histogram.pdf", fig_histogram)
-        end
     end
 
     # Style legend entries for main overlap figure
     lines!(ax_overlap, [NaN], [NaN];
-        color = :black, linewidth = 1, linestyle = :solid,
+        color = :black, linestyle = :solid,
         label = L"\textrm{Optimized}\;\,A^{(2)} ")
     lines!(ax_overlap, [NaN], [NaN];
-        color = :black, linewidth = 1, linestyle = :dash,
+        color = :black, linestyle = :dash,
         label = L"A^{(2)}=0")
 
+    Legend(fig_overlap[1, 3], ax_improvement)
     axislegend(ax_overlap; position = :lb, backgroundcolor = (:white, 0.8))
-    axislegend(ax_improvement; position = :lt, backgroundcolor = (:white, 0.8))
 
     display(fig_overlap)
-    display(fig_improvement)
 
-    mkpath("good_images/antihermitian")
-    save("good_images/antihermitian/relative_loss.png", fig_overlap)
-    save("good_images/antihermitian/relative_loss.pdf", fig_overlap)
-    save("good_images/antihermitian/loss_improvement2.png", fig_improvement)
-    save("good_images/antihermitian/loss_improvement2.pdf", fig_improvement)
+    out_dir = joinpath(@__DIR__, "good_images", "final")
+    mkpath(out_dir)
+    save(joinpath(out_dir, "loss_curve.png"), fig_overlap)
+    save(joinpath(out_dir, "loss_curve.pdf"), fig_overlap)
+    println("Saved loss_curve.png and loss_curve.pdf to: ", out_dir)
 
-    return fig_overlap, fig_improvement
+    return fig_overlap
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "final_analysis")
     with_logging(log_path) do
-        plot_loss_curves()
         plot_main_analysis()
         return 0
     end
