@@ -111,18 +111,18 @@ model(x, p) = @. (1 - p[1] * (x - p[2]) / (1 + abs(p[1] * (x - p[2]))^p[3])^(1 /
 rescale(x, p) = @. x * (p[2] - p[1]) + p[1]
 
 """
-    plot_pruning_and_sparsity_at_threshold(interaction_data, u_indices, file_label_pair, fit_params2, rescaling_vals, sys_x_filt2, sys_y_filt2, hilbert_space_sizes, output_dir, antihermitian_val, custom_ref_state_arg_val, cmap; selected_U=8, threshold=0.95)
+    plot_pruning_and_sparsity_at_threshold(u_values, u_indices, file_label_pair, fit_params, overlap_bounds, sparsity_data, norm_overlap_data, hilbert_space_sizes, output_dir, antihermitian_val, custom_ref_state_arg_val, cmap; selected_U=8, threshold=0.95)
 
 Plot pruning curves for `selected_U` (left panel) and maximum sparsity at overlap `threshold` (right panel) in a single figure using `create_fig`.
 """
 function plot_pruning_and_sparsity_at_threshold(
-    interaction_data,
+    u_values,
     u_indices,
     file_label_pair,
-    fit_params2,
-    rescaling_vals,
-    sys_x_filt2,
-    sys_y_filt2,
+    fit_params,
+    overlap_bounds,
+    sparsity_data,
+    norm_overlap_data,
     hilbert_space_sizes,
     output_dir::String,
     antihermitian_val::Bool,
@@ -147,39 +147,43 @@ function plot_pruning_and_sparsity_at_threshold(
     )
 
     # Panel 1: Pruning curves for selected U
-    pruning_plot_u_idx = argmin(abs.(interaction_data[u_indices] .- selected_U)) + u_indices[1] - 1
-    plot_idx_local = findfirst(==(pruning_plot_u_idx), u_indices)
+    selected_u_idx = argmin(abs.(u_values[u_indices] .- selected_U)) + u_indices[1] - 1
+    plot_idx_local = findfirst(==(selected_u_idx), u_indices)
 
     for (color_i, (label, _, _)) in enumerate(file_label_pair)
         if !isnothing(plot_idx_local)
-            fit_p = fit_params2[color_i][plot_idx_local]
-            rescale_p = rescaling_vals[color_i][plot_idx_local]
-            x_pts = sys_x_filt2[color_i][plot_idx_local]
-            y_pts = sys_y_filt2[color_i][plot_idx_local]
+            fit_p = fit_params[color_i][plot_idx_local]
+            bounds = overlap_bounds[color_i][plot_idx_local]
+            sparsity_pts = sparsity_data[color_i][plot_idx_local]
+            norm_overlap_pts = norm_overlap_data[color_i][plot_idx_local]
+            overlap_pts = rescale(norm_overlap_pts, bounds)
 
-            lines!(ax1, LinRange(0, 1, 200), rescale(model(LinRange(0, 1, 200), fit_p), rescale_p);
+            fit_sparsity = LinRange(0, 1, 200)
+            fit_overlap = rescale(model(fit_sparsity, fit_p), bounds)
+
+            lines!(ax1, fit_sparsity, fit_overlap;
                 color = cmap[color_i], linestyle = :dash)
-            scatter!(ax1, x_pts, rescale(y_pts, rescale_p);
+            scatter!(ax1, sparsity_pts, overlap_pts;
                 color = cmap[color_i], label = string(label))
         end
     end
 
     # Panel 2: Max sparsity at threshold
-    x_thresholds = []
-    for (i, (param_u, (label, _, _), rsc_vals, hs_size)) in enumerate(zip(fit_params2, file_label_pair, rescaling_vals, hilbert_space_sizes))
-        push!(x_thresholds, Float64[])
-        for (param, rsc_val) in zip(param_u, rsc_vals)
-            x_val = find_root_bisection(x -> rescale(model(x, param), rsc_val) - threshold, -1.0, 2.0)
-            push!(x_thresholds[end], x_val)
+    sparsity_at_threshold = []
+    for (i, (param_u, (label, _, _), bounds_u, hs_size)) in enumerate(zip(fit_params, file_label_pair, overlap_bounds, hilbert_space_sizes))
+        push!(sparsity_at_threshold, Float64[])
+        for (param, bounds) in zip(param_u, bounds_u)
+            sparsity_val = find_root_bisection(s -> rescale(model(s, param), bounds) - threshold, -1.0, 2.0)
+            push!(sparsity_at_threshold[end], sparsity_val)
         end
-        scatterlines!(ax2, interaction_data[u_indices], x_thresholds[end];
+        scatterlines!(ax2, u_values[u_indices], sparsity_at_threshold[end];
             label = string(label), linewidth = 2, markersize = 8, color = cmap[i])
     end
 
     Legend(fig[1, 3], ax2; LEGEND_ARGS...)
     colgap!(fig.layout, 10)
 
-    u_val_str = round(interaction_data[pruning_plot_u_idx], digits=2)
+    u_val_str = round(u_values[selected_u_idx], digits=2)
     out_filename = build_save_name_prefix(
         "pruning_and_sparsity_threshold_U=$(u_val_str)_th=$(threshold)";
         antihermitian=antihermitian_val,
@@ -195,14 +199,14 @@ function main()
     log_path = make_log_path(@__DIR__, "test_plot_pruning_and_sparsity_threshold")
     with_logging(log_path) do
         antihermitian_val, custom_ref_state_arg_val = true, "slater"
-        interaction_data = 0.25:0.25:15.0
+        u_values = 0.25:0.25:15.0
 
         hilbert_space_sizes = Int[]
-        fit_params2 = []
-        fit_errors2 = []
-        rescaling_vals = []
-        sys_x_filt2 = []
-        sys_y_filt2 = []
+        fit_params = []
+        fit_errors = []
+        overlap_bounds = []
+        sparsity_data = []
+        norm_overlap_data = []
         u_indices = 2:60
 
         for (color_i, (label, file_label, nelectrons)) in enumerate(FILE_LABEL_PAIRS)
@@ -225,26 +229,26 @@ function main()
 
             curr_fit_params = Vector{Any}(undef, length(u_indices))
             curr_fit_errors = Vector{Any}(undef, length(u_indices))
-            curr_rescaling_vals = Vector{Any}(undef, length(u_indices))
-            curr_x_filt2 = Vector{Any}(undef, length(u_indices))
-            curr_y_filt2 = Vector{Any}(undef, length(u_indices))
+            curr_overlap_bounds = Vector{Any}(undef, length(u_indices))
+            curr_sparsity_data = Vector{Any}(undef, length(u_indices))
+            curr_norm_overlap_data = Vector{Any}(undef, length(u_indices))
 
             for (idx, i) in collect(enumerate(u_indices))
                 filt = d["removed_terms"][:, i] .> 0
                 err = max.(abs.(d["error_data"][:, i][filt]), 1e-16)
                 overlap = 1 .- err
 
-                x = d["removed_terms"][:, i][filt] ./ maximum(d["removed_terms"][:, i][filt])
-                y = (overlap .- overlap[end]) ./ (overlap[1] .- overlap[end])
-                curr_rescaling_vals[idx] = [overlap[end], overlap[1]]
+                sparsity = d["removed_terms"][:, i][filt] ./ maximum(d["removed_terms"][:, i][filt])
+                norm_overlap = (overlap .- overlap[end]) ./ (overlap[1] .- overlap[end])
+                curr_overlap_bounds[idx] = [overlap[end], overlap[1]]
 
-                filt2 = y .> y[end]
+                filt2 = norm_overlap .> norm_overlap[end]
                 weight = min.(1 ./ (1 .- overlap) .^ 2, 1e6)
 
                 fit = curve_fit(
                     model,
-                    x[filt2],
-                    y[filt2],
+                    sparsity[filt2],
+                    norm_overlap[filt2],
                     weight[filt2],
                     [1.0, 1.0, 1.0],
                     lower=[-Inf, -Inf, 0.1],
@@ -259,15 +263,15 @@ function main()
 
                 curr_fit_params[idx] = copy(fit.param)
                 curr_fit_errors[idx] = copy(errs)
-                curr_x_filt2[idx] = x[filt2]
-                curr_y_filt2[idx] = y[filt2]
+                curr_sparsity_data[idx] = sparsity[filt2]
+                curr_norm_overlap_data[idx] = norm_overlap[filt2]
             end
 
-            push!(fit_params2, curr_fit_params)
-            push!(fit_errors2, curr_fit_errors)
-            push!(rescaling_vals, curr_rescaling_vals)
-            push!(sys_x_filt2, curr_x_filt2)
-            push!(sys_y_filt2, curr_y_filt2)
+            push!(fit_params, curr_fit_params)
+            push!(fit_errors, curr_fit_errors)
+            push!(overlap_bounds, curr_overlap_bounds)
+            push!(sparsity_data, curr_sparsity_data)
+            push!(norm_overlap_data, curr_norm_overlap_data)
         end
 
         output_dir = joinpath(@__DIR__, "..", "good_images", "final")
@@ -278,8 +282,8 @@ function main()
         cmap = cmap2(length(FILE_LABEL_PAIRS))
 
         fig = plot_pruning_and_sparsity_at_threshold(
-            interaction_data, u_indices, FILE_LABEL_PAIRS, fit_params2,
-            rescaling_vals, sys_x_filt2, sys_y_filt2, hilbert_space_sizes, output_dir,
+            u_values, u_indices, FILE_LABEL_PAIRS, fit_params,
+            overlap_bounds, sparsity_data, norm_overlap_data, hilbert_space_sizes, output_dir,
             antihermitian_val, custom_ref_state_arg_val, cmap; selected_U=8, threshold=0.95
         )
 

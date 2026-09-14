@@ -1,0 +1,214 @@
+================================================================================
+Timestamp: 2026-09-09T13:03:42.342
+Command run: julia testing/test_infidelity_and_dimH_plots.jl 
+================================================================================
+=== Starting test_infidelity_and_dimH_plots ===
+Selected U: 8.0
+ERROR: Failed to resolve arg1:
+[ComputeEdge] arg1 = compute_identity((linesgments_shifted, ), changed, cached)
+  @ /home/jek354/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:743
+[ComputeEdge] linesgments_shifted = (::MapFunctionWrapper(#tex_linesegments!##0))((linesegments, lineindices, preprojection, model_f32c, positions_transformed_f32c, model_clip_planes, space, ), changed, cached)
+  @ unknown method location
+[ComputeEdge] glyphcollections, glyphindices, font_per_char, glyph_origins, glyph_extents, text_blocks, text_color, text_rotation, text_scales, text_strokewidth, text_strokecolor, linesegments, linewidths, linecolors, lineindices = #compute_glyph_collections!##0((input_text, fontsize, selected_font, align, rotation, justification, lineheight, word_wrap_width, offset, fonts, computed_color, strokecolor, strokewidth, ), changed, cached)
+  @ /home/jek354/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:343
+  with edge inputs:
+    input_text = LaTeXString[L"$1 - |\\langle E_0(U)|\\mathcal{U}|E_0(0)\\rangle|^2$"]
+    fontsize = 10.0f0
+    selected_font = FTFont (family = NewComputerModern Math, style = Regular)
+    align = (:center, :bottom)
+    rotation = 0.70710677 + 0.0im + 0.0jm + 0.70710677km
+    justification = Makie.Automatic()
+    lineheight = 1.0
+    word_wrap_width = -1
+    offset = Float32[0.0, 0.0, 0.0]
+    fonts = Attributes()
+    computed_color = RGBA{Float32}(0.0, 0.0, 0.0, 1.0)
+    strokecolor = RGBA{Float32}(0.0, 0.0, 0.0, 0.0)
+    strokewidth = 0.0f0
+Triggered by update of:
+  alpha, strokecolor, position, colormap, colorscale, text, fonts, highclip, word_wrap_width, justification, font, align, nan_color, strokewidth, rotation, arg1, lineheight, colorrange, offset, color, fontsize or lowclip
+Due to ERROR: TeXParseError: unexpected error
+at position 7 (string index 7)
+$1 - |\\langle E_0(U)|\\mathcal{U}|E_0(0)\\rangle|^2$
+      ^
+Stack
+[3] TeXExpr :inline_math
+├─ TeXExpr :digit '1'
+├─ TeXExpr :char ' '
+├─ TeXExpr :spaced
+│  └─ TeXExpr :symbol '−'
+├─ TeXExpr :char ' '
+└─ TeXExpr :delimiter '|'
+[2] TeXExpr :line
+[1] TeXExpr :lines
+
+TeX expression tokenized as
+index : token_type [length]
+1 : dollar [1]
+2 : char [1]
+3 : char [1]
+4 : char [1]
+5 : char [1]
+6 : char [1]
+7 : newline [2]
+9 : char [1]
+10 : char [1]
+11 : char [1]
+12 : char [1]
+13 : char [1]
+14 : char [1]
+15 : char [1]
+16 : char [1]
+17 : underscore [1]
+18 : char [1]
+19 : char [1]
+20 : char [1]
+21 : char [1]
+22 : char [1]
+23 : newline [2]
+25 : char [1]
+26 : char [1]
+27 : char [1]
+28 : char [1]
+29 : char [1]
+30 : char [1]
+31 : char [1]
+32 : lcurly [1]
+33 : char [1]
+34 : rcurly [1]
+35 : char [1]
+36 : char [1]
+37 : underscore [1]
+38 : char [1]
+39 : char [1]
+40 : char [1]
+41 : char [1]
+42 : newline [2]
+44 : char [1]
+45 : char [1]
+46 : char [1]
+47 : char [1]
+48 : char [1]
+49 : char [1]
+50 : char [1]
+51 : caret [1]
+52 : char [1]
+53 : dollar [1]
+
+
+Stacktrace:
+  [1] texparse(tex::LaTeXString; root::MathTeXEngine.TeXExpr, showdebug::Bool)
+    @ MathTeXEngine ~/.julia/packages/MathTeXEngine/Zd227/src/parser/parser.jl:242
+  [2] texparse
+    @ ~/.julia/packages/MathTeXEngine/Zd227/src/parser/parser.jl:138 [inlined]
+  [3] generate_tex_elements(str::LaTeXString, font_family::MathTeXEngine.FontFamily)
+    @ MathTeXEngine ~/.julia/packages/MathTeXEngine/Zd227/src/engine/layout.jl:890
+  [4] generate_tex_elements
+    @ ~/.julia/packages/MathTeXEngine/Zd227/src/engine/layout.jl:890 [inlined]
+  [5] texelems_and_glyph_collection(str::LaTeXString, fontscale_px::Float32, align::Tuple{Symbol, Symbol}, rotation::Quaternionf, color::ColorTypes.RGBA{Float32}, strokecolor::ColorTypes.RGBA{Float32}, strokewidth::Float32, word_wrap_width::Int64)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:798
+  [6] convert_text_string!(outputs::@NamedTuple{glyphcollections::Vector{Makie.GlyphCollection}, glyphindices::Vector{UInt64}, font_per_char::Vector{FreeTypeAbstraction.FTFont}, glyph_origins::Vector{Point{3, Float32}}, glyph_extents::Vector{Makie.GlyphExtent}, text_blocks::Vector{UnitRange{Int64}}, text_color::Vector{ColorTypes.RGBA{Float32}}, text_rotation::Vector{Quaternionf}, text_scales::Vector{Vec{2, Float32}}, text_strokewidth::Vector{Float32}, text_strokecolor::Vector{ColorTypes.RGBA{Float32}}, linesegments::Vector{Point{3, Float32}}, linewidths::Vector{Float32}, linecolors::Vector{ColorTypes.RGBA{Float32}}, lineindices::Vector{Pair{Int64, Int64}}}, input_text::LaTeXString, i::Int64, N::Int64, fontsize::Float32, font::FreeTypeAbstraction.FTFont, align::Tuple{Symbol, Symbol}, rotation::Quaternionf, justification::Makie.Automatic, lineheight::Float64, word_wrap_width::Int64, offset::Vec{3, Float32}, fonts::Attributes, color::ColorTypes.RGBA{Float32}, strokecolor::ColorTypes.RGBA{Float32}, strokewidth::Float32)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:269
+  [7] (::Makie.var"#compute_glyph_collections!##0#compute_glyph_collections!##1")(::@NamedTuple{input_text::Vector{LaTeXString}, fontsize::Float32, selected_font::FreeTypeAbstraction.FTFont, align::Tuple{Symbol, Symbol}, rotation::Quaternionf, justification::Makie.Automatic, lineheight::Float64, word_wrap_width::Int64, offset::Vec{3, Float32}, fonts::Attributes, computed_color::ColorTypes.RGBA{Float32}, strokecolor::ColorTypes.RGBA{Float32}, strokewidth::Float32}, changed::@NamedTuple{input_text::Bool, fontsize::Bool, selected_font::Bool, align::Bool, rotation::Bool, justification::Bool, lineheight::Bool, word_wrap_width::Bool, offset::Bool, fonts::Bool, computed_color::Bool, strokecolor::Bool, strokewidth::Bool}, cached::Nothing)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:364
+  [8] ComputePipeline.TypedEdge(edge::ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph}, f::Makie.var"#compute_glyph_collections!##0#compute_glyph_collections!##1", inputs::@NamedTuple{input_text::Base.RefValue{Any}, fontsize::Base.RefValue{Float32}, selected_font::Base.RefValue{FreeTypeAbstraction.FTFont}, align::Base.RefValue{Any}, rotation::Base.RefValue{Quaternionf}, justification::Base.RefValue{Makie.Automatic}, lineheight::Base.RefValue{Float64}, word_wrap_width::Base.RefValue{Int64}, offset::Base.RefValue{Vec{3, Float32}}, fonts::Base.RefValue{Attributes}, computed_color::Base.RefValue{ColorTypes.RGBA{Float32}}, strokecolor::Base.RefValue{ColorTypes.RGBA{Float32}}, strokewidth::Base.RefValue{Float32}})
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:126
+  [9] ComputePipeline.TypedEdge(edge::ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph})
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:120
+ [10] (::ComputePipeline.var"#resolve!##4#resolve!##5"{ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph}})()
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:670
+ [11] lock(f::ComputePipeline.var"#resolve!##4#resolve!##5"{ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph}}, l::ReentrantLock)
+    @ Base ./lock.jl:335
+ [12] resolve!(edge::ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph})
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:663
+ [13] _resolve!(computed::ComputePipeline.Computed)
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:658
+ [14] foreach
+    @ ./abstractarray.jl:3188 [inlined]
+ [15] (::ComputePipeline.var"#resolve!##4#resolve!##5"{ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph}})()
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:667
+--- the above 5 lines are repeated 1 more time ---
+ [21] lock(f::ComputePipeline.var"#resolve!##4#resolve!##5"{ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph}}, l::ReentrantLock)
+    @ Base ./lock.jl:335
+ [22] resolve!(edge::ComputePipeline.ComputeEdge{ComputePipeline.ComputeGraph})
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:663
+ [23] _resolve!(computed::ComputePipeline.Computed)
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:658
+ [24] resolve!(computed::ComputePipeline.Computed)
+    @ ComputePipeline ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:650
+ [25] getindex
+    @ ~/.julia/packages/ComputePipeline/E2l50/src/ComputePipeline.jl:563 [inlined]
+ [26] #_register_expand_arguments!##0
+    @ ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:399 [inlined]
+ [27] iterate
+    @ ./generator.jl:48 [inlined]
+ [28] _collect(c::Vector{Symbol}, itr::Base.Generator{Vector{Symbol}, Makie.var"#_register_expand_arguments!##0#_register_expand_arguments!##1"{ComputePipeline.ComputeGraph}}, ::Base.EltypeUnknown, isz::Base.HasShape{1})
+    @ Base ./array.jl:810
+ [29] _register_expand_arguments!(::Type{LineSegments}, attr::ComputePipeline.ComputeGraph, inputs::Vector{Symbol}, is_merged::Bool)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:388
+ [30] _register_expand_arguments!
+    @ ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:395 [inlined]
+ [31] register_arguments!
+    @ ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:373 [inlined]
+ [32] (LineSegments)(user_args::Tuple{ComputePipeline.Computed}, user_attributes::Dict{Symbol, Any})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:783
+ [33] _create_plot!(F::Function, attributes::Dict{Symbol, Any}, scene::Makie.Text{Tuple{Vector{Point{2, Float32}}}}, args::ComputePipeline.Computed)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/figureplotting.jl:552
+ [34] linesegments!(::Makie.Text{Tuple{Vector{Point{2, Float32}}}}, ::Vararg{Any}; kw::@Kwargs{linewidth::ComputePipeline.Computed, color::ComputePipeline.Computed, space::ComputePipeline.Computed})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/recipes.jl:550
+ [35] tex_linesegments!(plot::Makie.Text{Tuple{Vector{Point{2, Float32}}}})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:463
+ [36] calculated_attributes!
+    @ ~/.julia/packages/Makie/XzVRj/src/basic_recipes/text.jl:442 [inlined]
+ [37] connect_plot!(parent::Scene, plot::Makie.Text{Tuple{Vector{Point{2, Float32}}}})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/compute-plots.jl:861
+ [38] plot!(scene::Scene, plot::Makie.Text{Tuple{Vector{Point{2, Float32}}}})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/interfaces.jl:211
+ [39] _create_plot!(F::Function, attributes::Dict{Symbol, Any}, scene::Scene, args::Observable{Point{2, Float32}})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/figureplotting.jl:553
+ [40] text!(::Scene, ::Vararg{Any}; kw::@Kwargs{text::Observable{Any}, fontsize::Observable{Any}, color::Observable{Any}, visible::Observable{Any}, align::Observable{Tuple{Symbol, Symbol}}, rotation::Observable{Float32}, font::Observable{Any}, markerspace::Symbol, inspectable::Bool})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/recipes.jl:550
+ [41] Makie.LineAxis(parent::Scene, attrs::Attributes)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/lineaxis.jl:410
+ [42] Makie.LineAxis(parent::Scene; kwargs...)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/lineaxis.jl:3
+ [43] LineAxis
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/lineaxis.jl:1 [inlined]
+ [44] initialize_block!(ax::Axis; palette::Nothing)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks/axis.jl:362
+ [45] initialize_block!(ax::Axis)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks/axis.jl:154
+ [46] _block(T::Type{Axis}, fig_or_scene::Figure, args::Vector{Any}, kwdict::Dict{Symbol, Any}, bbox::Nothing; kwdict_complete::Bool)
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:405
+ [47] _block
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:321 [inlined]
+ [48] #_block#1615
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:266 [inlined]
+ [49] _block(::Type{Axis}, ::GridPosition; kwargs::@Kwargs{aspect::Float64, xlabel::LaTeXString, ylabel::LaTeXString, yscale::typeof(log10), limits::Tuple{Tuple{Int64, Int64}, Tuple{Float64, Float64}}})
+    @ Makie ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:260
+ [50] _block
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:251 [inlined]
+ [51] #_#1613
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:242 [inlined]
+ [52] Block
+    @ ~/.julia/packages/Makie/XzVRj/src/makielayout/blocks.jl:241 [inlined]
+ [53] #create_fig#401
+    @ ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:82 [inlined]
+ [54] create_fig
+    @ ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:80 [inlined]
+ [55] generate_infidelity_and_dimH_figure(selected_U::Float64; output_dir::String)
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:123
+ [56] generate_infidelity_and_dimH_figure
+    @ ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:122 [inlined]
+ [57] (::var"#main##0#main##1"{Vector{String}})()
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:251
+ [58] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+    @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [59] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+    @ Base ./io.jl:410
+ [60] open
+    @ ./io.jl:407 [inlined]
+ [61] with_logging
+    @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [62] main(ARGS::Vector{String})
+    @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:244

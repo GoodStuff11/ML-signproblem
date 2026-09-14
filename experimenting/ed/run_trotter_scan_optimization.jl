@@ -42,6 +42,9 @@ Arguments:
                      from an already-optimized run with this smaller num_exponentials value.
   --grow_mode=<mode> (optional): "chain" or "per_u". Default: "chain".
   --target_fidelity=<value> (optional): Prune parameter vector to reproduce target fidelity.
+  --run_label=<string> (optional): Append this label to the saved-file prefix, so the run is always
+                     freshly randomly initialized under a distinct filename rather than resuming from
+                     (or overwriting) any existing coefficients already saved under the standard prefix.
 =#
 
 # Pre-scan ARGS for GPU flag before loading CUDA package
@@ -97,6 +100,7 @@ function parse_arguments(args::Vector{String})
     grow_from_exponentials = nothing
     grow_mode = :chain
     target_fidelity = nothing
+    run_label = nothing
     filtered_args = String[]
 
     for arg in args
@@ -151,6 +155,8 @@ function parse_arguments(args::Vector{String})
             end
         elseif startswith(arg, "--target_fidelity=")
             target_fidelity = parse(Float64, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--run_label=")
+            run_label = String(split(arg, "=", limit=2)[2])
         else
             push!(filtered_args, arg)
         end
@@ -172,13 +178,13 @@ function parse_arguments(args::Vector{String})
         datatype = ComplexF64
     end
 
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity = parse_arguments(ARGS)
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label = parse_arguments(ARGS)
 
         println("Number of threads: $(Threads.nthreads())")
         println("Use GPU: $use_gpu")
@@ -217,8 +223,13 @@ function (@main)(ARGS)
             "antihermitian" => antihermitian
         )
 
-        # u_build suffix only appears when increasing num_exponentials via --grow_from_exponentials
-        suffix = !isnothing(grow_from_exponentials) ? "u_build" : nothing
+        # u_build suffix only appears when increasing num_exponentials via --grow_from_exponentials;
+        # run_label (if given) is always appended so this run never resumes from, or overwrites,
+        # any existing coefficients saved under the standard (label-less) prefix.
+        suffix_parts = String[]
+        !isnothing(grow_from_exponentials) && push!(suffix_parts, "u_build")
+        !isnothing(run_label) && push!(suffix_parts, run_label)
+        suffix = isempty(suffix_parts) ? nothing : join(suffix_parts, "_")
 
         save_name_prefix = build_save_name_prefix(
             :trotter;

@@ -1,0 +1,18 @@
+================================================================================
+Timestamp: 2026-09-09T13:04:46.864
+Command run: julia testing/test_infidelity_and_dimH_plots.jl 
+================================================================================
+=== Starting test_infidelity_and_dimH_plots ===
+Selected U: 8.0
+Processed N=(2, 2)_3x2: dimH = 39, loss at U=8.0: 1.0436096431476471e-14
+Processed N=(3, 2)_3x2: dimH = 50, loss at U=8.0: 4.993339075554104e-12
+Processed N=(3, 3)_3x2: dimH = 68, loss at U=8.0: 2.1739299249645683e-10
+Processed N=(3, 2)_3x3: dimH = 336, loss at U=8.0: 4.654243246915435e-6
+Processed N=(3, 3)_4x2: dimH = 392, loss at U=8.0: 5.8815147316426675e-5
+Processed N=(3, 3)_3x3: dimH = 792, loss at U=8.0: 0.0006268149359069941
+Processed N=(4, 3)_3x3: dimH = 1176, loss at U=8.0: 0.008373513564082558
+Processed N=(4, 4)_3x3: dimH = 1764, loss at U=8.0: 0.01088930090156115
+Processed N=(5, 4)_3x3: dimH = 1764, loss at U=8.0: 0.0117862863183813
+Processed N=(5, 4)_4x3: dimH = 32670, loss at U=8.0: 0.00821775650329104
+Saved figure to: /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.png and /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.pdf
+=== TEST PASSED SUCCESSFULLY: test_infidelity_and_dimH_plots ===

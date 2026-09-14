@@ -133,7 +133,7 @@ function get_optimizer_algo(opt_sym::Symbol)
 end
 
 """
-    find_multi_start_initialization(f, optf, M::Int; kwargs...) -> (A_init, local_multistart_losses, local_best_start_idx, multistart_run)
+    find_multi_start_initialization(f, optf, M::Int; kwargs...) -> (A_init, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run, initial_gradient_samples)
 
 Perform multi-start initialization by sampling `initialization_samples` random configurations of size `M`.
 """
@@ -145,9 +145,14 @@ function find_multi_start_initialization(f, optf, M::Int;
     optimizer=:LBFGS,
     perturb_optimization::Float64=0.0,
     use_gpu::Bool=false)
+    # Returns (A_init, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run, initial_gradient_samples)
+    # initial_gradient_samples records (mag, gnorm, loss_val) for EVERY sampled random initialization
+    # (not just the survivors that pass the is_good filter below), for barren-plateau-style analysis
+    # of the initial-gradient magnitude as a function of the random-initialization scale `mag`.
 
     println("Sampling $initialization_samples initial configurations for multi-start...")
     samples_raw = Vector{Any}(undef, initialization_samples)
+    initial_gradient_samples = Vector{NTuple{3,Float64}}(undef, initialization_samples)
     log_min = log10(1e-7)
     log_max = log10(1e-1)
 
@@ -160,6 +165,7 @@ function find_multi_start_initialization(f, optf, M::Int;
         loss_val = res.val
         grad = res.grad[1]
         gnorm = norm(grad)
+        initial_gradient_samples[s] = (mag, gnorm, loss_val)
 
         is_good = (gnorm > 1e-8) && (loss_val < 1.0)
         if is_good
@@ -182,7 +188,7 @@ function find_multi_start_initialization(f, optf, M::Int;
     if top_n == 0
         println("No good samples found, falling back to random initialization.")
         fallback_A = (2 * rand(M) .- 1) * 0.01
-        return fallback_A, Vector{Float64}[], 0, false
+        return fallback_A, Vector{Float64}[], Vector{Vector{Float64}}[], 0, false, initial_gradient_samples
     end
 
     println("Performing quick optimization on top $top_n candidates...")
@@ -196,6 +202,7 @@ function find_multi_start_initialization(f, optf, M::Int;
         curr_loss = Inf
         success = false
         candidate_history = Float64[]
+        candidate_gradient_history = Vector{Float64}[]
         for (idx, opt) in enumerate(optimizers)
             if idx > 1 && perturb_optimization > 1e-9
                 used_perturb = perturb_optimization^(1 + (idx - 1) / 3)
@@ -204,6 +211,7 @@ function find_multi_start_initialization(f, optf, M::Int;
             opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
             cb = (state, loss_val) -> begin
                 push!(candidate_history, loss_val)
+                push!(candidate_gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
                 return false
             end
             prob = Optimization.OptimizationProblem(optf, curr_A)
@@ -217,7 +225,7 @@ function find_multi_start_initialization(f, optf, M::Int;
             end
         end
         if success
-            candidate_results[i] = (curr_loss, curr_A, candidate_history)
+            candidate_results[i] = (curr_loss, curr_A, candidate_history, candidate_gradient_history)
         else
             candidate_results[i] = nothing
         end
@@ -227,9 +235,11 @@ function find_multi_start_initialization(f, optf, M::Int;
     best_A = nothing
     local_best_start_idx = 0
     local_multistart_losses = Vector{Float64}[]
+    local_multistart_gradients = Vector{Vector{Float64}}[]
     for (i, res) in enumerate(candidate_results)
         if !isnothing(res)
             push!(local_multistart_losses, res[3])
+            push!(local_multistart_gradients, res[4])
             if res[1] < best_loss
                 best_loss = res[1]
                 best_A = res[2]
@@ -240,10 +250,10 @@ function find_multi_start_initialization(f, optf, M::Int;
 
     if isnothing(best_A)
         fallback_A = (2 * rand(M) .- 1) * 0.01
-        return fallback_A, Vector{Float64}[], 0, false
+        return fallback_A, Vector{Float64}[], Vector{Vector{Float64}}[], 0, false, initial_gradient_samples
     else
         println("Selected best candidate with loss=$best_loss")
-        return best_A, local_multistart_losses, local_best_start_idx, true
+        return best_A, local_multistart_losses, local_multistart_gradients, local_best_start_idx, true, initial_gradient_samples
     end
 end
 
@@ -306,12 +316,14 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
 
     multistart_run = false
     local_multistart_losses = Vector{Float64}[]
+    local_multistart_gradients = Vector{Vector{Float64}}[]
     local_best_start_idx = 0
+    local_initial_gradient_samples = NTuple{3,Float64}[]
 
     if !isnothing(initial_coefficients) && length(initial_coefficients) == M
         A_init = copy(initial_coefficients)
     elseif initialization_samples > 0
-        A_init, local_multistart_losses, local_best_start_idx, multistart_run = find_multi_start_initialization(f, optf, M;
+        A_init, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run, local_initial_gradient_samples = find_multi_start_initialization(f, optf, M;
             initialization_samples=initialization_samples,
             multi_start_samples=multi_start_samples,
             multi_start_iters=multi_start_iters,
@@ -337,7 +349,10 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
     metrics["optimization_losses"] = Vector{Float64}[]
+    metrics["optimization_gradients"] = Vector{Vector{Float64}}[]
     metrics["multistart_losses"] = Vector{Vector{Float64}}[]
+    metrics["multistart_gradients"] = Vector{Vector{Vector{Float64}}}[]
+    metrics["initial_gradient_samples"] = Vector{NTuple{3,Float64}}[]
     metrics["best_start_idx"] = Int[]
     metrics["convergence_info"] = Vector{Dict{String,Any}}[]
     metrics["stopping_reasons"] = Vector{String}[]
@@ -361,6 +376,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         println("States are already equal")
         push!(metrics["loss"], initial_loss)
         push!(metrics["optimization_losses"], [initial_loss])
+        push!(metrics["optimization_gradients"], [zeros(Float64, M_full)])
         push!(metrics["convergence_info"], [Dict{String,Any}("optimizer" => "None", "stage" => 1, "primary_reason" => "States are already equal", "iterations" => 0, "g_residual" => 0.0)])
         push!(metrics["stopping_reasons"], ["States are already equal"])
         if haskey(metrics, "energy") && !isempty(metrics["energy"])
@@ -374,10 +390,12 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     curr_A = copy(A_init)
     curr_loss = initial_loss
     final_history = copy(initial_history)
+    final_gradient_history = Vector{Float64}[]
     stage_convergence_info = Dict{String,Any}[]
 
     cb = (state, loss_val) -> begin
         push!(final_history, loss_val)
+        push!(final_gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
         return false
     end
 
@@ -404,6 +422,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
 
     push!(metrics["loss"], curr_loss)
     push!(metrics["optimization_losses"], final_history)
+    push!(metrics["optimization_gradients"], final_gradient_history)
 
     if !isnothing(loaded_metrics) && haskey(loaded_metrics, "convergence_info") && !isempty(loaded_metrics["convergence_info"])
         prev_stages = loaded_metrics["convergence_info"][1]
@@ -417,14 +436,18 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
 
     if multistart_run
         push!(metrics["multistart_losses"], local_multistart_losses)
+        push!(metrics["multistart_gradients"], local_multistart_gradients)
         push!(metrics["best_start_idx"], local_best_start_idx)
     elseif !isnothing(loaded_metrics) && haskey(loaded_metrics, "multistart_losses") && !isempty(loaded_metrics["multistart_losses"])
         push!(metrics["multistart_losses"], loaded_metrics["multistart_losses"][1])
+        push!(metrics["multistart_gradients"], get(loaded_metrics, "multistart_gradients", [Vector{Vector{Float64}}[]])[1])
         push!(metrics["best_start_idx"], get(loaded_metrics, "best_start_idx", [0])[1])
     else
         push!(metrics["multistart_losses"], Vector{Float64}[])
+        push!(metrics["multistart_gradients"], Vector{Vector{Float64}}[])
         push!(metrics["best_start_idx"], 0)
     end
+    push!(metrics["initial_gradient_samples"], local_initial_gradient_samples)
 
     ref_evolved = apply_unitary(curr_A, gates, ref_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
     ref_evolved_cpu = Array(ref_evolved)

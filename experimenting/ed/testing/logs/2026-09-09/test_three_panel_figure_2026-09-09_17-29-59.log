@@ -1,0 +1,9 @@
+================================================================================
+Timestamp: 2026-09-09T17:29:59.135
+Command run: julia testing/test_three_panel_figure.jl 
+================================================================================
+=== Starting test_three_panel_figure ===
+Saved 3-panel figure to: /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/three_panel_figure.png and /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/three_panel_figure.pdf
+Panel 1 systems: ["N=(3, 2)_3x2", "N=(3, 3)_3x2", "N=(3, 3)_4x2", "N=(5, 4)_3x3", "N=(5, 4)_4x3"]
+Panel 2 systems: ["N=(2, 2)_3x2", "N=(3, 2)_3x3", "N=(3, 3)_3x3", "N=(4, 3)_3x3", "N=(4, 4)_3x3"]
+=== TEST PASSED SUCCESSFULLY: test_three_panel_figure ===

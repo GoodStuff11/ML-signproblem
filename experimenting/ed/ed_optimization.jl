@@ -414,7 +414,7 @@ function setup_optimization_function(gradient, use_gpu_flag, f, fg!, f_nongradie
     return optf
 end
 
-function execute_single_optimization(optf, current_t_vals, current_maxiters, optimizers, order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, initial_loss; loss_history=Float64[])
+function execute_single_optimization(optf, current_t_vals, current_maxiters, optimizers, order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, initial_loss; loss_history=Float64[], gradient_history=Vector{Float64}[])
     local_t_vals = copy(current_t_vals)
     local_loss = initial_loss
     local_sol = nothing
@@ -504,6 +504,7 @@ function execute_single_optimization(optf, current_t_vals, current_maxiters, opt
             unreg_loss = loss_val - 0.5 * 1e-3 * sum(abs2, state.u)
             push!(time_tracker[optimizer_sym], dt)
             push!(loss_history, unreg_loss)
+            push!(gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
             return callback(state, loss_val)
         end
 
@@ -573,6 +574,7 @@ function run_multistart_initialization(
     top_n = min(multi_start_samples, length(good_samples))
 
     local_multistart_losses = Vector{Float64}[]
+    local_multistart_gradients = Vector{Vector{Float64}}[]
     local_best_start_idx = 0
     multistart_run = false
     t_vals = nothing
@@ -594,10 +596,12 @@ function run_multistart_initialization(
         for i in 1:top_n
             candidate_t = good_samples[i][3]
             candidate_history = Float64[]
+            candidate_gradient_history = Vector{Float64}[]
             try
-                _, opt_t, opt_loss = execute_single_optimization(optf, candidate_t, quick_maxiters, [:GradientDescent, :LBFGS], order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, initial_loss; loss_history=candidate_history)
+                _, opt_t, opt_loss = execute_single_optimization(optf, candidate_t, quick_maxiters, [:GradientDescent, :LBFGS], order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, initial_loss; loss_history=candidate_history, gradient_history=candidate_gradient_history)
                 println("Candidate $i quick opt loss: $opt_loss")
                 push!(local_multistart_losses, candidate_history)
+                push!(local_multistart_gradients, candidate_gradient_history)
                 if opt_loss < best_loss
                     best_loss = opt_loss
                     best_t = opt_t
@@ -625,7 +629,7 @@ function run_multistart_initialization(
             println("Selected best candidate with loss=$best_loss")
         end
     end
-    return t_vals, local_multistart_losses, local_best_start_idx, multistart_run
+    return t_vals, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run
 end
 
 function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIndexer;
@@ -703,7 +707,9 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
     metrics["other"] = []
     metrics["loss_std"] = Float64[0.0]
     metrics["optimization_losses"] = Vector{Float64}[]
+    metrics["optimization_gradients"] = Vector{Vector{Float64}}[]
     metrics["multistart_losses"] = Vector{Vector{Float64}}[]
+    metrics["multistart_gradients"] = Vector{Vector{Vector{Float64}}}[]
     metrics["best_start_idx"] = Int[]
     if loss_type == :overlap
         metrics["energy"] = Float64[!isnothing(H) ? real(dot(state1, H * state1)) : NaN]
@@ -720,6 +726,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         println("States are already equal")
         push!(metrics["loss"], loss)
         push!(metrics["optimization_losses"], [loss])
+        push!(metrics["optimization_gradients"], [Float64[]])
         return computed_matrices, coefficient_labels, computed_coefficients, parameter_mappings, parities, metrics, operator_cache
     end
 
@@ -766,6 +773,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         struct_data = ensure_operator_structure!(order, operator_cache, indexer, spin_conserved, use_symmetry, momentum_basis, sign_convention, lattice_ordering, precomputed_structures, antihermitian, (loss_type == :energy ? 0.01 + 0im : loss * 100))
         multistart_run = false
         local_multistart_losses = Vector{Float64}[]
+        local_multistart_gradients = Vector{Vector{Float64}}[]
         local_best_start_idx = 0
 
         # Extract variables for convenience from struct_data
@@ -824,7 +832,7 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
                 t_vals = t_vals_all
             end
         elseif initialization_samples > 0
-            t_vals, local_multistart_losses, local_best_start_idx, multistart_run = run_multistart_initialization(
+            t_vals, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run = run_multistart_initialization(
                 initialization_samples, multi_start_samples, multi_start_iters, maxiters,
                 order, get_p_args, signs, sym_data, t_keys, use_symmetry, loss_type, loss, magnitude_estimate,
                 gradient, use_gpu_flag, f_adjoint, f_adjoint_gpu, optf, optimizers, time_tracker, max_time_ratio, perturb_optimization,
@@ -841,7 +849,8 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
         println("Parameter count: $(length(t_vals))")
 
         final_history = Float64[]
-        sol, t_vals, loss = execute_single_optimization(optf, t_vals, maxiters, optimizers, order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, loss; loss_history=final_history)
+        final_gradient_history = Vector{Float64}[]
+        sol, t_vals, loss = execute_single_optimization(optf, t_vals, maxiters, optimizers, order, get_p_args, time_tracker, max_time_ratio, perturb_optimization, loss; loss_history=final_history, gradient_history=final_gradient_history)
         coefficients = t_vals
 
         # Construct and Store Matrices
@@ -865,11 +874,14 @@ function optimize_unitary(state1::Vector, state2::Vector, indexer::CombinationIn
 
         println("Finished order $order")
         push!(metrics["optimization_losses"], final_history)
+        push!(metrics["optimization_gradients"], final_gradient_history)
         if multistart_run
             push!(metrics["multistart_losses"], local_multistart_losses)
+            push!(metrics["multistart_gradients"], local_multistart_gradients)
             push!(metrics["best_start_idx"], local_best_start_idx)
         else
             push!(metrics["multistart_losses"], Vector{Float64}[])
+            push!(metrics["multistart_gradients"], Vector{Vector{Float64}}[])
             push!(metrics["best_start_idx"], 0)
         end
         computed_coefficients[order] = coefficients

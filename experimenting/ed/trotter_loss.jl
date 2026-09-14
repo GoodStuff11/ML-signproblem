@@ -17,7 +17,7 @@ function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, ta
     num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
     ref_evolved = apply_unitary(A, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
     target_dev = to_device_vector(target, use_gpu, datatype)
-    return max(0.0, 1.0 - abs2(dot(target_dev, ref_evolved)))
+    return 1.0 - abs2(dot(target_dev, ref_evolved))
 end
 
 function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int;
@@ -28,7 +28,7 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, t
             antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
         evolved_ref = last_checkpoint(phis)
         overlap = dot(target_dev, evolved_ref)
-        loss = max(0.0, 1.0 - abs2(overlap))
+        loss = 1.0 - abs2(overlap)
         println("loss: $loss")
     end
     println("Forward time: $t")

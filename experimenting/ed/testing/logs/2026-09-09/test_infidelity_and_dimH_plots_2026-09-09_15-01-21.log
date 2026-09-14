@@ -1,0 +1,38 @@
+================================================================================
+Timestamp: 2026-09-09T15:01:21.533
+Command run: julia testing/test_infidelity_and_dimH_plots.jl 
+================================================================================
+=== Starting test_infidelity_and_dimH_plots ===
+Selected U values: [4.0, 8.0, 12.0]
+System N=(2, 2)_3x2 | dimH = 39 | U = 4.0 -> loss = 1.5076828674409626e-13
+System N=(2, 2)_3x2 | dimH = 39 | U = 8.0 -> loss = 1.0436096431476471e-14
+System N=(2, 2)_3x2 | dimH = 39 | U = 12.0 -> loss = 1.4432899320127035e-14
+System N=(3, 2)_3x2 | dimH = 50 | U = 4.0 -> loss = 8.436042975290547e-10
+System N=(3, 2)_3x2 | dimH = 50 | U = 8.0 -> loss = 4.993339075554104e-12
+System N=(3, 2)_3x2 | dimH = 50 | U = 12.0 -> loss = 3.9968028886505635e-15
+System N=(3, 3)_3x2 | dimH = 68 | U = 4.0 -> loss = 1.5135708242297596e-9
+System N=(3, 3)_3x2 | dimH = 68 | U = 8.0 -> loss = 2.1739299249645683e-10
+System N=(3, 3)_3x2 | dimH = 68 | U = 12.0 -> loss = 3.342237597792064e-11
+System N=(3, 2)_3x3 | dimH = 336 | U = 4.0 -> loss = 1.8040193123791681e-6
+System N=(3, 2)_3x3 | dimH = 336 | U = 8.0 -> loss = 4.654243246915435e-6
+System N=(3, 2)_3x3 | dimH = 336 | U = 12.0 -> loss = 8.324398329984106e-6
+System N=(3, 3)_4x2 | dimH = 392 | U = 4.0 -> loss = 4.613549575815945e-6
+System N=(3, 3)_4x2 | dimH = 392 | U = 8.0 -> loss = 5.8815147316426675e-5
+System N=(3, 3)_4x2 | dimH = 392 | U = 12.0 -> loss = 0.00020175993535920256
+System N=(3, 3)_3x3 | dimH = 792 | U = 4.0 -> loss = 0.00017052592034838554
+System N=(3, 3)_3x3 | dimH = 792 | U = 8.0 -> loss = 0.0006268149359069941
+System N=(3, 3)_3x3 | dimH = 792 | U = 12.0 -> loss = 0.0012561438235174638
+System N=(4, 3)_3x3 | dimH = 1176 | U = 4.0 -> loss = 0.0014524256674296465
+System N=(4, 3)_3x3 | dimH = 1176 | U = 8.0 -> loss = 0.008373513564082558
+System N=(4, 3)_3x3 | dimH = 1176 | U = 12.0 -> loss = 0.015617350376236905
+System N=(4, 4)_3x3 | dimH = 1764 | U = 4.0 -> loss = 0.0021631154398461527
+System N=(4, 4)_3x3 | dimH = 1764 | U = 8.0 -> loss = 0.01088930090156115
+System N=(4, 4)_3x3 | dimH = 1764 | U = 12.0 -> loss = 0.019228869898388345
+System N=(5, 4)_3x3 | dimH = 1764 | U = 4.0 -> loss = 0.0005579681820967464
+System N=(5, 4)_3x3 | dimH = 1764 | U = 8.0 -> loss = 0.0117862863183813
+System N=(5, 4)_3x3 | dimH = 1764 | U = 12.0 -> loss = 0.025434890317955428
+System N=(5, 4)_4x3 | dimH = 32670 | U = 4.0 -> loss = 0.0007120651223877505
+System N=(5, 4)_4x3 | dimH = 32670 | U = 8.0 -> loss = 0.00821775650329104
+System N=(5, 4)_4x3 | dimH = 32670 | U = 12.0 -> loss = 0.019884900684742357
+Saved figure to: /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.png and /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.pdf
+=== TEST PASSED SUCCESSFULLY: test_infidelity_and_dimH_plots ===

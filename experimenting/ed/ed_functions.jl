@@ -110,7 +110,7 @@ function find_best_energy_sector(
         su2_idxs = Int[]
         for k in 1:length(all_E)
             sector_label = (labels === nothing) ? k : labels[k]
-            slater_idx = get_slater_ground_state(data, sector_label)
+            slater_idx = get_slater_ground_state(data, sector_label; verbose=verbose)
             if slater_idx != -1 && is_doubly_occupied(data, sector_label, slater_idx)
                 push!(su2_idxs, k)
             end
@@ -318,11 +318,11 @@ end
 Find the index corresponding to a single Slater determinant ground state of the tight-binding
 model for the given momentum sector in an open HDF5 file object.
 """
-function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
+function get_slater_ground_state_h5(data, sector::Int; custom_ref=true, verbose=true)
     parsed = parse_custom_ref(custom_ref)
     !isnothing(parsed) && return parsed
 
-    println("Computing slater ground state for sector $sector")
+    verbose && println("Computing slater ground state for sector $sector")
 
     L = read(data, "metadata/Lvec")
     state_prob = abs.(read(data, "data/evecs/$sector")[:, 1, 1])
@@ -362,15 +362,15 @@ function get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
         return E_up + E_dn
     end)
 
-    println("best slater ground state: $idx")
+    verbose && println("best slater ground state: $idx")
     return idx
 end
 
-function get_slater_ground_state(data, sector::Int; custom_ref=true)
+function get_slater_ground_state(data, sector::Int; custom_ref=true, verbose=true)
     if data isa Dict
         return get_slater_ground_state_jld2(data, sector; custom_ref=custom_ref)
     else
-        return get_slater_ground_state_h5(data, sector; custom_ref=custom_ref)
+        return get_slater_ground_state_h5(data, sector; custom_ref=custom_ref, verbose=verbose)
     end
 end
 
@@ -697,7 +697,7 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
             h5open(joinpath(folder, f), "r") do data
                 U_val_ref = Float64.(read(data, "data/uvec"))
                 key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-                valid_keys = su2_symmetry ? [k for k in key_labels if (s_idx = get_slater_ground_state(data, k); s_idx != -1 && is_doubly_occupied(data, k, s_idx))] : key_labels
+                valid_keys = su2_symmetry ? [k for k in key_labels if (s_idx = get_slater_ground_state(data, k; verbose=verbose); s_idx != -1 && is_doubly_occupied(data, k, s_idx))] : key_labels
                 if isempty(valid_keys)
                     push!(all_file_E, fill(Inf, length(U_val_ref)))
                 else
@@ -727,7 +727,7 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
 
         key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
         all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels]
-        k_min = find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry)
+        k_min = find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry, verbose=verbose)
 
         if verbose
             println([
@@ -752,7 +752,7 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
 
         use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
         if use_slater_ref
-            slater_index = get_slater_ground_state(data, k_min; custom_ref=use_slater_reference)
+            slater_index = get_slater_ground_state(data, k_min; custom_ref=use_slater_reference, verbose=verbose)
             if slater_index == -1
                 error("No Slater ground state could be found in sector $k_min.")
             end
@@ -867,7 +867,7 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
 
     use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
     if use_slater_ref
-        slater_index = get_slater_ground_state(dic, k_min; custom_ref=use_slater_reference)
+        slater_index = get_slater_ground_state(dic, k_min; custom_ref=use_slater_reference, verbose=verbose)
         if slater_index == -1
             error("No Slater ground state could be found in sector $k_min.")
         end

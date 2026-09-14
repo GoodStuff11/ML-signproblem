@@ -1,65 +1,13 @@
 #=
-trotter_exp_testing.jl
+trotter_analysis_lib.jl
 
-Compare Hamiltonian energies across three methods:
-  1. Exact exponential  – stored coefficients from unitary_map_energy_symmetry=false files
-                          applied as a single unitary (assumes energy optimization).
-  2. Trotterized        – same stored coefficients repeated P times, each copy divided
-                          by P (approximating the exact exponential at increasing order P).
-  3. Trotter-optimized  – overlap-optimized Trotter coefficients from
-                          trotter_N=<N_sites>_u files.
+Reusable library of data-loading, coefficient-reordering, energy/overlap-computation,
+and CairoMakie plot-building functions shared by trotter_exp_testing.jl and other
+analysis scripts (e.g. plot_dimH_and_barren_analysis.jl). This file defines no
+`(@main)` entry point and has no side effects beyond `include`s — it is meant to be
+`include`d from a script, never run directly.
 
-Usage:
-  julia --project=.. trotter_exp_testing.jl [folders...] [options]
-
-Arguments/Options:
-  folders (positional, optional): Zero, one, or more paths to ED data folders (or system size suffixes like "3x2", "3x3").
-                                 - If zero are provided: defaults to "N=(2, 2)_3x2".
-                                 - If one is provided and no --u option is specified: runs a U-value sweep analysis
-                                   for that single system size, saving the plot to <folder>/<output_file>.png.
-                                 - If multiple are provided (or one folder with the --u option is specified): runs a
-                                   system-size comparison analysis at the specified U value.
-                                   Saves the plot to <first_folder>/<output_file>_system_size.png.
-
-  --u=<float> or --U=<float> (optional): Specify a single U value to perform system size comparison at.
-                                         This argument is REQUIRED if multiple folders/system sizes are specified.
-                                         If multiple system sizes are inputted but this option is missing, the script
-                                         raises an error.
-
-  --trotter_orders=<list> (optional): Comma-separated list of positive integers
-                     specifying the Trotterization repetition counts P to compare.
-                     For each P the exact-exp coefficient vector is repeated P times
-                     and divided by P before applying the unitary.
-                     Default: "1,2,4,8".
-
-  --n_up=<int> (optional): Number of spin-up electrons. Default: 4.
-
-  --n_dn=<int> (optional): Number of spin-down electrons. Default: 4.
-
-  --lvec=<WxH> (optional): Lattice dimensions in the format WxH (e.g. "3x3").
-                     Default: "3x3".
-
-  --output=<string> (optional): Name of png to output (will have .png or _system_size.png appended). Default: trotter_order_comparison
-
-  --antihermitian (optional): Whether to use antihermitian operators. Can be true/false or --antihermitian. Default: auto-detect from shared.jld2 files.
-
-  --loss=<string> (optional): Loss type. Valid options are:
-                              - "overlap": overlap-optimized loss
-                              - "energy": energy-optimized loss
-                              Default: "overlap".
-
-  --custom_ref_state=<string> (optional): Custom reference state label. Default: nothing (use Slater determinant).
-
-Examples:
-  1. Sweep U values for a single system:
-     julia --project=.. trotter_exp_testing.jl
-     julia --project=.. trotter_exp_testing.jl "N=(2, 2)_3x2"
-
-  2. Compare trotterized energies across system sizes at a single U value:
-     julia --project=.. trotter_exp_testing.jl "N=(2, 2)_3x2" "N=(3, 3)_3x3" --u=2.0
-
-  3. System size comparison specifying short system size suffixes:
-     julia --project=.. trotter_exp_testing.jl 3x2 3x3 --u=4.0 --trotter_orders=1,2,4
+Extracted verbatim (no logic changes) from trotter_exp_testing.jl.
 =#
 
 using Lattices
@@ -75,20 +23,20 @@ using OptimizationOptimJL
 using Combinatorics
 
 if !isdefined(Main, :UtilityFunctions)
-    include("../utility_functions.jl")
+    include("utility_functions.jl")
 end
 using .UtilityFunctions
 if !isdefined(Main, :Trotter)
-    include("../trotter.jl")
+    include("trotter.jl")
 end
 using .Trotter
-include("../data_path.jl")
-include("../logging.jl")
-include("../nn_strategy.jl")
+include("data_path.jl")
+include("logging.jl")
+include("nn_strategy.jl")
 
-include("../ed_objects.jl")
-include("../ed_functions.jl")
-include("../ed_optimization.jl")
+include("ed_objects.jl")
+include("ed_functions.jl")
+include("ed_optimization.jl")
 
 cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
 cmap2(L) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
@@ -118,122 +66,6 @@ end
 
 const LEGEND_ARGS = Dict(:rowgap => -8, :padding => (3, 3, 0, 0))
 set_theme!(theme_latexfonts(), fontsize=10)
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# ARGUMENT PARSING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-
-"""
-    resolve_system_folder(input::String) -> String
-
-Resolves the positional input to a full directory path inside get_data_root().
-Supports absolute paths, folders within the data root, or strings that end with or match system names.
-"""
-function resolve_system_folder(input::String)
-    if isabspath(input) && isdir(input)
-        return input
-    end
-    root = get_data_root()
-    p1 = joinpath(root, input)
-    if isdir(p1)
-        return p1
-    end
-    # Search for matching folders
-    for item in readdir(root)
-        if isdir(joinpath(root, item))
-            if item == input || endswith(item, "_" * input)
-                return joinpath(root, item)
-            end
-        end
-    end
-    error("Could not resolve system size / folder: '$input' in data root '$root'")
-end
-
-"""
-    parse_arguments(args::Vector{String}) -> (folders, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg, u_val)
-
-Parse command-line arguments for the trotter_exp_testing script.
-
-Returns:
-  - folders        (Vector{String}) : resolved paths to ED data folders.
-  - trotter_orders (Vector{Int})    : Trotter repetition counts to sweep over.
-  - n_up           (Int)            : number of spin-up electrons.
-  - n_dn           (Int)            : number of spin-down electrons.
-  - lvec           (Vector{Int})    : lattice dimensions [W, H].
-  - output         (String)         : output filename
-  - antihermitian  (Union{Bool,Nothing}) : antihermitian flag or nothing
-  - loss_type      (Symbol)         : loss type (:overlap or :energy)
-  - custom_ref_state_arg (Union{String,Nothing}) : custom reference state name or nothing
-  - u_val          (Union{Float64,Nothing}) : specified U value or nothing
-"""
-function parse_arguments(args::Vector{String})
-    output = "trotter_order_comparison"
-    trotter_orders = [1, 2, 4, 8]
-    n_up = 4
-    n_dn = 4
-    lvec = [3, 3]
-    antihermitian = nothing
-    loss_type = :overlap
-    custom_ref_state_arg = nothing
-    u_val = nothing
-    positional = String[]
-
-    for arg in args
-        if startswith(arg, "--trotter_orders=")
-            val = split(arg, "=", limit=2)[2]
-            trotter_orders = [parse(Int, s) for s in split(val, ",")]
-        elseif startswith(arg, "--n_up=")
-            n_up = parse(Int, split(arg, "=", limit=2)[2])
-        elseif startswith(arg, "--n_dn=")
-            n_dn = parse(Int, split(arg, "=", limit=2)[2])
-        elseif startswith(arg, "--lvec=")
-            parts = split(split(arg, "=", limit=2)[2], "x")
-            length(parts) == 2 || error("--lvec must be in the form WxH, e.g. 3x3")
-            lvec = [parse(Int, parts[1]), parse(Int, parts[2])]
-        elseif startswith(arg, "--output")
-            output = String(split(arg, "=", limit=2)[2])
-        elseif startswith(arg, "--antihermitian")
-            if occursin("=", arg)
-                antihermitian = parse(Bool, split(arg, "=", limit=2)[2])
-            else
-                antihermitian = true
-            end
-        elseif startswith(arg, "--loss=")
-            val = String(split(arg, "=", limit=2)[2])
-            if val == "overlap"
-                loss_type = :overlap
-            elseif val == "energy"
-                loss_type = :energy
-            else
-                error("Invalid --loss option: '$val'. Valid options are: 'overlap', 'energy'.")
-            end
-        elseif startswith(arg, "--custom_ref_state=")
-            custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
-        elseif startswith(arg, "--u=") || startswith(arg, "--U=")
-            u_val = parse(Float64, split(arg, "=", limit=2)[2])
-        elseif startswith(arg, "--")
-            error("Unknown option: $arg")
-        else
-            push!(positional, arg)
-        end
-    end
-
-    folders = String[]
-    if isempty(positional)
-        push!(folders, resolve_system_folder("N=(2, 2)_3x2"))
-    else
-        for pos in positional
-            push!(folders, resolve_system_folder(pos))
-        end
-    end
-
-    if length(folders) > 1 && isnothing(u_val)
-        error("If multiple system sizes are specified, a single U value must be provided via the --u parameter (e.g. --u=2.0).")
-    end
-
-    return folders, trotter_orders, n_up, n_dn, lvec, output, antihermitian, loss_type, custom_ref_state_arg, u_val
-end
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING HELPERS
@@ -364,10 +196,20 @@ function build_exact_to_trotter_mapping(
     mapping_factors = zeros(Float64, num_gates)
 
     d_dim = length(basis_sector)
-    v_in = zeros(ComplexF64, d_dim)
-    v_out = zeros(ComplexF64, d_dim)
 
-    for (g_idx, g) in enumerate(gates)
+    # Each gate's mapping entry is independent of every other gate's (distinct
+    # g_idx slots in mapping_indices/mapping_factors, no shared mutable state
+    # aside from read-only caches built above), so this is embarrassingly
+    # parallel across gates -- and for large sectors (d_dim ~ 1e4-1e5) each
+    # iteration's sparse-matrix/LinearMap construction dominates runtime, so
+    # multithreading here gives a near-linear speedup with thread count.
+    @safe_threads for g_idx in 1:num_gates
+        g = gates[g_idx]
+        # v_in/v_out must be allocated per-iteration (not hoisted/shared) since
+        # threads run concurrently and would otherwise race on shared buffers.
+        v_in = zeros(ComplexF64, d_dim)
+        v_out = zeros(ComplexF64, d_dim)
+
         lbl = fgate_to_label(g, lvec)
         ck = Trotter.key_to_canonical(lbl)
 
@@ -413,7 +255,6 @@ function build_exact_to_trotter_mapping(
 
         # Evaluate LinearMap column c
         T_map = Trotter.tau_g_operator_sector(g, N_sites, basis_sector; antihermitian=antihermitian)
-        fill!(v_in, 0.0)
         v_in[c] = 1.0
         mul!(v_out, T_map, v_in)
         val_T = real(v_out[r])
@@ -593,10 +434,13 @@ function compute_exact_exp_energies_and_overlaps(
             mat_l_order = sparse(struct_data[:rows], struct_data[:cols], vals, length(basis_sector), length(basis_sector))
             if antihermitian
                 mat_l_order = make_antihermitian(mat_l_order)
-                psi_exact_sector = exp(Matrix(mat_l_order)) * psi_exact_sector
+                # apply_exp (ed_optimization.jl) uses expv (Krylov, sparse-matrix-vector-product
+                # only) above a size threshold instead of materializing a dense exp(M), since a
+                # dense exp(M) is O(dimH^3) and infeasible once dimH reaches the thousands.
+                psi_exact_sector = apply_exp(mat_l_order, psi_exact_sector, 1.0)
             else
                 mat_l_order = make_hermitian(mat_l_order)
-                psi_exact_sector = exp(1im * Matrix(mat_l_order)) * psi_exact_sector
+                psi_exact_sector = apply_exp(mat_l_order, psi_exact_sector, 1.0im)
             end
         end
 
@@ -817,12 +661,13 @@ function build_comparison_plot(
     num_cols::Int=2,
     height_mm::Float64=70.0,
     legend_position::Symbol=:rb,
+    ylim::Tuple=(1e-5, nothing),
 )
     fig, ax = create_fig(num_cols, height_mm;
         xlabel=L"U",
         ylabel=L"E - E_0(U)",
         yscale=log10,
-        limits=((0, 15), (1e-16, nothing)),
+        limits=((0, 15), ylim),
     )
 
     palette = cmap2(length(trotter_orders))
@@ -900,6 +745,7 @@ function build_overlap_comparison_plot(
     num_cols::Int=2,
     height_mm::Float64=70.0,
     legend_position::Symbol=:rb,
+    ylim::Tuple=(1e-5, nothing),
 )
     palette = cmap2(length(trotter_orders))
 
@@ -908,7 +754,7 @@ function build_overlap_comparison_plot(
             xlabel=L"U",
             ylabel=L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
             yscale=log10,
-            limits=((0, 15), (1e-7, nothing)),
+            limits=((0, 15), ylim),
         )
 
         # Exact exp line
@@ -957,7 +803,7 @@ function build_overlap_comparison_plot(
             xlabel=L"U",
             ylabel=L"1 - |\langle \psi_{\textrm{exact}}|\mathcal{U}_P|\psi_{\textrm{ref}}\rangle|^2",
             yscale=log10,
-            limits=((0, 15), (1e-16, nothing)),
+            limits=((0, 15), ylim),
         )
 
         # Plot discretization error for each Trotter order P
@@ -1045,10 +891,11 @@ function setup_system(
     folder::String,
     custom_ref_state_arg::Union{String,Nothing},
     antihermitian_arg::Union{Bool,Nothing},
-    loss_type::Symbol
+    loss_type::Symbol;
+    verbose=true
 )
     U_values, target_vecs, indexer, _, N_elec, _, _, sign_convention =
-        load_ED_data(folder; verbose=true, use_slater_reference=(custom_ref_state_arg == "slater"))
+        load_ED_data(folder; verbose=verbose, use_slater_reference=(custom_ref_state_arg == "slater"))
     n_up_loaded, n_dn_loaded = N_elec
     n_U = length(U_values)
     N_sites = prod(indexer.lattice_dims)
@@ -1087,13 +934,13 @@ function setup_system(
 
     local H_hop_mom, H_int_mom, basis_ints
     if isnothing(q_target)
-        println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
+        verbose && println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
         basis_ints = Trotter.get_basis_sector(indexer, dims_val, N_sites)
         lattice = Square(Tuple(dims_val), Periodic())
         subspace = HubbardSubspace(n_up_loaded, n_dn_loaded, lattice; k=nothing)
         H_hop_mom, H_int_mom = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
     else
-        println("\nBuilding sector Hamiltonians in momentum basis...")
+        verbose && println("\nBuilding sector Hamiltonians in momentum basis...")
         H_hop_mom, basis_dict, _ = Trotter.HubbardMomentumBasis(
             1.0, 0.0, dims_val, (n_up_loaded, n_dn_loaded); indexer=indexer
         )
@@ -1103,13 +950,13 @@ function setup_system(
         basis_ints = basis_dict["ints"]
     end
 
-    println("Hilbert space sector dim = $(length(basis_ints))")
+    verbose && println("Hilbert space sector dim = $(length(basis_ints))")
 
-    println("\nEnumerating Trotter gates...")
+    verbose && println("\nEnumerating Trotter gates...")
     gates = Trotter.enumerate_ferm_excitations(
         2, dims_val; conserve_mom=true, conserve_sz=true, include_diagonal=true,
     )
-    tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_ints; antihermitian=antihermitian)
+    # tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_ints; antihermitian=antihermitian)
     num_gates = length(gates)
 
     return U_values, target_vecs, indexer, sign_convention, antihermitian, H_hop_mom, H_int_mom, basis_ints, gates, num_gates, N_sites, n_up_loaded, n_dn_loaded

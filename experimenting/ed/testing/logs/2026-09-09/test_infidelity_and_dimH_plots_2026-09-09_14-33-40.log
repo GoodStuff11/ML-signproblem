@@ -1,0 +1,37 @@
+================================================================================
+Timestamp: 2026-09-09T14:33:40.522
+Command run: julia test_infidelity_and_dimH_plots.jl 
+================================================================================
+=== Starting test_infidelity_and_dimH_plots ===
+Selected U: 8.0
+Processed N=(2, 2)_3x2: dimH = 39, loss at U=8.0: 1.0436096431476471e-14
+Processed N=(3, 2)_3x2: dimH = 50, loss at U=8.0: 4.993339075554104e-12
+Processed N=(3, 3)_3x2: dimH = 68, loss at U=8.0: 2.1739299249645683e-10
+Processed N=(3, 2)_3x3: dimH = 336, loss at U=8.0: 4.654243246915435e-6
+Processed N=(3, 3)_4x2: dimH = 392, loss at U=8.0: 5.8815147316426675e-5
+Processed N=(3, 3)_3x3: dimH = 792, loss at U=8.0: 0.0006268149359069941
+Processed N=(4, 3)_3x3: dimH = 1176, loss at U=8.0: 0.008373513564082558
+Processed N=(4, 4)_3x3: dimH = 1764, loss at U=8.0: 0.01088930090156115
+Processed N=(5, 4)_3x3: dimH = 1764, loss at U=8.0: 0.0117862863183813
+Processed N=(5, 4)_4x3: dimH = 32670, loss at U=8.0: 0.00821775650329104ERROR: UndefVarError: `©yd` not defined
+ in `Main`
+Suggestion: check for spelling errors or missing imports.
+Stacktrace:
+ [1] generate_infidelity_and_dimH_figure(selected_U::Float64; output_dir::String)
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:229
+ [2] generate_infidelity_and_dimH_figure
+   @ ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:122 [inlined]
+ [3] (::var"#main##0#main##1"{Vector{String}})()
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:251
+ [4] (::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}})(log_file::IOStream)
+   @ Main ~/research/ML-signproblem/experimenting/ed/logging.jl:74
+ [5] open(::var"#with_logging##0#with_logging##1"{var"#main##0#main##1"{Vector{String}}}, ::String, ::Vararg{String}; kwargs::@Kwargs{})
+   @ Base ./io.jl:410
+ [6] open
+   @ ./io.jl:407 [inlined]
+ [7] with_logging
+   @ ~/research/ML-signproblem/experimenting/ed/logging.jl:35 [inlined]
+ [8] main(ARGS::Vector{String})
+   @ Main ~/research/ML-signproblem/experimenting/ed/testing/test_infidelity_and_dimH_plots.jl:244
+ [9] _start()
+   @ Base ./client.jl:556

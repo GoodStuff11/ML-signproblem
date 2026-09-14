@@ -1,0 +1,8 @@
+================================================================================
+Timestamp: 2026-09-09T14:59:54.647
+Command run: julia testing/test_infidelity_and_dimH_plots.jl 
+================================================================================
+=== Starting test_infidelity_and_dimH_plots ===
+Selected U values: [4.0, 8.0, 12.0]
+Saved figure to: /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.png and /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/loss_and_dimH.pdf
+=== TEST PASSED SUCCESSFULLY: test_infidelity_and_dimH_plots ===
