@@ -265,9 +265,30 @@ end
 """
     optimize_unitary(gates, tau_terms, ref, target, basis, N; kwargs...)
 
-Optimize the parameter vector A of length `num_exponentials * length(gates)` to minimize
-either overlap or energy loss. Supports multi-start initialization and GPU execution (`use_gpu=true`).
+Optimize the parameter vector `A` to minimize either overlap or energy loss.
+With `param_map === nothing` (the default), `A` has length
+`num_exponentials * length(gates)`, one coefficient per gate per layer. With a
+non-`nothing` `param_map`, `A` lives in the REDUCED space of length
+`num_exponentials * num_shared_params(param_map, length(gates))`, and the
+returned `A_opt` is likewise in that reduced space (see
+`expand_shared_coefficients` / `trotter_shared_params.jl` for the gather it
+implements).
+
+Supports multi-start initialization and GPU execution (`use_gpu=true`).
 Returns `(A_opt, final_loss, metrics)`.
+
+Note for `metric_functions` callbacks: they receive the reduced `curr_A`
+(length `num_exponentials * n_params`, not `num_exponentials * length(gates)`),
+so a metric that indexes per-gate must expand it first via
+`expand_shared_coefficients(curr_A, param_map, length(gates),
+num_exponentials)`. These callbacks are wrapped in a double try/catch-to-NaN
+below, so passing a per-gate-shaped index into a reduced-length vector is
+silently swallowed as `NaN` rather than raising — get the length right.
+
+Both this function and the `adjoint_loss`/`energy_loss` entry points it calls
+are guarded against `antihermitian=true` with a diagonal gate in `gates` (see
+`check_antihermitian_diagonal_gates`): such gates map to the zero operator
+under that convention, so their coefficients would be silently unoptimisable.
 """
 function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{AbstractVector,AbstractMatrix}, basis, N::Int;
     loss_type::Symbol=:overlap,
@@ -298,14 +319,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         target
     end
 
-    if antihermitian && any(TamFermion.is_diagonal_gate, gates)
-        throw(ArgumentError(
-            "antihermitian=true with a gate set containing diagonal gates: " *
-            "tau_g_operator_sector maps those to the zero operator, so their " *
-            "coefficients would be unoptimisable. The HVA gate set from " *
-            "enumerate_ferm_excitations_HVA is Hermitian by construction; use " *
-            "antihermitian=false."))
-    end
+    check_antihermitian_diagonal_gates(gates, antihermitian)
 
     n_params = num_shared_params(param_map, length(gates))
     M_full = num_exponentials * n_params

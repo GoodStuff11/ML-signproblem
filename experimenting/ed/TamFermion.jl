@@ -567,7 +567,12 @@ diagonal), does **not** conserve momentum, **does** conserve `s_z`.
 Unlike [`enumerate_ferm_excitations`](@ref) the result is deliberately **not**
 passed through `sortGatesByIJ` — the emitted order *is* the ansatz:
 
-1. on-site `n_{i↑} n_{i↓}`, sites `1:N`;
+1. on-site `n_{i↑} n_{i↓}`, sites `1:N` (the generator `tau_g_operator_sector`
+   actually builds for these diagonal gates is `-2 n_{i↑} n_{i↓}`, not
+   `n_{i↑} n_{i↓}`, because `p = count_ones(s_J) = 2` there; the factor is
+   uniform across every on-site gate and is absorbed into the shared
+   coefficient, so it is not a correctness issue, but it means an optimized
+   coefficient is `-2 U dt`, not `U dt`);
 2. for each lattice axis `a = 1:ndim` (axis 1 is horizontal), the hopping bonds
    of parity 0 then the bonds of parity 1.
 
@@ -588,6 +593,17 @@ is what ties them back together.
 
 `use_pbc=true` throws for an axis of odd length > 2: a periodic ring of odd length
 admits no 2-colouring into commuting halves.
+
+A length-2 periodic axis also double-counts: `circshift` by 1 on a length-2
+axis maps coord 0 -> 1 and coord 1 -> 0, so parity-0 and parity-1 pick up the
+SAME physical bond on that axis. This is not confined to a single bond layer —
+measured on `Lvec=(2,2)` with `use_pbc=true`, of the 20 emitted gates only 12
+are distinct (8 exact duplicates), spread across the parity groups of BOTH
+axes. This matches this repo's own `findLatticeEdges`, which likewise
+double-counts the L=2 ring, and is accepted as over-parameterization rather
+than a bug: under `tie=:full` the redundant groups compose as
+`exp(a₁τ)exp(a₂τ) = exp((a₁+a₂)τ)`, i.e. flat directions in the reduced
+parameter space, not incorrect dynamics.
 """
 function enumerate_ferm_excitations_HVA(Lvec;
     use_pbc::Bool=false,

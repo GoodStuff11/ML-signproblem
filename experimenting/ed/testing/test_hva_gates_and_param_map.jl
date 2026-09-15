@@ -170,7 +170,10 @@ function (@main)(ARGS)
         # here. On a length-2 periodic axis circshift maps coord 0 -> 1
         # and coord 1 -> 0, so parity-0 and parity-1 pick up the SAME
         # physical bond (matching this repo's own findLatticeEdges
-        # convention, which likewise double-counts the L=2 ring). That
+        # convention, which likewise double-counts the L=2 ring). Measured:
+        # (2,2) with use_pbc=true emits 20 gates of which only 12 are
+        # distinct (8 exact duplicates), spread across parity groups on
+        # BOTH axes, not confined to a single bond layer. That
         # duplicate-layer behaviour is accepted, not pinned by a test.
     end
 
@@ -246,6 +249,25 @@ end
     # Length validation
     @test_throws ArgumentError expand_shared_coefficients(theta, pmap, 5, P)
     @test_throws ArgumentError expand_shared_coefficients([1.0, 2.0], pmap, num_gates, P)
+
+    # Contiguity validation: a gappy map like [1, 3, 3] has no gate driven by
+    # parameter 2, so slot 2 is a dead, never-driven parameter with an
+    # identically-zero gradient. Every map this branch's helpers produce is
+    # contiguous by construction (_renumber_contiguous / collect(1:n)), so this
+    # can only come from a hand-written map and must throw rather than silently
+    # optimize a phantom parameter.
+    @test_throws ArgumentError expand_shared_coefficients(collect(1.0:6.0), [1, 3, 3], 3, P)
+    @test_throws ArgumentError expand_shared_coefficients(collect(1.0:4.0), [2, 2], 2, P)
+    # ...while the contiguous map of the same shape is accepted.
+    @test expand_shared_coefficients(collect(1.0:4.0), [1, 2, 2], 3, P) ==
+          [1.0, 2.0, 2.0, 3.0, 4.0, 4.0]
+    # The HVA helper's own maps pass the check at every tie setting.
+    for tie in (:full, :spin, :none)
+        g_h, pm_h = TamFermion.enumerate_ferm_excitations_HVA((3, 2); tie=tie)
+        np_h = maximum(pm_h)
+        @test length(expand_shared_coefficients(zeros(2 * np_h), pm_h, length(g_h), 2)) ==
+              2 * length(g_h)
+    end
 end
 
 @testset "shared-coefficient gradients" begin
@@ -353,6 +375,32 @@ end
     @test_throws ArgumentError optimize_unitary(gates, tau_terms, ref, target, basis, N;
         loss_type=:overlap, num_exponentials=1, param_map=pmap,
         maxiters=1, initialization_samples=0, antihermitian=true)
+
+    # The SAME guard must fire on the loss entry points themselves: calling
+    # adjoint_loss / energy_loss directly (a live pattern in this repo) would
+    # otherwise return silently-plausible numbers rather than crashing, because
+    # tau_g_operator_sector sends the on-site diagonal gates to the ZERO
+    # operator under the antihermitian convention.
+    H_guard = TamFermion.HubbardRealSpace(1.0, 4.0, Lvec, nvec; use_pbc=false, returnBasis=false)
+    theta_bad = 0.1 .* randn(n_params)
+    @test_throws ArgumentError adjoint_loss(theta_bad, gates, tau_terms, ref, target, basis, N;
+        num_exponentials=1, antihermitian=true, param_map=pmap)
+    @test_throws ArgumentError energy_loss(theta_bad, gates, tau_terms, H_guard, ref, basis, N;
+        num_exponentials=1, antihermitian=true, param_map=pmap)
+
+    # ...and on their rrules, which Zygote dispatches to INSTEAD of the primal
+    # body, so guarding only the primal would leave the gradient path unguarded.
+    @test_throws ArgumentError Zygote.gradient(
+        A -> adjoint_loss(A, gates, tau_terms, ref, target, basis, N;
+            num_exponentials=1, antihermitian=true, param_map=pmap), theta_bad)
+    @test_throws ArgumentError Zygote.gradient(
+        A -> energy_loss(A, gates, tau_terms, H_guard, ref, basis, N;
+            num_exponentials=1, antihermitian=true, param_map=pmap), theta_bad)
+
+    # The guard is a no-op for antihermitian=false, the path everything else
+    # in this file exercises: same gates, same diagonal on-site block, no throw.
+    @test isfinite(adjoint_loss(theta_bad, gates, tau_terms, ref, target, basis, N;
+        num_exponentials=1, antihermitian=false, param_map=pmap))
 end
 
         nothing

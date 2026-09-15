@@ -33,6 +33,28 @@ existing callers.
 =#
 
 """
+    check_antihermitian_diagonal_gates(gates, antihermitian::Bool)
+
+Guard shared by every loss/optimization entry point: under the antihermitian
+convention, `tau_g_operator_sector` maps a diagonal gate to the ZERO operator
+(TamFermion.jl), so any coefficient driving a diagonal gate would be silently
+unoptimisable. Throws `ArgumentError` when `antihermitian=true` and `gates`
+contains a diagonal gate; short-circuits to a no-op when `antihermitian=false`
+so the ordinary (non-antihermitian) path pays nothing extra.
+"""
+function check_antihermitian_diagonal_gates(gates, antihermitian::Bool)
+    if antihermitian && any(TamFermion.is_diagonal_gate, gates)
+        throw(ArgumentError(
+            "antihermitian=true with a gate set containing diagonal gates: " *
+            "tau_g_operator_sector maps those to the zero operator, so their " *
+            "coefficients would be unoptimisable. The HVA gate set from " *
+            "enumerate_ferm_excitations_HVA is Hermitian by construction; use " *
+            "antihermitian=false."))
+    end
+    return nothing
+end
+
+"""
     num_shared_params(param_map, num_gates) → Int
 
 Number of distinct variational parameters **per Trotter layer**.
@@ -47,6 +69,13 @@ function _check_shared(param_map::AbstractVector{Int}, theta_len::Int, num_gates
             "length(param_map) = $(length(param_map)) does not match num_gates = $num_gates"))
     end
     n_params = maximum(param_map)
+    if sort(unique(param_map)) != collect(1:n_params)
+        throw(ArgumentError(
+            "param_map = $param_map is not a contiguous surjection onto 1:$n_params " *
+            "(it has a gap); every param_map produced by this branch's helpers is " *
+            "contiguous by construction (_renumber_contiguous), so a gappy map would " *
+            "leave a dead, never-driven parameter slot with a zero gradient"))
+    end
     if theta_len != P * n_params
         throw(ArgumentError(
             "coefficient vector has length $theta_len but num_exponentials * n_params = " *

@@ -21,10 +21,17 @@ Compute the infidelity loss: 1 - |<target|U(A)|ref>|^2.
 With `param_map !== nothing`, `A` is the reduced parameter vector of length
 `num_exponentials * maximum(param_map)` and gates sharing an entry of `param_map`
 are driven by the same coefficient.
+
+Throws `ArgumentError` for `antihermitian=true` with a gate set containing
+diagonal gates (see `check_antihermitian_diagonal_gates`): `tau_g_operator_sector`
+maps those to the zero operator, so the numbers would be silently plausible but
+wrong. The guard is applied on both the primal and the `rrule`, since Zygote
+calls the `rrule` directly and would otherwise bypass it.
 """
 function adjoint_loss(A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int;
     num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
     param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    check_antihermitian_diagonal_gates(gates, antihermitian)
     A_steps = expand_shared_coefficients(A, param_map, length(gates), num_exponentials)
     ref_evolved = apply_unitary(A_steps, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
     target_dev = to_device_vector(target, use_gpu, datatype)
@@ -34,6 +41,7 @@ end
 function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, tau_terms, ref::AbstractArray, target::AbstractArray, basis, N::Int;
     num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
     param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    check_antihermitian_diagonal_gates(gates, antihermitian)
     num_gates = length(gates)
     A_steps = expand_shared_coefficients(A, param_map, num_gates, num_exponentials)
     t = @elapsed begin
@@ -72,10 +80,15 @@ Compute the variational energy loss: <ref|U(A)^† H U(A)|ref>.
 
 With `param_map !== nothing`, `A` is the reduced parameter vector of length
 `num_exponentials * maximum(param_map)`.
+
+Throws `ArgumentError` for `antihermitian=true` with a gate set containing
+diagonal gates, on both the primal and the `rrule` (see
+`check_antihermitian_diagonal_gates`).
 """
 function energy_loss(A::AbstractArray, gates, tau_terms, H, ref::AbstractArray, basis, N::Int;
     num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
     param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    check_antihermitian_diagonal_gates(gates, antihermitian)
     A_steps = expand_shared_coefficients(A, param_map, length(gates), num_exponentials)
     ref_evolved = apply_unitary(A_steps, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
     return real(dot(ref_evolved, H * ref_evolved))
@@ -84,6 +97,7 @@ end
 function ChainRulesCore.rrule(::typeof(energy_loss), A::AbstractArray, gates, tau_terms, H, ref::AbstractArray, basis, N::Int;
     num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
     param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    check_antihermitian_diagonal_gates(gates, antihermitian)
     num_gates = length(gates)
     A_steps = expand_shared_coefficients(A, param_map, num_gates, num_exponentials)
     phis = apply_unitary_checkpoints(A_steps, gates, ref, basis, N, num_exponentials;
