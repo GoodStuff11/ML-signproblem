@@ -245,7 +245,10 @@ end
 
 Evolve the reference state `ref` through all parameter layers without storing intermediate checkpoints.
 """
-function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int; antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int;
+    antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    A = expand_shared_coefficients(A, param_map, length(gates), num_exponentials)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates

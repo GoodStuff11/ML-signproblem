@@ -10,6 +10,7 @@ Run from the `ed/` directory:
 using Test
 using LinearAlgebra
 using Random
+using Zygote
 
 const ED_DIR = normpath(joinpath(@__DIR__, ".."))
 include(joinpath(ED_DIR, "trotter.jl"))
@@ -18,6 +19,17 @@ include(joinpath(ED_DIR, "logging.jl"))
 using .Trotter
 using .Trotter.TamFermion
 using .Trotter.TrotterOptimization
+
+"""Central finite differences of `f` at `x`."""
+function fd_gradient(f, x::AbstractVector; h=1e-5)
+    g = similar(x)
+    for k in eachindex(x)
+        xp = copy(x); xp[k] += h
+        xm = copy(x); xm[k] -= h
+        g[k] = (f(xp) - f(xm)) / (2h)
+    end
+    return g
+end
 
 # ───────────────────────────────────────────────────────────────────────
 # Shared helpers
@@ -234,6 +246,70 @@ end
     # Length validation
     @test_throws ArgumentError expand_shared_coefficients(theta, pmap, 5, P)
     @test_throws ArgumentError expand_shared_coefficients([1.0, 2.0], pmap, num_gates, P)
+end
+
+@testset "shared-coefficient gradients" begin
+    Random.seed!(20260914)
+    Lvec, nvec = (2, 2), (1, 1)
+    N = prod(Lvec)
+    basis = build_sector_basis(Lvec, nvec)
+    d = length(basis)
+
+    gates, pmap = TamFermion.enumerate_ferm_excitations_HVA(Lvec)
+    num_gates = length(gates)
+    tau_terms = TamFermion.fgateToTauSector(gates, N, basis; antihermitian=false)
+
+    ref = normalize!(randn(ComplexF64, d))
+    target = normalize!(randn(ComplexF64, d))
+    H = TamFermion.HubbardRealSpace(1.0, 4.0, Lvec, nvec; use_pbc=false, returnBasis=false)
+    @test size(H, 1) == d
+
+    PP = Ref(1)   # the layer count the closures below read; set before each call
+    make_loss(kind, pm) = A -> (kind === :overlap ?
+        adjoint_loss(A, gates, tau_terms, ref, target, basis, N;
+                     num_exponentials=PP[], antihermitian=false, param_map=pm) :
+        energy_loss(A, gates, tau_terms, H, ref, basis, N;
+                    num_exponentials=PP[], antihermitian=false, param_map=pm))
+
+    for P in (1, 2), kind in (:overlap, :energy)
+        PP[] = P
+        n_params = maximum(pmap)
+        theta = 0.3 .* randn(P * n_params)
+
+        f_tied = make_loss(kind, pmap)
+        f_free = make_loss(kind, nothing)
+
+        # 1. Tied forward equals the expanded untied forward.
+        a = expand_shared_coefficients(theta, pmap, num_gates, P)
+        @test f_tied(theta) ≈ f_free(a)
+
+        # 2. Analytic gradient equals central finite differences.
+        g_analytic = Zygote.gradient(f_tied, theta)[1]
+        g_fd = fd_gradient(f_tied, theta)
+        @test isapprox(g_analytic, g_fd; rtol=1e-5, atol=1e-7)
+
+        # 3. Analytic gradient equals the group-wise SUM of the untied gradient.
+        g_free = Zygote.gradient(f_free, a)[1]
+        g_contracted = contract_shared_gradient(g_free, pmap, num_gates, P)
+        @test isapprox(g_analytic, g_contracted; rtol=1e-9, atol=1e-12)
+    end
+
+    # 4. Regression guarantee: an identity param_map reproduces param_map=nothing.
+    PP[] = 2
+    identity_map = collect(1:num_gates)
+    a = 0.2 .* randn(2 * num_gates)
+    f_id = make_loss(:overlap, identity_map)
+    f_nothing = make_loss(:overlap, nothing)
+    @test f_id(a) == f_nothing(a)
+    @test Zygote.gradient(f_id, a)[1] == Zygote.gradient(f_nothing, a)[1]
+
+    # 5. apply_unitary accepts a reduced vector via param_map.
+    PP[] = 1
+    theta = 0.3 .* randn(maximum(pmap))
+    v_tied = apply_unitary(theta, gates, ref, basis, N, 1; param_map=pmap)
+    v_free = apply_unitary(expand_shared_coefficients(theta, pmap, num_gates, 1),
+                           gates, ref, basis, N, 1)
+    @test v_tied ≈ v_free
 end
 
         nothing
