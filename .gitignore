@@ -32,3 +32,6 @@ experimenting/ed/data/N=(5, 5)_4x4/meta_data_and_E.jld2
 experimenting/ed/data/N=(5, 5)_4x4 copy/meta_data_and_E.jld2
 experimenting/ed/data/N=(6, 6)_4x3/unitary_map_energy_symmetry=false_N=(6, 6)_shared.jld2
 experimenting/ed/data/N=(6, 6)_4x3/unitary_map_energy_symmetry=false_N=(6, 6)_u_2.jld2
+
+# Claude Code worktrees and local state
+.claude/
