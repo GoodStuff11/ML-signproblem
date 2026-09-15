@@ -204,6 +204,38 @@ function (@main)(ARGS)
     end
 end
 
+@testset "sharing helpers" begin
+    pmap = [1, 1, 2, 3, 3, 3]
+    num_gates = 6
+    P = 2
+
+    @test num_shared_params(nothing, num_gates) == 6
+    @test num_shared_params(pmap, num_gates) == 3
+
+    # Gather: layer-major, theta[(l-1)*n_params + pmap[j]] lands at a[(l-1)*num_gates+j]
+    theta = [10.0, 20.0, 30.0, 40.0, 50.0, 60.0]   # 2 layers × 3 params
+    a = expand_shared_coefficients(theta, pmap, num_gates, P)
+    @test a == [10.0, 10.0, 20.0, 30.0, 30.0, 30.0,
+                40.0, 40.0, 50.0, 60.0, 60.0, 60.0]
+
+    # Scatter-add is the exact transpose of the gather.
+    grad_a = collect(1.0:12.0)
+    grad_theta = contract_shared_gradient(grad_a, pmap, num_gates, P)
+    @test grad_theta == [1.0 + 2.0, 3.0, 4.0 + 5.0 + 6.0,
+                         7.0 + 8.0, 9.0, 10.0 + 11.0 + 12.0]
+
+    # <grad_a, E*theta> == <E'*grad_a, theta>  (the adjoint identity itself)
+    @test dot(grad_a, a) ≈ dot(grad_theta, theta)
+
+    # nothing short-circuits to identity
+    @test expand_shared_coefficients(theta, nothing, 3, P) === theta
+    @test contract_shared_gradient(grad_a, nothing, 6, P) === grad_a
+
+    # Length validation
+    @test_throws ArgumentError expand_shared_coefficients(theta, pmap, 5, P)
+    @test_throws ArgumentError expand_shared_coefficients([1.0, 2.0], pmap, num_gates, P)
+end
+
         nothing
     end
 end
