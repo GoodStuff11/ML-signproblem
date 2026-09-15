@@ -38,9 +38,15 @@ dense_taus(gates, N, basis) =
 
 # ───────────────────────────────────────────────────────────────────────
 # All testsets run inside this single (@main) / with_logging wrapper so
-# every run is logged under testing/logs/. Later tasks should add their
-# @testset blocks inside this same with_logging do-block rather than
-# introducing a second wrapper.
+# every run is logged under testing/logs/. Later tasks (Tasks 2-4) should
+# add their @testset blocks inside this same with_logging do-block, placed
+# ABOVE the trailing `nothing` near the bottom of this function. The
+# `nothing` must remain the LAST statement in the do-block: `@main` tries
+# to convert whatever this function returns into a process exit code, and
+# a bare `@testset` returns a `Test.DefaultTestSet` (not exit-code
+# convertible), which would make even a fully-passing run exit nonzero
+# with a spurious MethodError. Appending a new testset below the `nothing`
+# would silently reintroduce that bug.
 # ───────────────────────────────────────────────────────────────────────
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "test_hva_gates_and_param_map")
@@ -131,6 +137,70 @@ function (@main)(ARGS)
     @testset "odd periodic axis is rejected" begin
         @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); use_pbc=true)
         @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); tie=:nonsense)
+    end
+
+    @testset "PBC canonicalization wrap branch on $(Lvec)" for Lvec in [(2, 2), (4, 2)]
+        N = prod(Lvec)
+        gates, pmap = TamFermion.enumerate_ferm_excitations_HVA(Lvec; use_pbc=true)
+
+        # On-site gates are still first, still diagonal.
+        @test all(is_diagonal_gate, gates[1:N])
+        @test all(!is_diagonal_gate, gates[N+1:end])
+
+        # This is the assertion that actually exercises the `i < j ? ... :
+        # (sitebit(j), sitebit(i))` wrap branch: on a periodic axis the
+        # forward neighbour of the last site wraps to site 1, so j < i for
+        # that bond and the swap must fire to keep the h.c.-dedup
+        # convention intact.
+        @test all(g -> (g.cre_up, g.cre_dn) <= (g.ann_up, g.ann_dn), gates)
+
+        # NOTE: deliberately no group-count / pmap assertion for (2,2)
+        # here. On a length-2 periodic axis circshift maps coord 0 -> 1
+        # and coord 1 -> 0, so parity-0 and parity-1 pick up the SAME
+        # physical bond (matching this repo's own findLatticeEdges
+        # convention, which likewise double-counts the L=2 ring). That
+        # duplicate-layer behaviour is accepted, not pinned by a test.
+    end
+
+    @testset "PBC group count on (4,2) is well-defined" begin
+        Lvec = (4, 2)
+        N = prod(Lvec)
+        gates, pmap = TamFermion.enumerate_ferm_excitations_HVA(Lvec; use_pbc=true)
+        # Rather than re-deriving the exact bond geometry here, check the
+        # invariants that follow from the grouping structure: a contiguous
+        # surjection, and every group having an even size (each bond
+        # contributes exactly 2 gates, up and down).
+        @test sort(unique(pmap)) == collect(1:maximum(pmap))
+        for k in 1:maximum(pmap)
+            @test count(==(k), pmap) % 2 == 0
+        end
+        @test length(gates) == N + 2 * ((length(gates) - N) ÷ 2)
+    end
+
+    @testset "length-1 periodic axis emits no self-bond gates" begin
+        Lvec = (1, 4)
+        N = prod(Lvec)
+        gates, pmap = TamFermion.enumerate_ferm_excitations_HVA(Lvec; use_pbc=true)
+
+        # The on-site block is unaffected.
+        @test all(is_diagonal_gate, gates[1:N])
+
+        # This is the invariant the self-bond bug broke: a length-1
+        # periodic axis makes every site its own forward neighbour, which
+        # (absent the `j == i` skip) emitted a diagonal FGate(m, m, 0, 0)
+        # "hopping" gate. No gate beyond the on-site block may be
+        # diagonal, regardless of how many genuine hopping gates the
+        # other (non-trivial) axis contributes.
+        @test all(!is_diagonal_gate, gates[N+1:end])
+
+        # The length-1 axis itself contributes zero bonds; the only
+        # hopping gates come from the length-4 axis, which forms a genuine
+        # 4-site ring (bonds (1,2),(3,4) parity 0; (2,3),(4,1) parity 1),
+        # i.e. N bonds x 2 spin channels.
+        @test length(gates) == N + 2 * N
+
+        # h.c.-dedup convention still holds even across the (4,1) wrap bond.
+        @test all(g -> (g.cre_up, g.cre_dn) <= (g.ann_up, g.ann_dn), gates)
     end
 end
 

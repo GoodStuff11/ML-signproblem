@@ -635,6 +635,11 @@ function enumerate_ferm_excitations_HVA(Lvec;
             for i in 1:N
                 j = neighbors[a, i]
                 j == 0 && continue                      # missing OBC neighbour
+                # A length-1 periodic axis makes a site its own forward
+                # neighbour (circshift by 1 on an axis of length 1 is a
+                # no-op), so i == j here would be a "bond" from a site to
+                # itself. There is no such bond; skip it.
+                j == i && continue
                 coords = unravel_c(i - 1, dims)         # 0-based
                 (coords[a] % 2) == parity || continue
                 nbond += 1
