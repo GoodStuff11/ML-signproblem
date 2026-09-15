@@ -78,21 +78,26 @@ function extract_convergence_info(sol)
 end
 
 """
-    grow_coefficients(old_coeffs, old_num_exponentials, new_num_exponentials, num_gates) -> Vector{Float64}
+    grow_coefficients(old_coeffs, old_num_exponentials, new_num_exponentials, num_gates; param_map=nothing) -> Vector{Float64}
 
 Extend a Trotter coefficient vector that was optimized for `old_num_exponentials` layers into
 one usable for a larger `new_num_exponentials`, so the newly-added (later) layers can be
 optimized starting from an already-converged shorter ansatz instead of from scratch.
+
+With `param_map !== nothing` the vector grows in units of
+`num_shared_params(param_map, num_gates)` per layer rather than `num_gates`.
 """
-function grow_coefficients(old_coeffs::AbstractVector, old_num_exponentials::Int, new_num_exponentials::Int, num_gates::Int)
+function grow_coefficients(old_coeffs::AbstractVector, old_num_exponentials::Int, new_num_exponentials::Int, num_gates::Int;
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing)
     if new_num_exponentials < old_num_exponentials
         error("new_num_exponentials ($new_num_exponentials) must be >= old_num_exponentials ($old_num_exponentials)")
     end
-    old_len = old_num_exponentials * num_gates
+    n_params = num_shared_params(param_map, num_gates)
+    old_len = old_num_exponentials * n_params
     if length(old_coeffs) != old_len
-        error("length(old_coeffs) = $(length(old_coeffs)) does not match old_num_exponentials * num_gates = $old_len")
+        error("length(old_coeffs) = $(length(old_coeffs)) does not match old_num_exponentials * n_params = $old_len")
     end
-    new_coeffs = zeros(Float64, new_num_exponentials * num_gates)
+    new_coeffs = zeros(Float64, new_num_exponentials * n_params)
     new_coeffs[1:old_len] .= old_coeffs
     return new_coeffs
 end
@@ -270,6 +275,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     state2::Union{AbstractVector,Nothing}=nothing,
     num_exponentials::Int=1,
     active_indices::Union{Nothing,AbstractVector{Int}}=nothing,
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing,
     maxiters::Int=100,
     optimizer=:LBFGS,
     perturb_optimization::Float64=0.001,
@@ -292,16 +298,28 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         target
     end
 
-    M_full = num_exponentials * length(gates)
+    if antihermitian && any(TamFermion.is_diagonal_gate, gates)
+        throw(ArgumentError(
+            "antihermitian=true with a gate set containing diagonal gates: " *
+            "tau_g_operator_sector maps those to the zero operator, so their " *
+            "coefficients would be unoptimisable. The HVA gate set from " *
+            "enumerate_ferm_excitations_HVA is Hermitian by construction; use " *
+            "antihermitian=false."))
+    end
+
+    n_params = num_shared_params(param_map, length(gates))
+    M_full = num_exponentials * n_params
 
     f = (A, p=nothing) -> begin
         A_full = isnothing(active_indices) ? A : embed_active_params(A, active_indices, M_full)
         if loss_type == :overlap
             return adjoint_loss(A_full, gates, tau_terms, ref_prep, target_prep, basis, N;
-                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+                param_map=param_map)
         elseif loss_type == :energy
             return energy_loss(A_full, gates, tau_terms, target_prep, ref_prep, basis, N;
-                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+                param_map=param_map)
         else
             error("Unknown loss_type: $loss_type")
         end
@@ -449,7 +467,7 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     end
     push!(metrics["initial_gradient_samples"], local_initial_gradient_samples)
 
-    ref_evolved = apply_unitary(curr_A, gates, ref_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
+    ref_evolved = apply_unitary(curr_A, gates, ref_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype, param_map=param_map)
     ref_evolved_cpu = Array(ref_evolved)
     if loss_type == :overlap
         final_energy = !isnothing(H_mat) ? real(dot(ref_evolved_cpu, H_mat * ref_evolved_cpu)) : NaN

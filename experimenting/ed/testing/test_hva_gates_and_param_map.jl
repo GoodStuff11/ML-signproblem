@@ -312,6 +312,49 @@ end
     @test v_tied ≈ v_free
 end
 
+@testset "optimize_unitary and grow_coefficients with sharing" begin
+    Random.seed!(20260915)
+    Lvec, nvec = (2, 2), (1, 1)
+    N = prod(Lvec)
+    basis = build_sector_basis(Lvec, nvec)
+    d = length(basis)
+
+    gates, pmap = TamFermion.enumerate_ferm_excitations_HVA(Lvec)
+    num_gates = length(gates)
+    n_params = maximum(pmap)
+    tau_terms = TamFermion.fgateToTauSector(gates, N, basis; antihermitian=false)
+
+    ref = normalize!(randn(ComplexF64, d))
+    target = normalize!(randn(ComplexF64, d))
+
+    P = 2
+    A_opt, final_loss, metrics = optimize_unitary(gates, tau_terms, ref, target, basis, N;
+        loss_type=:overlap, num_exponentials=P, param_map=pmap,
+        maxiters=10, initialization_samples=0, antihermitian=false)
+
+    # The returned vector lives in the REDUCED space.
+    @test length(A_opt) == P * n_params
+    @test isfinite(final_loss)
+    @test 0.0 <= final_loss <= 1.0 + 1e-8
+    @test length(metrics["optimization_gradients"][1][end]) == P * n_params
+
+    # grow_coefficients grows in units of n_params, not num_gates.
+    grown = grow_coefficients(A_opt, P, 3, num_gates; param_map=pmap)
+    @test length(grown) == 3 * n_params
+    @test grown[1:P*n_params] == A_opt
+    @test all(grown[P*n_params+1:end] .== 0.0)
+
+    # Default (no sharing) behaviour of grow_coefficients is unchanged.
+    old = collect(1.0:Float64(2 * num_gates))
+    @test grow_coefficients(old, 2, 3, num_gates) ==
+          vcat(old, zeros(num_gates))
+
+    # A diagonal gate under the antihermitian convention is rejected.
+    @test_throws ArgumentError optimize_unitary(gates, tau_terms, ref, target, basis, N;
+        loss_type=:overlap, num_exponentials=1, param_map=pmap,
+        maxiters=1, initialization_samples=0, antihermitian=true)
+end
+
         nothing
     end
 end
