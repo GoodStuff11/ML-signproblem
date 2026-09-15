@@ -17,7 +17,7 @@ export int2occ, getReducedHilSpace
 # Basis conversion
 export uint_for_bits, combineSpinInts, splitSpinInts
 # Fermion gates
-export singleSpinChannelCombos, enumerate_ferm_excitations, sortGatesByIJ
+export singleSpinChannelCombos, enumerate_ferm_excitations, enumerate_ferm_excitations_HVA, sortGatesByIJ, is_diagonal_gate
 # Excitation operators
 export excitation_operator_sector, fgateToExpSector, fgateToExp, tau_g_operator_sector, fgateToTauSector
 # Translation invariance
@@ -526,6 +526,140 @@ function enumerate_ferm_excitations(p::Integer, Lvec,
 
     sorted_gates, _ = sortGatesByIJ(gates, N)
     return sorted_gates
+end
+
+"""
+    is_diagonal_gate(g::FGate) → Bool
+
+`true` when `C†_I C_J` has `I == J`, i.e. the generator τ_g is diagonal in the
+occupation basis. Such gates are annihilated by the antihermitian convention.
+"""
+is_diagonal_gate(g::FGate) = (g.cre_up == g.ann_up) && (g.cre_dn == g.ann_dn)
+
+"""
+Renumber `key` so distinct values become 1, 2, 3, … in order of first
+appearance. Groups that never occur simply never get an id, which is how
+empty (axis, parity) blocks are dropped.
+"""
+function _renumber_contiguous(key::AbstractVector{Int})
+    lookup = Dict{Int,Int}()
+    out = Vector{Int}(undef, length(key))
+    next = 1
+    for (k, v) in enumerate(key)
+        id = get(lookup, v, 0)
+        if id == 0
+            id = next
+            lookup[v] = id
+            next += 1
+        end
+        out[k] = id
+    end
+    return out
+end
+
+"""
+    enumerate_ferm_excitations_HVA(Lvec; use_pbc=false, tie=:full) → (gates, param_map)
+
+Hamiltonian-Variational-Ansatz gate set for the Hubbard model on a lattice of
+dimensions `Lvec`. Strictly **Hermitian** (the on-site interaction gates are
+diagonal), does **not** conserve momentum, **does** conserve `s_z`.
+
+Unlike [`enumerate_ferm_excitations`](@ref) the result is deliberately **not**
+passed through `sortGatesByIJ` — the emitted order *is* the ansatz:
+
+1. on-site `n_{i↑} n_{i↓}`, sites `1:N`;
+2. for each lattice axis `a = 1:ndim` (axis 1 is horizontal), the hopping bonds
+   of parity 0 then the bonds of parity 1.
+
+A bond's parity is the parity of its source site's coordinate along that axis, so
+parity-0 bonds are `(0,1),(2,3),…` and parity-1 bonds are `(1,2),(3,4),…`. Within
+one parity group the bonds have disjoint support and therefore commute.
+
+Each bond emits **two** gates, spin-up then spin-down, because an `FGate` is a
+single product operator and cannot represent a sum over spin channels. `param_map`
+is what ties them back together.
+
+`tie` selects the returned `param_map`:
+- `:full` (default) — one coefficient for the on-site block and one per
+  (axis, parity) hopping block, shared across both spin channels.
+- `:none` — `collect(1:length(gates))`, every gate independent.
+- `:spin` — one coefficient per site for the on-site block, and one per bond
+  shared by that bond's up/down pair.
+
+`use_pbc=true` throws for an axis of odd length > 2: a periodic ring of odd length
+admits no 2-colouring into commuting halves.
+"""
+function enumerate_ferm_excitations_HVA(Lvec;
+    use_pbc::Bool=false,
+    tie::Symbol=:full)
+
+    if !(tie in (:full, :none, :spin))
+        throw(ArgumentError("tie must be one of :full, :none, :spin; got :$tie"))
+    end
+
+    dims = Tuple(collect(Int, Lvec))
+    N = prod(dims)
+    ndim = length(dims)
+
+    if use_pbc
+        for (a, L) in enumerate(dims)
+            if L > 2 && isodd(L)
+                throw(ArgumentError(
+                    "use_pbc=true with odd length L=$L on axis $a: a periodic ring " *
+                    "of odd length cannot be 2-coloured into commuting bond groups."))
+            end
+        end
+    end
+
+    sitebit(s::Integer) = DtMb(1) << DtMb(s - 1)
+
+    gates = FGate[]
+    block_key = Int[]   # on-site block = 1; (axis, parity) blocks = 2, 3, …
+    fine_key = Int[]    # on-site = site index; bond gates = N + bond index
+
+    # ── Block 1: on-site interaction ────────────────────────────────────
+    for s in 1:N
+        m = sitebit(s)
+        push!(gates, FGate(m, m, m, m))
+        push!(block_key, 1)
+        push!(fine_key, s)
+    end
+
+    # ── Hopping blocks, axis-major then parity ──────────────────────────
+    neighbors = findForwardLatticeNeighbors(dims; use_pbc=use_pbc)
+    block = 1
+    nbond = 0
+    for a in 1:ndim
+        for parity in 0:1
+            block += 1
+            for i in 1:N
+                j = neighbors[a, i]
+                j == 0 && continue                      # missing OBC neighbour
+                coords = unravel_c(i - 1, dims)         # 0-based
+                (coords[a] % 2) == parity || continue
+                nbond += 1
+                # Canonicalise to (cre_up, cre_dn) <= (ann_up, ann_dn). Swapping
+                # cre/ann leaves τ_g = C†_I C_J + C†_J C_I unchanged.
+                lo, hi = i < j ? (sitebit(i), sitebit(j)) : (sitebit(j), sitebit(i))
+                push!(gates, FGate(lo, hi, DtMb(0), DtMb(0)))   # spin up
+                push!(block_key, block)
+                push!(fine_key, N + nbond)
+                push!(gates, FGate(DtMb(0), DtMb(0), lo, hi))   # spin down
+                push!(block_key, block)
+                push!(fine_key, N + nbond)
+            end
+        end
+    end
+
+    param_map = if tie === :none
+        collect(1:length(gates))
+    elseif tie === :full
+        _renumber_contiguous(block_key)
+    else # :spin
+        _renumber_contiguous(fine_key)
+    end
+
+    return gates, param_map
 end
 
 """

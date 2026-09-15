@@ -30,6 +30,6 @@ export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_stat
        strip_global_phase, get_gpu_gate_ops, gpu_apply_gate_exp!, to_device_vector
 
 # Re-export TamFermion basis and gate utilities at Trotter level
-export get_basis_sector, enumerate_ferm_excitations, fgateToTauSector
+export get_basis_sector, enumerate_ferm_excitations, enumerate_ferm_excitations_HVA, fgateToTauSector, is_diagonal_gate
 
 end # module Trotter
