@@ -13,6 +13,7 @@ using Random
 
 const ED_DIR = normpath(joinpath(@__DIR__, ".."))
 include(joinpath(ED_DIR, "trotter.jl"))
+include(joinpath(ED_DIR, "logging.jl"))
 
 using .Trotter
 using .Trotter.TamFermion
@@ -34,6 +35,16 @@ end
 
 dense_taus(gates, N, basis) =
     [Matrix(t) for t in TamFermion.fgateToTauSector(gates, N, basis; antihermitian=false)]
+
+# ───────────────────────────────────────────────────────────────────────
+# All testsets run inside this single (@main) / with_logging wrapper so
+# every run is logged under testing/logs/. Later tasks should add their
+# @testset blocks inside this same with_logging do-block rather than
+# introducing a second wrapper.
+# ───────────────────────────────────────────────────────────────────────
+function (@main)(ARGS)
+    log_path = make_log_path(@__DIR__, "test_hva_gates_and_param_map")
+    with_logging(log_path) do
 
 @testset "HVA gate set" begin
     @testset "structure on $(Lvec)" for Lvec in [(2, 2), (3, 2)]
@@ -120,5 +131,9 @@ dense_taus(gates, N, basis) =
     @testset "odd periodic axis is rejected" begin
         @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); use_pbc=true)
         @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); tie=:nonsense)
+    end
+end
+
+        nothing
     end
 end
