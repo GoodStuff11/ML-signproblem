@@ -1,0 +1,17 @@
+================================================================================
+Timestamp: 2026-09-14T22:57:08.699
+Command run: julia testing/test_trotter_gpu_streaming_fix.jl 
+================================================================================
+================================================================================
+=== Test Trotter GPU Gate Streaming Fix (pre_cache_all=false / stream_tau) ===
+================================================================================
+
+--- 1. Checking function signatures and keywords ---
+  [PASS] get_gpu_gate_ops accepts stream_tau keyword argument
+  [PASS] prepare_gpu_gate_ops is an alias for get_gpu_gate_ops
+  [PASS] gpu_apply_gate_exp! accepts tau keyword argument
+  [PASS] apply_unitary_checkpoints accepts stream_tau keyword argument
+Test Failed at /home/jek354/research/ML-signproblem/experimenting/ed/testing/test_trotter_gpu_streaming_fix.jl:72
+  Expression: hasmethod(Trotter.TrotterOptimization.backward_adjoint_propagation, Tuple{AbstractArray, Any, Any, Any, AbstractVector, Any, Int, Int}, (:antihermitian, :use_gpu, :datatype, :stream_tau))
+
+ERROR: There was an error during testing

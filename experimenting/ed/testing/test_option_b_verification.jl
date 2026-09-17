@@ -51,12 +51,12 @@ function (@main)(ARGS)
 
         phis_b = Trotter.TrotterOptimization.apply_unitary_checkpoints(
             A_rand, gates, v_ref32, basis_sector, N_sites, 1;
-            antihermitian=true, use_gpu=true, datatype=Float32
+            antihermitian=true, use_gpu=true, datatype=Float32, stream_tau=true
         )
         init_adj = CUDA.copy(phis_b[end])
         grad_b = Trotter.TrotterOptimization.backward_adjoint_propagation(
             A_rand, gates, nothing, phis_b, init_adj, basis_sector, N_sites, 1;
-            antihermitian=true, use_gpu=true, datatype=Float32
+            antihermitian=true, use_gpu=true, datatype=Float32, stream_tau=true
         )
 
         # Test Full GPU (stream_tau=false)

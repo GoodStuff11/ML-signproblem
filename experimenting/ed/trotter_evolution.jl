@@ -64,7 +64,8 @@ Evolves the state `ref` forward through all parameters `A` and returns strided c
 Automatically calculates optimal stride K to prevent GPU OOM.
 """
 function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int;
-    antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+    antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
+    stream_tau::Union{Nothing,Bool}=nothing)
     
     P = num_exponentials
     num_gates = length(gates)
@@ -72,7 +73,7 @@ function apply_unitary_checkpoints(A::AbstractArray, gates, ref::AbstractArray, 
 
     if use_gpu && _has_cuda()
         CUDA_mod = _get_cuda()
-        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype, stream_tau=stream_tau)
         ref_dev = to_device_vector(ref, use_gpu, datatype)
         d = length(basis)
 
@@ -126,7 +127,8 @@ end
 Propagates the adjoint state backward using local GPU rematerialization between strided checkpoints.
 """
 function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::Union{Vector, StridedCheckpoints}, init_adjoint_state::AbstractVector, basis, N::Int, num_exponentials::Int;
-    antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64)
+    antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
+    stream_tau::Union{Nothing,Bool}=nothing)
     
     P = num_exponentials
     num_gates = length(gates)
@@ -135,8 +137,9 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
 
     if use_gpu && _has_cuda()
         CUDA_mod = _get_cuda()
-        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
-        adj_curr = copy(init_adjoint_state)
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype, stream_tau=stream_tau)
+        adj_curr = to_device_vector(init_adjoint_state, use_gpu, datatype)
+        adj_curr = (adj_curr === init_adjoint_state) ? copy(adj_curr) : adj_curr
         adj_next = similar(adj_curr)
 
         if phis isa StridedCheckpoints
@@ -171,6 +174,7 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
 
                     if gpu_ops.is_diag[param_idx] && antihermitian
                         grad_A[curr_step] = 0.0
+                        tau_mat = nothing
                     else
                         tau_mat = _get_gpu_tau_mat(gpu_ops, param_idx)
                         CUDA_mod.CUSPARSE.mv!('N', eltype(gpu_ops.w1)(1.0), tau_mat, phi_curr, eltype(gpu_ops.w1)(0.0), gpu_ops.w1, 'O')
@@ -182,7 +186,7 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
                         end
                     end
 
-                    gpu_apply_gate_exp!(adj_next, adj_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=true)
+                    gpu_apply_gate_exp!(adj_next, adj_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=true, tau=tau_mat)
                     adj_curr, adj_next = adj_next, adj_curr
                 end
             end
@@ -196,6 +200,7 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
 
                 if gpu_ops.is_diag[param_idx] && antihermitian
                     grad_A[curr] = 0.0
+                    tau_mat = nothing
                 else
                     tau_mat = _get_gpu_tau_mat(gpu_ops, param_idx)
                     CUDA_mod.CUSPARSE.mv!('N', eltype(gpu_ops.w1)(1.0), tau_mat, phi_curr, eltype(gpu_ops.w1)(0.0), gpu_ops.w1, 'O')
@@ -207,14 +212,14 @@ function backward_adjoint_propagation(A::AbstractArray, gates, tau_terms, phis::
                     end
                 end
 
-                gpu_apply_gate_exp!(adj_next, adj_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=true)
+                gpu_apply_gate_exp!(adj_next, adj_curr, gpu_ops, param_idx, a; antihermitian=antihermitian, inverse=true, tau=tau_mat)
                 adj_curr, adj_next = adj_next, adj_curr
             end
         end
 
         return grad_A
     else
-        adjoint_state = copy(init_adjoint_state)
+        adjoint_state = (eltype(init_adjoint_state) == datatype) ? copy(init_adjoint_state) : datatype.(init_adjoint_state)
         curr = M
         for l in P:-1:1
             coefs = A[((l-1)*num_gates+1):(l*num_gates)]
@@ -247,14 +252,15 @@ Evolve the reference state `ref` through all parameter layers without storing in
 """
 function apply_unitary(A::AbstractArray, gates, ref::AbstractArray, basis, N::Int, num_exponentials::Int;
     antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
-    param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing,
+    stream_tau::Union{Nothing,Bool}=nothing)
     A = expand_shared_coefficients(A, param_map, length(gates), num_exponentials)
     P = num_exponentials
     num_gates = length(gates)
     M = P * num_gates
 
     if use_gpu && _has_cuda()
-        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype)
+        gpu_ops = get_gpu_gate_ops(gates, N, basis; antihermitian=antihermitian, datatype=datatype, stream_tau=stream_tau)
         ref_dev = to_device_vector(ref, use_gpu, datatype)
         v_curr = copy(ref_dev)
         v_next = similar(ref_dev)

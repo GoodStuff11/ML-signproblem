@@ -95,10 +95,14 @@ end
     make_log_path(script_dir, script_name) -> String
 
 Construct a timestamped log file path of the form:
-    <script_dir>/logs/<yyyy-mm-dd>/<script_name>_YYYY-MM-DD_HH-MM-SS.log
+    <script_dir>/logs/<yyyy-mm-dd>/<script_name>_YYYY-MM-DD_HH-MM-SS_<pid>.log
+
+The pid suffix keeps concurrently-launched jobs (e.g. an sbatch batch that all start
+in the same second) from sharing one log file; NFS has no atomic O_APPEND, so two
+writers on one file silently clobber each other's output.
 """
 function make_log_path(script_dir::String, script_name::String)
     day_folder = Dates.format(Dates.now(), "yyyy-mm-dd")
     timestamp = Dates.format(Dates.now(), "yyyy-mm-dd_HH-MM-SS")
-    return joinpath(script_dir, "logs", day_folder, "$(script_name)_$(timestamp).log")
+    return joinpath(script_dir, "logs", day_folder, "$(script_name)_$(timestamp)_$(getpid()).log")
 end

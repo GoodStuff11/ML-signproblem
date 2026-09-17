@@ -1,0 +1,88 @@
+================================================================================
+Timestamp: 2026-09-14T21:57:46.043
+Command run: julia testing/test_hva_gates_and_param_map.jl 
+================================================================================
+Test Summary: | Pass  Total  Time
+HVA gate set  |  139    139  3.4s
+Test Summary:   | Pass  Total  Time
+sharing helpers |   15     15  0.0s
+loss: 0.9716274703039658
+Forward time: 0.099575924
+Gradient time: 0.178227266
+loss: 0.9716274703039658
+Forward time: 0.000279474
+Gradient time: 0.000174273
+loss: 0.7994538696792824
+loss: 0.7994538696792824
+loss: 0.9675004886591034
+Forward time: 0.000235835
+Gradient time: 0.000196894
+loss: 0.9675004886591034
+Forward time: 0.00021171
+Gradient time: 0.000187397
+loss: 0.6897316933092837
+loss: 0.6897316933092837
+loss: 0.9031235558850677
+Forward time: 0.000203438
+Gradient time: 0.000182406
+loss: 0.9031235558850677
+Forward time: 0.000192874
+Gradient time: 0.000175003
+Test Summary:                | Pass  Total  Time
+shared-coefficient gradients |   16     16  6.0s
+Initial loss (overlap): 0.9595692411361
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=false)...
+loss: 0.9595692411361
+Forward time: 0.00045387
+Gradient time: 0.000272448
+loss: 0.9453182447346822
+Forward time: 0.000337175
+Gradient time: 0.000210871
+loss: 0.8747357656207062
+Forward time: 0.000209229
+Gradient time: 0.000167534
+loss: 0.9814579307527117
+Forward time: 0.000192927
+Gradient time: 0.000175544
+loss: 0.9125676222931524
+Forward time: 0.000191597
+Gradient time: 0.000165983
+loss: 0.9125676222931524
+Forward time: 0.000190199
+Gradient time: 0.000173188
+loss: 0.8257864212702307
+Forward time: 0.000201782
+Gradient time: 0.000163735
+loss: 0.792917136192352
+Forward time: 0.000206081
+Gradient time: 0.000172296
+loss: 0.8017062089025697
+Forward time: 0.000190115
+Gradient time: 0.000166043
+loss: 0.7354059761886411
+Forward time: 0.000213064
+Gradient time: 0.000169444
+loss: 0.7354059761886413
+Forward time: 0.000195579
+Gradient time: 0.000167198
+loss: 0.6486608726175122
+Forward time: 0.000231806
+Gradient time: 0.000166343
+loss: 0.6365142987859579
+Forward time: 0.000195472
+Gradient time: 0.000167059
+loss: 0.6248690483016678
+Forward time: 0.000204809
+Gradient time: 0.000160797
+loss: 0.6230421108738267
+Forward time: 0.000196776
+Gradient time: 0.00016627
+loss: 0.6217547682781877
+Forward time: 0.0002284
+Gradient time: 0.000165223
+loss: 0.6213467745955752
+Forward time: 0.000188163
+Gradient time: 0.000163813
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.006356944786183344)
+Test Summary:                                       | Pass  Total  Time
+optimize_unitary and grow_coefficients with sharing |   14     14  9.0s

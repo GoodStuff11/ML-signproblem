@@ -21,6 +21,18 @@ Arguments:
                      - "overlap": Optimize overlap loss (1 - |<ψ'|U|ψ>|^2).
                      - "energy": Optimize energy loss (<ψ|U^† H U|ψ>).
   --use-gpu=<true|false> (optional): Whether to use GPU acceleration (CUDA). If set to false, it runs entirely on CPU (using multiple threads if julia is started with threads) without loading the CUDA package. Default: true (or auto-detect if GPU is available).
+  --regularization=<value> (optional): L2 penalty coefficient on the loss
+                     (`+ 0.5 * value * ||t||^2`; see `REGULARIZATION_STRENGTH` in
+                     ed_optimization.jl). Default: 1e-3, the value this optimization has
+                     always used. Pass 0 to optimize the bare infidelity/energy instead.
+                     This changes what the optimizer converges to, so coefficients saved
+                     at different settings are not comparable -- pair it with
+                     --run_label so they land in separate files.
+  --run_label=<string> (optional): Append this label to the saved-file prefix, so the run
+                     is always freshly randomly initialized under a distinct filename
+                     rather than resuming from (or overwriting) any existing coefficients
+                     already saved under the standard prefix. Mirrors the identically
+                     named option of run_trotter_scan_optimization.jl.
 
 Examples:
   julia --project=.. run_lanczos_scan_optimization.jl "data/N=(2, 2)_2x2" 25
@@ -111,6 +123,8 @@ function parse_arguments(args::Vector{String})
     loss_type = :overlap
     custom_ref_state_arg = nothing
     antihermitian = false
+    regularization = 1.0e-3
+    run_label = nothing
     filtered_args = String[]
     for arg in args
         if startswith(arg, "--nn=")
@@ -137,6 +151,10 @@ function parse_arguments(args::Vector{String})
             else
                 error("Invalid --loss option: '$val'. Valid options are: 'overlap', 'energy'.")
             end
+        elseif startswith(arg, "--regularization=")
+            regularization = parse(Float64, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--run_label=")
+            run_label = String(split(arg, "=", limit=2)[2])
         elseif startswith(arg, "--custom_ref_state=")
             custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
         elseif startswith(arg, "--antihermitian")
@@ -161,7 +179,7 @@ function parse_arguments(args::Vector{String})
     u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
     u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing
 
-    return folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian
+    return folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian, regularization, run_label
 end
 
 
@@ -169,7 +187,11 @@ function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_lanczos_scan_optimization")
     with_logging(log_path) do
 
-        folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian = parse_arguments(ARGS)
+        folder, u_start, u_end, nn_strategy_file, maxiters, loss_type, custom_ref_state_arg, antihermitian, regularization, run_label = parse_arguments(ARGS)
+
+        REGULARIZATION_STRENGTH[] = regularization
+        println("L2 regularization strength: $(REGULARIZATION_STRENGTH[])")
+        isnothing(run_label) || println("Run label: $run_label")
 
         # Parse electrons and dimension from the folder name
         electrons_parsed = (2, 2)
@@ -187,6 +209,7 @@ function (@main)(ARGS)
             load_ED_data(folder; verbose=true, use_slater_reference=use_slater_ref)
 
         scan_instructions = Dict(
+            "regularization" => regularization,
             "starting level" => 1,
             "ending level" => 1, # level index for targets
             "optimization_scheme" => [2],
@@ -210,7 +233,8 @@ function (@main)(ARGS)
             custom_ref_state_arg=custom_ref_state_arg,
             antihermitian=antihermitian,
             loss_type=loss_type,
-            nn_strategy_file=nn_strategy_file
+            nn_strategy_file=nn_strategy_file,
+            suffix=run_label
         )
 
         if u_end === nothing

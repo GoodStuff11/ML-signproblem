@@ -1453,6 +1453,50 @@ function build_param_index_map(
 end
 
 """
+    is_diagonal_operator_key(key) -> Bool
+
+True when `key` (a `[(site, spin, :create)..., (site, spin, :annihilate)...]` operator key)
+is a density-density term: the modes it creates are exactly the modes it annihilates.
+The counterpart of `TamFermion.is_diagonal_gate` for the exact matrix-exponential ansatz.
+"""
+function is_diagonal_operator_key(key)
+    cre = [(s.coordinates..., σ) for (s, σ, op) in key if op == :create]
+    ann = [(s.coordinates..., σ) for (s, σ, op) in key if op == :annihilate]
+    return sort(cre) == sort(ann)
+end
+
+"""
+    drop_diagonal_parameters(rows, cols, signs, ops_list, t_keys, param_index_map)
+
+Remove every density-density (diagonal) parameter from an already-built operator structure,
+returning filtered `(rows, cols, signs, ops_list, t_keys, param_index_map)` with
+`param_index_map` renumbered to the surviving `t_keys`.
+
+Used on structures loaded from `precomputed_structures`, which are always generated with the
+diagonal terms present; generating a structure from scratch instead passes
+`omit_diagonal=true` to [`create_randomized_nth_order_operator`](@ref) and never builds them.
+See that function for why an antihermitian generator must not carry diagonal terms.
+"""
+function drop_diagonal_parameters(rows, cols, signs, ops_list, t_keys, param_index_map)
+    keep_param = .!is_diagonal_operator_key.(t_keys)
+    all(keep_param) && return rows, cols, signs, ops_list, t_keys, param_index_map
+
+    # old parameter index -> new parameter index (0 for dropped parameters)
+    new_index = zeros(Int, length(t_keys))
+    n = 0
+    for i in eachindex(t_keys)
+        if keep_param[i]
+            n += 1
+            new_index[i] = n
+        end
+    end
+
+    keep_entry = [keep_param[p] for p in param_index_map]
+    return rows[keep_entry], cols[keep_entry], signs[keep_entry], ops_list[keep_entry],
+    t_keys[keep_param], [new_index[p] for p in param_index_map[keep_entry]]
+end
+
+"""
     precompute_n_body_structures(indexer, max_order=2; use_symmetry=[true, false], spin_conserved::Bool=false, momentum_basis::Bool=false, sign_convention::Symbol=:spin_first)
 
 Precompute and cache `n_body_structure` for optimization, avoiding expensive generation at runtime.
@@ -1579,16 +1623,24 @@ function is_slater_determinant(state::Vector, indexer::CombinationIndexer; get_v
 end
 function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexer, return_keys::Bool=false;
     magnitude::T=1e-3 + 0im, omit_H_conj::Bool=false, conserve_spin::Bool=false, normalize_coefficients::Bool=false,
-    conserve_momentum::Bool=false, sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake()) where T
-    # function creates a dictionary of free parameters in the form of a dictionary. 
+    conserve_momentum::Bool=false, omit_diagonal::Bool=false,
+    sign_convention::Symbol=:spin_first, lattice_ordering::Ordering=ColSnake()) where T
+    # function creates a dictionary of free parameters in the form of a dictionary.
     # when spin is conserved, the Hilbert space is smaller, so a restricted number of coefficients are possible. The rest aren't filled in
     # When hermiticity is forced, we only need to worry about upper diagonal elements. The rest can be filled in afterward
+    # omit_diagonal drops the density-density terms (the modes created are exactly the modes
+    # annihilated). Those are needed for a Hermitian generator, but a real antihermitian
+    # generator kills them: their matrix is real and diagonal, so (A - A')/2 is identically
+    # zero and the corresponding coefficients are unoptimizable dead parameters. This mirrors
+    # `include_diagonal` in TamFermion.enumerate_ferm_excitations, which the Trotter ansatz
+    # sets to `!antihermitian` for the same reason.
 
     t_dict = Dict{Vector{Tuple{Coordinate{2,Int64},Int,Symbol}},T}()
     site_list = sort(indexer.a, order=lattice_ordering) #ensuring normal ordering
     all_ops(label) = combinations([(s, σ, label) for s in site_list for σ in 1:2], n)
     equal_spin(create, annihilate) = sum((σ * 2 - 3) for (s, σ, _) in create) == sum((σ * 2 - 3) for (s, σ, _) in annihilate)
     geq_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] <= [(s.coordinates..., σ) for (s, σ, _) in annihilate]
+    diagonal_ops(create, annihilate) = [(s.coordinates..., σ) for (s, σ, _) in create] == [(s.coordinates..., σ) for (s, σ, _) in annihilate]
 
     all_pairs = collect(Iterators.product(all_ops(:create), all_ops(:annihilate)))
 
@@ -1624,7 +1676,7 @@ function create_randomized_nth_order_operator(n::Int, indexer::CombinationIndexe
                 is_momentum_conserved = true
             end
 
-            if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved
+            if (!omit_H_conj || geq_ops(ops_create, ops_annihilate)) && (!conserve_spin || equal_spin(ops_create, ops_annihilate)) && is_momentum_conserved && !(omit_diagonal && diagonal_ops(ops_create, ops_annihilate))
                 if key ∉ keys(local_dict)
                     local_dict[key] = (2 * rand() - 1) / 2 * magnitude
                 else

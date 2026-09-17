@@ -57,7 +57,9 @@ function ChainRulesCore.rrule(::typeof(adjoint_loss), A::AbstractArray, gates, t
 
     function adjoint_loss_pullback(y)
         t = @elapsed begin
-            init_adjoint_state = (2 * overlap * conj(y)) * target_dev
+            scale = 2 * overlap * conj(y)
+            scale_val = (datatype <: Real) ? datatype(real(scale)) : datatype(scale)
+            init_adjoint_state = to_device_vector(scale_val .* target_dev, use_gpu, datatype)
             grad_steps = backward_adjoint_propagation(A_steps, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials;
                 antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
             grad_A = contract_shared_gradient(grad_steps, param_map, num_gates, num_exponentials)
@@ -91,7 +93,8 @@ function energy_loss(A::AbstractArray, gates, tau_terms, H, ref::AbstractArray, 
     check_antihermitian_diagonal_gates(gates, antihermitian)
     A_steps = expand_shared_coefficients(A, param_map, length(gates), num_exponentials)
     ref_evolved = apply_unitary(A_steps, gates, ref, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
-    return real(dot(ref_evolved, H * ref_evolved))
+    H_dev = to_device_matrix(H, use_gpu, datatype)
+    return real(dot(ref_evolved, H_dev * ref_evolved))
 end
 
 function ChainRulesCore.rrule(::typeof(energy_loss), A::AbstractArray, gates, tau_terms, H, ref::AbstractArray, basis, N::Int;
@@ -103,10 +106,13 @@ function ChainRulesCore.rrule(::typeof(energy_loss), A::AbstractArray, gates, ta
     phis = apply_unitary_checkpoints(A_steps, gates, ref, basis, N, num_exponentials;
         antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
     evolved_ref = last_checkpoint(phis)
-    loss = real(dot(evolved_ref, H * evolved_ref))
+    H_dev = to_device_matrix(H, use_gpu, datatype)
+    loss = real(dot(evolved_ref, H_dev * evolved_ref))
     println("loss: $loss")
     function energy_loss_pullback(y)
-        init_adjoint_state = (-2 * conj(y)) * (H * evolved_ref)
+        scale = -2 * conj(y)
+        scale_val = (datatype <: Real) ? datatype(real(scale)) : datatype(scale)
+        init_adjoint_state = to_device_vector(scale_val .* (H_dev * evolved_ref), use_gpu, datatype)
         grad_steps = backward_adjoint_propagation(A_steps, gates, tau_terms, phis, init_adjoint_state, basis, N, num_exponentials;
             antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype)
         grad_A = contract_shared_gradient(grad_steps, param_map, num_gates, num_exponentials)

@@ -1,0 +1,31 @@
+================================================================================
+Timestamp: 2026-09-14T22:57:29.290
+Command run: julia testing/test_trotter_gpu_streaming_fix.jl 
+================================================================================
+================================================================================
+=== Test Trotter GPU Gate Streaming Fix (pre_cache_all=false / stream_tau) ===
+================================================================================
+
+--- 1. Checking function signatures and keywords ---
+  [PASS] get_gpu_gate_ops accepts stream_tau keyword argument
+  [PASS] prepare_gpu_gate_ops is an alias for get_gpu_gate_ops
+  [PASS] gpu_apply_gate_exp! accepts tau keyword argument
+  [PASS] apply_unitary_checkpoints accepts stream_tau keyword argument
+  [PASS] backward_adjoint_propagation accepts stream_tau keyword argument
+  [PASS] apply_unitary accepts stream_tau keyword argument
+
+--- 2. Testing GpuGateOps with pre_cache_all = false (tau_dev = nothing) ---
+  [PASS] GpuGateOps initialized with tau_dev containing nothing (streaming mode)
+  [PASS] _get_gpu_tau_mat correctly returns nothing for antihermitian diagonal gate
+
+--- 3. Testing build_direct_sparse_tau on 2x2 lattice ---
+  [PASS] Gate enumeration correctly filters diagonal gates for antihermitian (none present)
+  [PASS] Gate enumeration includes diagonal gates for standard hermitian
+
+--- 4. Testing pre_cache_all threshold logic ---
+  [PASS] Small basis size (400400 bytes) triggers pre_cache_all = true
+  [PASS] 4x4 basis size (4.12 GB) triggers pre_cache_all = false
+
+================================================================================
+=== All streaming fix assertions passed successfully! ===
+================================================================================

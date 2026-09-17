@@ -1,0 +1,72 @@
+--- a/experimenting/ed/fig4_lib.jl
++++ b/experimenting/ed/fig4_lib.jl
+@@ -179,6 +179,20 @@
+ end
+ 
+ """
++    is_diagonal_key(key) -> Bool
++
++True when `key`'s created modes are exactly its annihilated modes, i.e. it is a
++density-density (diagonal) term such as `n_a n_b`. Mirrors the `diagonal_ops` test inside
++[`create_randomized_nth_order_operator`](@ref); both halves of a key are sorted the same
++way, so an elementwise comparison suffices.
++"""
++function is_diagonal_key(key)
++    n = div(length(key), 2)
++    modes(ops) = [(op[1].coordinates..., op[2]) for op in ops]
++    return modes(@view key[1:n]) == modes(@view key[n+1:end])
++end
++
++"""
+     build_order_structures(t_keys, indexer, sign_convention, antihermitian)
+         -> (orders, structures, t_keys_exact, flat_to_order_and_idx)
+ 
+@@ -255,6 +269,9 @@
+     mapping_factors = zeros(Float64, num_gates)
+ 
+     d_dim = length(basis_sector)
++    # Counted across threads so the (expected, benign) diagonal-gate skips below are
++    # reported rather than silently dropped.
++    n_diag_skipped = Threads.Atomic{Int}(0)
+ 
+     # Each gate's mapping entry is independent of every other gate's (distinct
+     # g_idx slots in mapping_indices/mapping_factors, no shared mutable state
+@@ -269,13 +286,25 @@
+         v_in = zeros(ComplexF64, d_dim)
+         v_out = zeros(ComplexF64, d_dim)
+ 
+-        ck = Trotter.key_to_canonical(fgate_to_label(g, lvec))
++        gate_label = fgate_to_label(g, lvec)
++        ck = Trotter.key_to_canonical(gate_label)
+ 
+         idx_JLD2 = canonical_index(canon_to_idx_JLD2, ck)
+         idx_JLD2 == 0 && continue
+ 
+         idx_exact = canonical_index(canon_to_idx_exact, ck)
+         if idx_exact == 0
++            # An antihermitian generator is built as X - X'. A diagonal (density-density)
++            # key gives a hermitian X, so its generator is identically zero -- which is why
++            # `ensure_operator_structure!` omits those keys entirely when antihermitian=true.
++            # The Trotter gate set is enumerated with include_diagonal=true and saved JLD2
++            # key lists still carry them, so a diagonal gate legitimately has no exact-exp
++            # counterpart: leave its mapping at 0 rather than failing. Any other missing key
++            # is a real structure mismatch and stays fatal.
++            if antihermitian && is_diagonal_key(gate_label)
++                Threads.atomic_add!(n_diag_skipped, 1)
++                continue
++            end
+             error("Gate $g_idx (label $ck) has no matching key in exact-exp t_keys (struct_data).")
+         end
+ 
+@@ -307,6 +336,11 @@
+         end
+     end
+ 
++    n_diag_skipped[] > 0 && println(
++        "  Skipped $(n_diag_skipped[]) diagonal (density-density) gate(s) with no exact-exp " *
++        "counterpart: their antihermitian generator is identically zero."
++    )
++
+     return mapping_indices, mapping_factors
+ end
+ 

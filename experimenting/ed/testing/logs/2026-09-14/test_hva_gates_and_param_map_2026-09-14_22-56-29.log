@@ -1,0 +1,8 @@
+================================================================================
+Timestamp: 2026-09-14T22:56:29.312
+Command run: julia testing/test_hva_gates_and_param_map.jl 
+================================================================================
+Test Summary: | Pass  Total  Time
+HVA gate set  |  139    139  3.6s
+Test Summary:   | Pass  Total  Time
+sharing helpers |   15     15  

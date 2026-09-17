@@ -1,0 +1,146 @@
+================================================================================
+Timestamp: 2026-09-15T12:02:16.933
+Command run: julia testing/test_trotter_datatype_gpu.jl --use_gpu
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION DATATYPE & GPU REGRESSION TESTS
+==========================================================
+Requested use_gpu: true
+Is CUDA loaded:    true
+CUDA functional:   true
+GPU Device:        Tesla T4
+Threads available: 1
+Basis dimension: 256
+
+--- Test 1: Float32 Antihermitian Overlap Loss & Gradient ---
+loss: 0.42301422357559204
+Forward time: 0.189449438
+Gradient time: 0.252890335
+CPU Float32 Loss: 0.42301417145964926, Gradient norm: 0.20127131637271223
+loss: 0.42301422357559204
+Forward time: 0.035280201
+Gradient time: 2.695648154
+GPU Float32 Loss: 0.42301422357559204, Gradient norm: 0.20127132035388506
+Loss Diff (CPU vs GPU Float32): 5.211594278353715e-8
+Max Grad Diff (CPU vs GPU Float32): 1.365459309510264e-8
+PASSED: Float32 Antihermitian GPU Loss and Gradient match CPU without cuSPARSE error.
+
+--- Test 2: Multi-start Initialization on GPU with Float32 ---
+Sampling 5 initial configurations for multi-start...
+┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+loss: 0.4210812449455261
+Forward time: 0.002286416
+Gradient time: 0.004377921
+loss: 0.42468708753585815
+Forward time: 0.001719845
+Gradient time: 0.004166132
+loss: 0.4246872067451477
+Forward time: 0.001604722
+Gradient time: 0.004108564
+loss: 0.42468738555908203
+Forward time: 0.001603173
+Gradient time: 0.004130865
+loss: 0.4246870279312134
+Forward time: 0.001563162
+Gradient time: 0.004055826
+Performing quick optimization on top 2 candidates...
+┌ Warning: CUDA is loaded. Running loop serially to prevent segmentation faults from concurrent CPU-GPU GC interactions.
+└ @ Main.Trotter.TrotterOptimization ~/research/ML-signproblem/experimenting/ed/utility_functions.jl:343
+loss: 0.42468738555908203
+Forward time: 0.001877728
+Gradient time: 0.004265027
+loss: 0.4050876498222351
+Forward time: 0.002052626
+Gradient time: 0.004306866
+loss: 0.37347590923309326
+Forward time: 0.001669106
+Gradient time: 0.004184599
+loss: 0.3659976124763489
+Forward time: 0.001651955
+Gradient time: 0.00415815
+loss: 0.3588700294494629
+Forward time: 0.00161965
+Gradient time: 0.004111333
+loss: 0.35695576667785645
+Forward time: 0.001618408
+Gradient time: 0.004151203
+loss: 0.4246872067451477
+Forward time: 0.001752217
+Gradient time: 0.004232998
+loss: 0.40508753061294556
+Forward time: 0.001650082
+Gradient time: 0.004133598
+loss: 0.37347573041915894
+Forward time: 0.001630546
+Gradient time: 0.004176956
+loss: 0.3659975528717041
+Forward time: 0.001617125
+Gradient time: 0.004108649
+loss: 0.35887014865875244
+Forward time: 0.001602559
+Gradient time: 0.004158793
+loss: 0.35695594549179077
+Forward time: 0.001599227
+Gradient time: 0.004111322
+Selected best candidate with loss=0.35695576667785645
+PASSED: Multi-start sampling on GPU with Float32 executed successfully.
+
+--- Test 3: Full optimize_unitary on GPU with Float32 ---
+Initial loss (overlap): 0.4264923334121704
+Running main optimization step 1 with LBFGS (maxiters=10, use_gpu=true)...
+loss: 0.4264923334121704
+Forward time: 0.002064669
+Gradient time: 0.004478849
+loss: 0.4072498083114624
+Forward time: 0.001946302
+Gradient time: 0.004250743
+loss: 0.3754831552505493
+Forward time: 0.00169203
+Gradient time: 0.004172843
+loss: 0.36772918701171875
+Forward time: 0.001669622
+Gradient time: 0.004155162
+loss: 0.36175966262817383
+Forward time: 0.001632025
+Gradient time: 0.004157472
+loss: 0.3573876619338989
+Forward time: 0.001610338
+Gradient time: 0.004163284
+loss: 0.3556596040725708
+Forward time: 0.001607408
+Gradient time: 0.004147811
+loss: 0.3554314970970154
+Forward time: 0.001646692
+Gradient time: 0.004145821
+loss: 0.35509806871414185
+Forward time: 0.001616173
+Gradient time: 0.004145481
+loss: 0.3553057909011841
+Forward time: 0.001610822
+Gradient time: 0.004129932
+loss: 0.3550376892089844
+Forward time: 0.001594705
+Gradient time: 0.004129316
+loss: 0.35501420497894287
+Forward time: 0.002034823
+Gradient time: 0.004008854
+    Step 1 (LBFGS) stopped by: Maximum iterations reached (maxiters) (Iterations: 10, Final |g|: 0.0008324254304170609)
+Initial Loss: 0.42301422357559204 -> Optimized Loss: 0.35501420497894287
+PASSED: Full optimize_unitary on GPU with Float32 converged successfully.
+
+--- Test 4: ComplexF32 Hermitian Overlap Loss & Gradient on GPU ---
+loss: 0.4249197840690613
+Forward time: 0.162901137
+Gradient time: 2.104193936
+GPU ComplexF32 Loss: 0.4249197840690613, Gradient norm: 0.2602029674431344
+PASSED: ComplexF32 GPU loss and gradient computed cleanly.
+
+--- Test 5: to_device_matrix and energy_loss on GPU ---
+loss: 18.520359
+GPU Energy Loss: 18.520359, Gradient norm: 7.314425725828036
+PASSED: to_device_matrix and energy_loss with GPU executed cleanly.
+
+==========================================================
+ALL DATATYPE REGRESSION TESTS PASSED SUCCESSFULLY!
+==========================================================

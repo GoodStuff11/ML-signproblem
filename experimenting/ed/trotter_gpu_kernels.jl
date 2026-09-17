@@ -130,17 +130,20 @@ function build_direct_sparse_tau(g::TamFermion.FGate, N::Int, basis::AbstractVec
 end
 
 """
-    get_gpu_gate_ops(gates, N, basis; antihermitian=false, datatype=ComplexF64) -> GpuGateOps
+    get_gpu_gate_ops(gates, N, basis; antihermitian=false, datatype=ComplexF64, stream_tau=nothing) -> GpuGateOps
 
 Retrieve or build precomputed GPU gate operators for rapid matrix-vector gate applications.
+If `stream_tau` is explicitly provided as a boolean, controls whether tau matrices are streamed
+from host CPU RAM (`stream_tau=true`) or all cached on GPU VRAM (`stream_tau=false`).
+If `stream_tau` is `nothing`, automatically determined based on colptr memory heuristic.
 """
-function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antihermitian::Bool=false, datatype::Type{<:Number}=ComplexF64)
+function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antihermitian::Bool=false, datatype::Type{<:Number}=ComplexF64, stream_tau::Union{Nothing,Bool}=nothing)
     CUDA_mod = _get_cuda()
     if CUDA_mod === nothing
         error("CUDA not loaded or available")
     end
 
-    cache_key = hash((length(gates), N, length(basis), antihermitian, datatype))
+    cache_key = hash((length(gates), N, length(basis), antihermitian, datatype, stream_tau))
     if haskey(_GPU_GATE_OPS_CACHE, cache_key)
         return _GPU_GATE_OPS_CACHE[cache_key]
     end
@@ -166,7 +169,11 @@ function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antih
 
     # Pre-cache all tau matrices on GPU only if total colptr memory is small (< 4 GB)
     colptr_bytes_total = num_gates * (d + 1) * 4
-    pre_cache_all = colptr_bytes_total < 4 * 1024^3
+    pre_cache_all = if stream_tau !== nothing
+        !stream_tau
+    else
+        colptr_bytes_total < 4 * 1024^3
+    end
 
     for (k, g) in enumerate(gates)
         sp_mat, diag_flag, s0 = build_direct_sparse_tau(g, N, basis, sortOrder, spec_masks[k]; antihermitian=antihermitian)
@@ -195,6 +202,8 @@ function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antih
     return ops
 end
 
+const prepare_gpu_gate_ops = get_gpu_gate_ops
+
 """
     _get_gpu_tau_mat(gpu_ops, k)
 
@@ -212,11 +221,13 @@ function _get_gpu_tau_mat(gpu_ops::GpuGateOps, k::Int)
 end
 
 """
-    gpu_apply_gate_exp!(v_out, v_in, gpu_ops, k, a; antihermitian=false, inverse=false)
+    gpu_apply_gate_exp!(v_out, v_in, gpu_ops, k, a; antihermitian=false, inverse=false, tau=nothing)
 
 Apply the exponential of gate `k` with parameter `a` to device vector `v_in`, storing result in `v_out`.
+If `tau` is passed, it is reused directly, avoiding re-streaming the sparse matrix from host memory.
 """
-function gpu_apply_gate_exp!(v_out::AbstractVector, v_in::AbstractVector, gpu_ops::GpuGateOps, k::Int, a::Float64; antihermitian::Bool=false, inverse::Bool=false)
+function gpu_apply_gate_exp!(v_out::AbstractVector, v_in::AbstractVector, gpu_ops::GpuGateOps, k::Int, a::Float64;
+    antihermitian::Bool=false, inverse::Bool=false, tau=nothing)
     CUDA_mod = _get_cuda()
     a_val = inverse ? -a : a
 
@@ -226,22 +237,22 @@ function gpu_apply_gate_exp!(v_out::AbstractVector, v_in::AbstractVector, gpu_op
         else
             sign0 = gpu_ops.sign0_val[k]
             phase_val = exp(2im * a_val * sign0)
-            tau = gpu_ops.tau_dev[k]
-            CUDA_mod.CUSPARSE.mv!('N', eltype(v_out)(1.0), tau, v_in, eltype(v_out)(0.0), gpu_ops.w1, 'O')
+            tau_mat = isnothing(tau) ? _get_gpu_tau_mat(gpu_ops, k) : tau
+            CUDA_mod.CUSPARSE.mv!('N', eltype(gpu_ops.w1)(1.0), tau_mat, v_in, eltype(gpu_ops.w1)(0.0), gpu_ops.w1, 'O')
             coeff = eltype(v_out)((phase_val - 1.0) / (2.0 * sign0))
             v_out .= v_in .+ coeff .* gpu_ops.w1
         end
         return v_out
     end
 
-    tau = gpu_ops.tau_dev[k]
+    tau_mat = isnothing(tau) ? _get_gpu_tau_mat(gpu_ops, k) : tau
     ca = cos(a_val)
     sa = sin(a_val)
 
     # w1 = tau * v_in
-    CUDA_mod.CUSPARSE.mv!('N', eltype(v_out)(1.0), tau, v_in, eltype(v_out)(0.0), gpu_ops.w1, 'O')
+    CUDA_mod.CUSPARSE.mv!('N', eltype(gpu_ops.w1)(1.0), tau_mat, v_in, eltype(gpu_ops.w1)(0.0), gpu_ops.w1, 'O')
     # w2 = tau * w1 = tau^2 * v_in
-    CUDA_mod.CUSPARSE.mv!('N', eltype(v_out)(1.0), tau, gpu_ops.w1, eltype(v_out)(0.0), gpu_ops.w2, 'O')
+    CUDA_mod.CUSPARSE.mv!('N', eltype(gpu_ops.w1)(1.0), tau_mat, gpu_ops.w1, eltype(gpu_ops.w1)(0.0), gpu_ops.w2, 'O')
 
     if antihermitian
         coeff_tau2 = eltype(v_out)(1.0 - ca)
@@ -261,20 +272,58 @@ end
 Transfer vector `v` to GPU device memory if `use_gpu=true`, converted to `datatype`.
 """
 function to_device_vector(v::AbstractVector, use_gpu::Bool, datatype::Type{<:Number})
+    CUDA_mod = _get_cuda()
+    if use_gpu && _has_cuda()
+        if v isa CUDA_mod.CuArray && eltype(v) == datatype
+            return v
+        end
+    else
+        is_cu = CUDA_mod !== nothing && (v isa CUDA_mod.CuArray)
+        if !is_cu && eltype(v) == datatype
+            return v
+        end
+    end
+
     v_typed = if datatype <: Real && eltype(v) <: Complex
-        datatype.(real.(strip_global_phase(v)[1]))
+        v_cpu = (CUDA_mod !== nothing && v isa CUDA_mod.CuArray) ? Array(v) : v
+        datatype.(real.(strip_global_phase(v_cpu)[1]))
     else
         datatype.(v)
     end
+
     if use_gpu && _has_cuda()
-        CUDA_mod = _get_cuda()
-        if v isa CUDA_mod.CuArray && eltype(v) == datatype
-            return v
+        if v_typed isa CUDA_mod.CuArray
+            return v_typed
         else
             return CUDA_mod.CuArray(v_typed)
         end
     else
-        return (eltype(v) == datatype) ? v : v_typed
+        return (CUDA_mod !== nothing && v_typed isa CUDA_mod.CuArray) ? Array(v_typed) : v_typed
+    end
+end
+
+"""
+    to_device_matrix(mat, use_gpu, datatype)
+
+Transfer a matrix to GPU CuSparseMatrixCSC if `use_gpu=true` converted to `datatype`.
+"""
+function to_device_matrix(mat::AbstractMatrix, use_gpu::Bool, datatype::Type{<:Number})
+    CUDA_mod = _get_cuda()
+    if use_gpu && _has_cuda()
+        if mat isa CUDA_mod.CUSPARSE.CuSparseMatrixCSC && eltype(mat) == datatype
+            return mat
+        else
+            sp = mat isa SparseMatrixCSC ? mat : sparse(mat)
+            return CUDA_mod.CUSPARSE.CuSparseMatrixCSC(SparseMatrixCSC{datatype, Int32}(sp))
+        end
+    else
+        is_cu_sp = CUDA_mod !== nothing && (mat isa CUDA_mod.CUSPARSE.CuSparseMatrixCSC)
+        if !is_cu_sp && (mat isa SparseMatrixCSC) && eltype(mat) == datatype
+            return mat
+        else
+            sp_cpu = is_cu_sp ? SparseMatrixCSC(mat) : (mat isa SparseMatrixCSC ? mat : sparse(mat))
+            return SparseMatrixCSC{datatype, Int32}(sp_cpu)
+        end
     end
 end
 
@@ -285,8 +334,7 @@ Transfer sparse operators to GPU CuSparseMatrixCSC if `use_gpu=true`.
 """
 function to_device_ops(ops::Vector{<:AbstractMatrix}, use_gpu::Bool, datatype::Type{<:Number})
     if use_gpu && _has_cuda()
-        CUDA_mod = _get_cuda()
-        return [CUDA_mod.CUSPARSE.CuSparseMatrixCSC(SparseMatrixCSC{datatype, Int32}(sparse(op))) for op in ops]
+        return [to_device_matrix(op, true, datatype) for op in ops]
     end
     return ops
 end

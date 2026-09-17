@@ -6,8 +6,6 @@ and CairoMakie plot-building functions shared by trotter_exp_testing.jl and othe
 analysis scripts (e.g. plot_dimH_and_barren_analysis.jl). This file defines no
 `(@main)` entry point and has no side effects beyond `include`s — it is meant to be
 `include`d from a script, never run directly.
-
-Extracted verbatim (no logic changes) from trotter_exp_testing.jl.
 =#
 
 using Lattices
@@ -72,6 +70,35 @@ set_theme!(theme_latexfonts(), fontsize=10)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 """
+    resolve_u_file(folder, prefix, u_i, U_val=NaN) -> String
+
+Path to the per-U JLD2 file of `prefix`. Runs name these files by U-index
+(`U/0.25 + 1`), but older runs named them by sweep position, so fall back to `u_i`
+and then `u_i + 1` (legacy off-by-one) to keep both layouts loadable. Returns the
+last candidate when none exist, so callers can still test it with `isfile`.
+"""
+function resolve_u_file(folder::String, prefix::String, u_i::Int, U_val::Float64=NaN)
+    candidates = String[]
+    if !isnan(U_val) && U_val > 0
+        push!(candidates, joinpath(folder, "$(prefix)_u_$(round(Int, U_val / 0.25) + 1).jld2"))
+    end
+    push!(candidates, joinpath(folder, "$(prefix)_u_$(u_i).jld2"))
+    push!(candidates, joinpath(folder, "$(prefix)_u_$(u_i + 1).jld2"))
+    idx = findfirst(isfile, candidates)
+    return isnothing(idx) ? last(candidates) : candidates[idx]
+end
+
+"""
+    load_shared_dict(folder, prefix) -> Dict or nothing
+
+Load the `"dict"` payload of `<prefix>_shared.jld2`, or nothing if the file is missing.
+"""
+function load_shared_dict(folder::String, prefix::String)
+    fpath = joinpath(folder, "$(prefix)_shared.jld2")
+    return isfile(fpath) ? load(fpath)["dict"] : nothing
+end
+
+"""
     load_exact_exp_coefficients(folder, prefix, u_i) -> Vector{Float64} or nothing
 
 Load the optimized exact-exponential coefficient vector for U-index u_i.
@@ -82,22 +109,11 @@ This function returns the first non-Nothing numeric sub-array, cast to Float64.
 Returns nothing if the file is missing or all elements are Nothing.
 """
 function load_exact_exp_coefficients(folder::String, prefix::String, u_i::Int, U_val::Float64=NaN)
-    if U_val == 0.0
-        return nothing
-    end
-    fpath = if !isnan(U_val) && U_val > 0
-        u_idx = round(Int, U_val / 0.25) + 1
-        p = joinpath(folder, "$(prefix)_u_$(u_idx).jld2")
-        isfile(p) ? p : (isfile(joinpath(folder, "$(prefix)_u_$(u_i).jld2")) ? joinpath(folder, "$(prefix)_u_$(u_i).jld2") : joinpath(folder, "$(prefix)_u_$(u_i + 1).jld2"))
-    else
-        p = joinpath(folder, "$(prefix)_u_$(u_i).jld2")
-        isfile(p) ? p : joinpath(folder, "$(prefix)_u_$(u_i + 1).jld2")
-    end
+    U_val == 0.0 && return nothing
+    fpath = resolve_u_file(folder, prefix, u_i, U_val)
     isfile(fpath) || return nothing
-    d = load(fpath)["dict"]
-    raw = d["coefficients"]
     flat_coeffs = Float64[]
-    for elem in raw
+    for elem in load(fpath)["dict"]["coefficients"]
         if elem isa AbstractArray{<:Number}
             append!(flat_coeffs, elem)
         end
@@ -113,16 +129,12 @@ from the shared JLD2 file. Returns the non-nothing key list, or nothing if the
 file is missing or no keys are available.
 """
 function load_exact_exp_keys(folder::String, prefix::String)
-    fpath = joinpath(folder, "$(prefix)_shared.jld2")
-    isfile(fpath) || return nothing
-    d = load(fpath)["dict"]
-    labels = get(d, "coefficient_labels", nothing)
+    d = load_shared_dict(folder, prefix)
+    labels = isnothing(d) ? nothing : get(d, "coefficient_labels", nothing)
     isnothing(labels) && return nothing
     flat_keys = []
     for lbl in labels
-        if !isnothing(lbl)
-            append!(flat_keys, lbl)
-        end
+        isnothing(lbl) || append!(flat_keys, lbl)
     end
     return isempty(flat_keys) ? nothing : flat_keys
 end
@@ -133,10 +145,99 @@ end
 Load the instructions dict from the shared JLD2 file of exact-exponential optimization.
 """
 function load_exact_exp_instructions(folder::String, prefix::String)
-    fpath = joinpath(folder, "$(prefix)_shared.jld2")
-    isfile(fpath) || return nothing
-    d = load(fpath)["dict"]
-    return get(d, "instructions", nothing)
+    d = load_shared_dict(folder, prefix)
+    return isnothing(d) ? nothing : get(d, "instructions", nothing)
+end
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# OPERATOR-KEY / GENERATOR HELPERS
+# ═══════════════════════════════════════════════════════════════════════════════
+
+"""
+    key_orders(t_keys) -> Vector{Int}
+
+The distinct excitation orders (`length(key) ÷ 2`) present in `t_keys`, ascending.
+"""
+key_orders(t_keys::AbstractVector) = sort!(unique(div(length(k), 2) for k in t_keys))
+
+"""
+    canonical_index_map(t_keys) -> Dict
+
+Map each key's canonical form to its position in `t_keys`.
+"""
+canonical_index_map(t_keys::AbstractVector) =
+    Dict(Trotter.key_to_canonical(k) => idx for (idx, k) in enumerate(t_keys))
+
+"""
+    canonical_index(canon_to_idx, ck) -> Int
+
+Position of canonical key `ck`, falling back to its conjugate; 0 if neither is present.
+"""
+function canonical_index(canon_to_idx::AbstractDict, ck)
+    idx = get(canon_to_idx, ck, 0)
+    return idx == 0 ? get(canon_to_idx, Trotter.conjugate_canonical(ck), 0) : idx
+end
+
+"""
+    is_diagonal_key(key) -> Bool
+
+True when `key`'s created modes are exactly its annihilated modes, i.e. it is a
+density-density (diagonal) term such as `n_a n_b`. Mirrors the `diagonal_ops` test inside
+[`create_randomized_nth_order_operator`](@ref); both halves of a key are sorted the same
+way, so an elementwise comparison suffices.
+"""
+function is_diagonal_key(key)
+    n = div(length(key), 2)
+    modes(ops) = [(op[1].coordinates..., op[2]) for op in ops]
+    return modes(@view key[1:n]) == modes(@view key[n+1:end])
+end
+
+"""
+    build_order_structures(t_keys, indexer, sign_convention, antihermitian)
+        -> (orders, structures, t_keys_exact, flat_to_order_and_idx)
+
+Precompute the operator structure of every excitation order present in `t_keys`.
+`structures` is keyed by order, `t_keys_exact` concatenates the per-order key lists
+in ascending order, and `flat_to_order_and_idx` maps a position in `t_keys_exact`
+back to its `(order, index-within-order)`.
+"""
+function build_order_structures(
+    t_keys::AbstractVector, indexer, sign_convention::Symbol, antihermitian::Bool
+)
+    orders = key_orders(t_keys)
+    operator_cache = Dict{Int,Dict{Symbol,Any}}()
+    structures = Dict{Int,Any}()
+    t_keys_exact = []
+    flat_to_order_and_idx = Dict{Int,Tuple{Int,Int}}()
+
+    for ord in orders
+        struct_data = ensure_operator_structure!(
+            ord, operator_cache, indexer, true, false, true,
+            sign_convention, ColSnake(), Dict(), antihermitian, 1.0
+        )
+        structures[ord] = struct_data
+        for local_idx in 1:length(struct_data[:t_keys])
+            flat_to_order_and_idx[length(t_keys_exact)+local_idx] = (ord, local_idx)
+        end
+        append!(t_keys_exact, struct_data[:t_keys])
+    end
+
+    return orders, structures, t_keys_exact, flat_to_order_and_idx
+end
+
+"""
+    build_generator_matrix(struct_data, coeffs, dim, antihermitian) -> SparseMatrixCSC
+
+Assemble the (anti)hermitian generator of one order block from its structure data
+and that block's coefficient vector.
+"""
+function build_generator_matrix(struct_data, coeffs::Vector{Float64}, dim::Int, antihermitian::Bool)
+    vals = update_values(
+        struct_data[:signs], struct_data[:param_index_map], coeffs,
+        struct_data[:parameter_mapping], struct_data[:parity]
+    )
+    mat = sparse(struct_data[:rows], struct_data[:cols], vals, dim, dim)
+    return antihermitian ? make_antihermitian(mat) : make_hermitian(mat)
 end
 
 """
@@ -157,45 +258,20 @@ function build_exact_to_trotter_mapping(
     N_sites = prod(lvec)
     basis_sector = Trotter.get_basis_sector(indexer, lvec, N_sites)
 
-    present_orders = Int[]
-    for k in t_keys_JLD2
-        ord = div(length(k), 2)
-        if ord ∉ present_orders
-            push!(present_orders, ord)
-        end
-    end
-    sort!(present_orders)
+    _, order_structures, t_keys_exact, flat_to_order_and_idx =
+        build_order_structures(t_keys_JLD2, indexer, sign_convention, antihermitian)
 
-    operator_cache = Dict{Int,Dict{Symbol,Any}}()
-    order_structures = Dict{Int,Any}()
-    t_keys_exact = []
-
-    flat_to_order_and_idx = Dict{Int,Tuple{Int,Int}}()
-    flat_idx = 1
-
-    for ord in present_orders
-        struct_data = ensure_operator_structure!(ord, operator_cache, indexer, true, false, true, sign_convention, ColSnake(), Dict(), antihermitian, 1.0)
-        order_structures[ord] = struct_data
-        t_keys_exact_order = struct_data[:t_keys]
-        append!(t_keys_exact, t_keys_exact_order)
-
-        for local_idx in 1:length(t_keys_exact_order)
-            flat_to_order_and_idx[flat_idx] = (ord, local_idx)
-            flat_idx += 1
-        end
-    end
-
-    canon_keys_JLD2 = [Trotter.key_to_canonical(k) for k in t_keys_JLD2]
-    canon_to_idx_JLD2 = Dict(k => idx for (idx, k) in enumerate(canon_keys_JLD2))
-
-    canon_keys_exact = [Trotter.key_to_canonical(k) for k in t_keys_exact]
-    canon_to_idx_exact = Dict(k => idx for (idx, k) in enumerate(canon_keys_exact))
+    canon_to_idx_JLD2 = canonical_index_map(t_keys_JLD2)
+    canon_to_idx_exact = canonical_index_map(t_keys_exact)
 
     num_gates = length(gates)
     mapping_indices = zeros(Int, num_gates)
     mapping_factors = zeros(Float64, num_gates)
 
     d_dim = length(basis_sector)
+    # Counted across threads so the (expected, benign) diagonal-gate skips below are
+    # reported rather than silently dropped.
+    n_diag_skipped = Threads.Atomic{Int}(0)
 
     # Each gate's mapping entry is independent of every other gate's (distinct
     # g_idx slots in mapping_indices/mapping_factors, no shared mutable state
@@ -210,47 +286,42 @@ function build_exact_to_trotter_mapping(
         v_in = zeros(ComplexF64, d_dim)
         v_out = zeros(ComplexF64, d_dim)
 
-        lbl = fgate_to_label(g, lvec)
-        ck = Trotter.key_to_canonical(lbl)
+        gate_label = fgate_to_label(g, lvec)
+        ck = Trotter.key_to_canonical(gate_label)
 
-        idx_JLD2 = get(canon_to_idx_JLD2, ck, 0)
-        if idx_JLD2 == 0
-            idx_JLD2 = get(canon_to_idx_JLD2, Trotter.conjugate_canonical(ck), 0)
-        end
-        if idx_JLD2 == 0
-            continue
-        end
+        idx_JLD2 = canonical_index(canon_to_idx_JLD2, ck)
+        idx_JLD2 == 0 && continue
 
-        idx_exact = get(canon_to_idx_exact, ck, 0)
+        idx_exact = canonical_index(canon_to_idx_exact, ck)
         if idx_exact == 0
-            idx_exact = get(canon_to_idx_exact, Trotter.conjugate_canonical(ck), 0)
-        end
-        if idx_exact == 0
+            # An antihermitian generator is built as X - X'. A diagonal (density-density)
+            # key gives a hermitian X, so its generator is identically zero -- which is why
+            # `ensure_operator_structure!` omits those keys entirely when antihermitian=true.
+            # The Trotter gate set is enumerated with include_diagonal=true and saved JLD2
+            # key lists still carry them, so a diagonal gate legitimately has no exact-exp
+            # counterpart: leave its mapping at 0 rather than failing. Any other missing key
+            # is a real structure mismatch and stays fatal.
+            if antihermitian && is_diagonal_key(gate_label)
+                Threads.atomic_add!(n_diag_skipped, 1)
+                continue
+            end
             error("Gate $g_idx (label $ck) has no matching key in exact-exp t_keys (struct_data).")
         end
 
-        # Build sparse mat_l
+        # Build the one-hot generator for this gate's operator
         ord, i = flat_to_order_and_idx[idx_exact]
         struct_data = order_structures[ord]
-        P = length(struct_data[:t_keys])
-        t_l = zeros(Float64, P)
+        t_l = zeros(Float64, length(struct_data[:t_keys]))
         t_l[i] = 1.0
-        vals = update_values(struct_data[:signs], struct_data[:param_index_map], t_l, struct_data[:parameter_mapping], struct_data[:parity])
-        mat_l = sparse(struct_data[:rows], struct_data[:cols], vals, d_dim, d_dim)
-        if antihermitian
-            mat_l = make_antihermitian(mat_l)
-        else
-            mat_l = make_hermitian(mat_l)
-        end
+        mat_l = build_generator_matrix(struct_data, t_l, d_dim, antihermitian)
+
         I_nz, J_nz, V_nz = findnz(mat_l)
         # `mat_l` is built against the shared sparsity pattern (struct_data[:rows]/[:cols])
         # of the whole order block, so most stored entries are explicit zeros for this
         # particular one-hot gate; grabbing findnz's first entry would almost always land
         # on one of those structural zeros instead of the gate's actual matrix element.
         nz_pos = findfirst(v -> abs(v) > 1e-12, V_nz)
-        if isnothing(nz_pos)
-            continue
-        end
+        isnothing(nz_pos) && continue
         r, c, val_E = I_nz[nz_pos], J_nz[nz_pos], real(V_nz[nz_pos])
 
         # Evaluate LinearMap column c
@@ -260,11 +331,15 @@ function build_exact_to_trotter_mapping(
         val_T = real(v_out[r])
 
         if abs(val_T) > 1e-12
-            f = val_E / val_T
             mapping_indices[g_idx] = idx_JLD2
-            mapping_factors[g_idx] = f
+            mapping_factors[g_idx] = val_E / val_T
         end
     end
+
+    n_diag_skipped[] > 0 && println(
+        "  Skipped $(n_diag_skipped[]) diagonal (density-density) gate(s) with no exact-exp " *
+        "counterpart: their antihermitian generator is identically zero."
+    )
 
     return mapping_indices, mapping_factors
 end
@@ -328,12 +403,10 @@ Assumes the Hamiltonian is real and Hermitian (valid for Hubbard in momentum bas
 """
 function compute_gs_states(H_hop, H_int, U_values::Vector{Float64})
     n_U = length(U_values)
-    dim = size(H_hop, 1)
     gs_states = Vector{Vector{ComplexF64}}(undef, n_U)
     gs_energies = fill(NaN, n_U)
     for u_i in 1:n_U
-        H_u = H_hop + U_values[u_i] * H_int
-        vals, vecs = eigen(Symmetric(Matrix(real(H_u))))
+        vals, vecs = eigen(Symmetric(Matrix(real(H_hop + U_values[u_i] * H_int))))
         gs_states[u_i] = ComplexF64.(vecs[:, 1])
         gs_energies[u_i] = vals[1]
     end
@@ -342,7 +415,7 @@ end
 
 """
     compute_exact_exp_energies_and_overlaps(exact_coeffs_raw, t_keys_JLD2, indexer, lvec, basis_ints, ref_state, gs_states, H_hop_mom, H_int_mom, U_values; antihermitian, sign_convention)
-        -> (Vector{Float64}, Vector{Float64})
+        -> (energies, overlaps, exact_states)
 
 Compute the actual Hamiltonian energy and overlap with the ground state for the exact exponential state:
     ψ_exact = exp(i M) |ref_state⟩
@@ -370,31 +443,16 @@ function compute_exact_exp_energies_and_overlaps(
     # 1. Reconstruct basis_sector from indexer
     N_sites = prod(lvec)
     basis_sector = Trotter.get_basis_sector(indexer, lvec, N_sites)
+    d_dim = length(basis_sector)
 
     # Build state mappings
     state_to_idx = Dict(val => idx for (idx, val) in enumerate(basis_ints))
     perm = [state_to_idx[val] for val in basis_sector]
     inv_perm = invperm(perm)
 
-    # Map JLD2 keys
-    canon_keys_JLD2 = [Trotter.key_to_canonical(k) for k in t_keys_JLD2]
-    canon_to_idx_JLD2 = Dict(k => idx for (idx, k) in enumerate(canon_keys_JLD2))
-
-    # Determine present orders
-    present_orders = Int[]
-    for k in t_keys_JLD2
-        ord = div(length(k), 2)
-        if ord ∉ present_orders
-            push!(present_orders, ord)
-        end
-    end
-    sort!(present_orders)
-
-    operator_cache = Dict{Int,Dict{Symbol,Any}}()
-    order_structures = Dict{Int,Any}()
-    for ord in present_orders
-        order_structures[ord] = ensure_operator_structure!(ord, operator_cache, indexer, true, false, true, sign_convention, ColSnake(), Dict(), antihermitian, 1.0)
-    end
+    canon_to_idx_JLD2 = canonical_index_map(t_keys_JLD2)
+    present_orders, order_structures, _, _ =
+        build_order_structures(t_keys_JLD2, indexer, sign_convention, antihermitian)
 
     for u_i in 1:n_U
         coeffs = exact_coeffs_raw[u_i]
@@ -414,34 +472,18 @@ function compute_exact_exp_energies_and_overlaps(
         # Apply sequential unitaries order-by-order
         for ord in present_orders
             struct_data = order_structures[ord]
-            t_keys_exact = struct_data[:t_keys]
-
-            coeffs_exact_order = zeros(Float64, length(t_keys_exact))
-            for (idx_exact, key_exact) in enumerate(t_keys_exact)
-                ck = Trotter.key_to_canonical(key_exact)
-                idx_JLD2 = get(canon_to_idx_JLD2, ck, 0)
-                if idx_JLD2 == 0
-                    idx_JLD2 = get(canon_to_idx_JLD2, Trotter.conjugate_canonical(ck), 0)
+            coeffs_exact_order = [
+                let idx_JLD2 = canonical_index(canon_to_idx_JLD2, Trotter.key_to_canonical(key_exact))
+                    idx_JLD2 == 0 ? 0.0 : coeffs[idx_JLD2]
                 end
-                if idx_JLD2 == 0
-                    coeffs_exact_order[idx_exact] = 0.0
-                else
-                    coeffs_exact_order[idx_exact] = coeffs[idx_JLD2]
-                end
-            end
+                for key_exact in struct_data[:t_keys]
+            ]
 
-            vals = update_values(struct_data[:signs], struct_data[:param_index_map], coeffs_exact_order, struct_data[:parameter_mapping], struct_data[:parity])
-            mat_l_order = sparse(struct_data[:rows], struct_data[:cols], vals, length(basis_sector), length(basis_sector))
-            if antihermitian
-                mat_l_order = make_antihermitian(mat_l_order)
-                # apply_exp (ed_optimization.jl) uses expv (Krylov, sparse-matrix-vector-product
-                # only) above a size threshold instead of materializing a dense exp(M), since a
-                # dense exp(M) is O(dimH^3) and infeasible once dimH reaches the thousands.
-                psi_exact_sector = apply_exp(mat_l_order, psi_exact_sector, 1.0)
-            else
-                mat_l_order = make_hermitian(mat_l_order)
-                psi_exact_sector = apply_exp(mat_l_order, psi_exact_sector, 1.0im)
-            end
+            mat_l_order = build_generator_matrix(struct_data, coeffs_exact_order, d_dim, antihermitian)
+            # apply_exp (ed_optimization.jl) uses expv (Krylov, sparse-matrix-vector-product
+            # only) above a size threshold instead of materializing a dense exp(M), since a
+            # dense exp(M) is O(dimH^3) and infeasible once dimH reaches the thousands.
+            psi_exact_sector = apply_exp(mat_l_order, psi_exact_sector, antihermitian ? 1.0 : 1.0im)
         end
 
         # Map back to the basis_ints basis
@@ -516,9 +558,8 @@ function compute_trotterized_energies_and_overlaps(
             stored_num_exp = length(A_base) ÷ num_gates
             # Each coefficient copy is scaled down by 1/P; P copies applied in sequence
             A_trotter = repeat(A_base, P) ./ P
-            total_exp = P * stored_num_exp
             psi = Trotter.apply_unitary(
-                A_trotter, gates, ref_state, basis_ints, N_sites, total_exp;
+                A_trotter, gates, ref_state, basis_ints, N_sites, P * stored_num_exp;
                 antihermitian=antihermitian
             )
             energies_P[u_i] = compute_energy(psi, H_u)
@@ -563,22 +604,15 @@ function load_trotter_opt_energies_and_overlaps(
     loss_type::Symbol=:overlap,
     gs_energies::Union{Vector{Float64},Nothing}=nothing
 )
-    U_values = if n_U_or_U_values isa Vector{Float64}
-        n_U_or_U_values
-    else
-        fill(NaN, n_U_or_U_values)
-    end
+    U_values = n_U_or_U_values isa Vector{Float64} ? n_U_or_U_values : fill(NaN, n_U_or_U_values)
     n_U = length(U_values)
-    prefix = "trotter_N=$(N_sites)"
-    if !isnothing(custom_ref_state_arg)
-        prefix *= "_ref_$(custom_ref_state_arg)"
-    end
-    if antihermitian
-        prefix *= "_antihermitian"
-    end
-    if loss_type == :energy
-        prefix *= "_loss_energy"
-    end
+    prefix = build_save_name_prefix(:trotter;
+        sites=N_sites,
+        custom_ref_state_arg=custom_ref_state_arg,
+        antihermitian=antihermitian,
+        loss_type=loss_type,
+        suffix="noreg"
+    )
     energies = fill(NaN, n_U)
     overlaps = fill(NaN, n_U)
     for (u_i, U_val) in enumerate(U_values)
@@ -589,34 +623,27 @@ function load_trotter_opt_energies_and_overlaps(
             overlaps[u_i] = 1.0
             continue
         end
-        fpath = if !isnan(U_val) && U_val > 0
-            u_idx = round(Int, U_val / 0.25) + 1
-            p = joinpath(folder, "$(prefix)_u_$(u_idx).jld2")
-            isfile(p) ? p : (isfile(joinpath(folder, "$(prefix)_u_$(u_i).jld2")) ? joinpath(folder, "$(prefix)_u_$(u_i).jld2") : joinpath(folder, "$(prefix)_u_$(u_i + 1).jld2"))
-        else
-            p = joinpath(folder, "$(prefix)_u_$(u_i).jld2")
-            isfile(p) ? p : joinpath(folder, "$(prefix)_u_$(u_i + 1).jld2")
+        fpath = resolve_u_file(folder, prefix, u_i, U_val)
+        isfile(fpath) || continue
+
+        d = load(fpath)["dict"]
+        met = d["metrics"]
+        if !isempty(get(met, "energy", []))
+            energies[u_i] = met["energy"][end]
         end
-        if isfile(fpath)
-            d = load(fpath)["dict"]
-            met = d["metrics"]
-            if haskey(met, "energy") && !isempty(met["energy"])
-                energies[u_i] = met["energy"][end]
-            end
-            if haskey(met, "loss") && !isempty(met["loss"])
-                loss_val = met["loss"][end]
-                if get(d, "loss_type", loss_type) == :overlap
-                    overlaps[u_i] = 1.0 - loss_val
-                    if isnan(energies[u_i])
-                        energies[u_i] = loss_val
-                    end
-                else
+        if !isempty(get(met, "loss", []))
+            loss_val = met["loss"][end]
+            if get(d, "loss_type", loss_type) == :overlap
+                overlaps[u_i] = 1.0 - loss_val
+                if isnan(energies[u_i])
                     energies[u_i] = loss_val
                 end
+            else
+                energies[u_i] = loss_val
             end
-            if haskey(met, "overlap") && !isempty(met["overlap"])
-                overlaps[u_i] = met["overlap"][end]
-            end
+        end
+        if !isempty(get(met, "overlap", []))
+            overlaps[u_i] = met["overlap"][end]
         end
     end
     return energies, overlaps
@@ -643,6 +670,61 @@ end
 # PLOTTING
 # ═══════════════════════════════════════════════════════════════════════════════
 
+const EXACT_EXP_KW = (label=L"\textrm{Exact exp}", color=:black, linewidth=2)
+const TROTTER_OPT_KW = (label=L"\textrm{Trotter opt}", color=:crimson, linewidth=2)
+
+"""
+    plot_curve_group!(ax, x, transform, mask, palette, trotter_orders;
+                      exact, trotter, opt, plotfun, exact_kw, trotter_kw, opt_kw)
+
+Draw the standard curve family — exact-exponential, one curve per Trotter order `P`,
+and Trotter-optimized — on `ax`. Each series is drawn only where it is non-NaN and
+`mask` holds, and the plotted y-values are `transform(series)`. Passing `nothing`
+for a series omits it; a series with no valid points is skipped.
+"""
+function plot_curve_group!(
+    ax, x, transform, mask, palette, trotter_orders::Vector{Int};
+    exact::Union{Nothing,Vector{Float64}}=nothing,
+    trotter::Union{Nothing,Dict{Int,Vector{Float64}}}=nothing,
+    opt::Union{Nothing,Vector{Float64}}=nothing,
+    plotfun=lines!,
+    exact_kw=(;), trotter_kw=(;), opt_kw=(;)
+)
+    function draw!(y, kw)
+        valid = .!isnan.(y) .& mask
+        any(valid) && plotfun(ax, x[valid], transform(y)[valid]; kw...)
+    end
+
+    isnothing(exact) || draw!(exact, merge(EXACT_EXP_KW, exact_kw))
+    if !isnothing(trotter)
+        for (idx, P) in enumerate(trotter_orders)
+            draw!(trotter[P], merge((label=L"P = %$P", color=palette[idx], linewidth=1.5), trotter_kw))
+        end
+    end
+    isnothing(opt) || draw!(opt, merge(TROTTER_OPT_KW, opt_kw))
+    return ax
+end
+
+"""
+    create_u_fig(num_cols, height_mm, ylabel; ylim, logscale) -> (Figure, Axis)
+
+Figure with the U axis shared by all the U-sweep comparison plots.
+"""
+function create_u_fig(num_cols::Int, height_mm::Float64, ylabel;
+    ylim::Tuple=(1e-5, nothing), logscale::Bool=true
+)
+    return create_fig(num_cols, height_mm;
+        xlabel=L"U",
+        ylabel=ylabel,
+        (logscale ? (yscale=log10,) : (;))...,
+        limits=((0, 15), ylim),
+    )
+end
+
+# Clamped so log-scaled axes never receive a non-positive value.
+excess_over(baseline, floor_val=1e-16) = y -> max.(y .- baseline, floor_val)
+infidelity(y) = max.(1.0 .- y, 1e-16)
+
 """
     build_comparison_plot(U_values, gs_energies, exact_exp_energies,
                           trotter_energies, trotter_opt_energies,
@@ -663,50 +745,16 @@ function build_comparison_plot(
     legend_position::Symbol=:rb,
     ylim::Tuple=(1e-5, nothing),
 )
-    fig, ax = create_fig(num_cols, height_mm;
-        xlabel=L"U",
-        ylabel=L"E - E_0(U)",
-        yscale=log10,
-        limits=((0, 15), ylim),
+    fig, ax = create_u_fig(num_cols, height_mm, L"E - E_0(U)"; ylim=ylim)
+
+    plot_curve_group!(
+        ax, U_values, excess_over(gs_energies), U_values .> 0,
+        cmap2(length(trotter_orders)), trotter_orders;
+        exact=exact_exp_energies,
+        trotter=trotter_energies,
+        opt=trotter_opt_energies,
+        exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
     )
-
-    palette = cmap2(length(trotter_orders))
-
-    # Exact exp line
-    valid_exact = .!isnan.(exact_exp_energies) .& (U_values .> 0)
-    if any(valid_exact)
-        lines!(ax, U_values[valid_exact], max.(exact_exp_energies[valid_exact] .- gs_energies[valid_exact], 1e-16);
-            label=L"\textrm{Exact exp}",
-            color=:black,
-            linewidth=2,
-            linestyle=:solid
-        )
-    end
-
-    # Trotterized lines (P = 1, 2, 4, 8)
-    for (idx, P) in enumerate(trotter_orders)
-        energies_P = trotter_energies[P]
-        valid_P = .!isnan.(energies_P) .& (U_values .> 0)
-        if any(valid_P)
-            lines!(ax, U_values[valid_P], max.(energies_P[valid_P] .- gs_energies[valid_P], 1e-16);
-                label=L"P = %$P",
-                color=palette[idx],
-                linewidth=1.5,
-                linestyle=:dash
-            )
-        end
-    end
-
-    # Trotter-optimized line
-    valid_opt = .!isnan.(trotter_opt_energies) .& (U_values .> 0)
-    if any(valid_opt)
-        lines!(ax, U_values[valid_opt], max.(trotter_opt_energies[valid_opt] .- gs_energies[valid_opt], 1e-16);
-            label=L"\textrm{Trotter opt}",
-            color=:crimson,
-            linewidth=2,
-            linestyle=:solid
-        )
-    end
 
     axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
 
@@ -748,134 +796,39 @@ function build_overlap_comparison_plot(
     ylim::Tuple=(1e-5, nothing),
 )
     palette = cmap2(length(trotter_orders))
+    mask = U_values .> 0
 
     if metric == :infidelity || metric == :ground_state
-        fig, ax = create_fig(num_cols, height_mm;
-            xlabel=L"U",
-            ylabel=L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
-            yscale=log10,
-            limits=((0, 15), ylim),
+        fig, ax = create_u_fig(num_cols, height_mm,
+            L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2"; ylim=ylim)
+        plot_curve_group!(ax, U_values, infidelity, mask, palette, trotter_orders;
+            exact=exact_exp_overlaps,
+            trotter=trotter_overlaps,
+            opt=trotter_opt_overlaps,
+            exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
         )
-
-        # Exact exp line
-        valid_exact = .!isnan.(exact_exp_overlaps) .& (U_values .> 0)
-        if any(valid_exact)
-            infid_exact = max.(1.0 .- exact_exp_overlaps[valid_exact], 1e-16)
-            lines!(ax, U_values[valid_exact], infid_exact;
-                label=L"\textrm{Exact exp}",
-                color=:black,
-                linewidth=2,
-                linestyle=:solid
-            )
-        end
-
-        # Trotterized lines (P = 1, 2, 4, 8)
-        for (idx, P) in enumerate(trotter_orders)
-            overlaps_P = trotter_overlaps[P]
-            valid_P = .!isnan.(overlaps_P) .& (U_values .> 0)
-            if any(valid_P)
-                infid_P = max.(1.0 .- overlaps_P[valid_P], 1e-16)
-                lines!(ax, U_values[valid_P], infid_P;
-                    label=L"P = %$P",
-                    color=palette[idx],
-                    linewidth=1.5,
-                    linestyle=:dash
-                )
-            end
-        end
-
-        # Trotter-optimized line
-        valid_opt = .!isnan.(trotter_opt_overlaps) .& (U_values .> 0)
-        if any(valid_opt)
-            infid_opt = max.(1.0 .- trotter_opt_overlaps[valid_opt], 1e-16)
-            lines!(ax, U_values[valid_opt], infid_opt;
-                label=L"\textrm{Trotter opt}",
-                color=:crimson,
-                linewidth=2,
-                linestyle=:solid
-            )
-        end
-
-        axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-        return fig
     elseif metric == :trotter_error || metric == :exact_infidelity
-        fig, ax = create_fig(num_cols, height_mm;
-            xlabel=L"U",
-            ylabel=L"1 - |\langle \psi_{\textrm{exact}}|\mathcal{U}_P|\psi_{\textrm{ref}}\rangle|^2",
-            yscale=log10,
-            limits=((0, 15), ylim),
+        fig, ax = create_u_fig(num_cols, height_mm,
+            L"1 - |\langle \psi_{\textrm{exact}}|\mathcal{U}_P|\psi_{\textrm{ref}}\rangle|^2"; ylim=ylim)
+        # Discretization error only: the exact-exp and Trotter-opt curves are 0 by construction.
+        plot_curve_group!(ax, U_values, infidelity, mask, palette, trotter_orders;
+            trotter=trotter_to_exact_overlaps,
+            trotter_kw=(linestyle=:solid,),
         )
-
-        # Plot discretization error for each Trotter order P
-        if !isnothing(trotter_to_exact_overlaps)
-            for (idx, P) in enumerate(trotter_orders)
-                ovlp_exact_P = trotter_to_exact_overlaps[P]
-                valid_P = .!isnan.(ovlp_exact_P) .& (U_values .> 0)
-                if any(valid_P)
-                    infid_exact_P = max.(1.0 .- ovlp_exact_P[valid_P], 1e-16)
-                    lines!(ax, U_values[valid_P], infid_exact_P;
-                        label=L"P = %$P",
-                        color=palette[idx],
-                        linewidth=1.5,
-                        linestyle=:solid
-                    )
-                end
-            end
-        end
-
-        axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-        return fig
     else
-        fig, ax = create_fig(num_cols, height_mm;
-            xlabel=L"U",
-            ylabel=L"|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
-            limits=((0, 15), (-0.05, 1.05)),
+        fig, ax = create_u_fig(num_cols, height_mm,
+            L"|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2"; ylim=(-0.05, 1.05), logscale=false)
+        plot_curve_group!(ax, U_values, identity, mask, palette, trotter_orders;
+            exact=exact_exp_overlaps,
+            trotter=trotter_overlaps,
+            opt=trotter_opt_overlaps,
+            exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
         )
-
-        # Exact exp line
-        valid_exact = .!isnan.(exact_exp_overlaps) .& (U_values .> 0)
-        if any(valid_exact)
-            lines!(ax, U_values[valid_exact], exact_exp_overlaps[valid_exact];
-                label=L"\textrm{Exact exp}",
-                color=:black,
-                linewidth=2,
-                linestyle=:solid
-            )
-        end
-
-        # Trotterized lines (P = 1, 2, 4, 8)
-        for (idx, P) in enumerate(trotter_orders)
-            overlaps_P = trotter_overlaps[P]
-            valid_P = .!isnan.(overlaps_P) .& (U_values .> 0)
-            if any(valid_P)
-                lines!(ax, U_values[valid_P], overlaps_P[valid_P];
-                    label=L"P = %$P",
-                    color=palette[idx],
-                    linewidth=1.5,
-                    linestyle=:dash
-                )
-            end
-        end
-
-        # Trotter-optimized line
-        valid_opt = .!isnan.(trotter_opt_overlaps) .& (U_values .> 0)
-        if any(valid_opt)
-            lines!(ax, U_values[valid_opt], trotter_opt_overlaps[valid_opt];
-                label=L"\textrm{Trotter opt}",
-                color=:crimson,
-                linewidth=2,
-                linestyle=:solid
-            )
-        end
-
-        axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-        return fig
     end
-end
 
-# ═══════════════════════════════════════════════════════════════════════════════
-# MAIN
-# ═══════════════════════════════════════════════════════════════════════════════
+    axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
+    return fig
+end
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MODULAR SYSTEM HELPERS
@@ -897,57 +850,47 @@ function setup_system(
     U_values, target_vecs, indexer, _, N_elec, _, _, sign_convention =
         load_ED_data(folder; verbose=verbose, use_slater_reference=(custom_ref_state_arg == "slater"))
     n_up_loaded, n_dn_loaded = N_elec
-    n_U = length(U_values)
     N_sites = prod(indexer.lattice_dims)
     dims_val = collect(Int, indexer.lattice_dims)
 
-    # Derive antihermitian
-    local antihermitian
-    if isnothing(antihermitian_arg)
-        test_prefix = "trotter_N=$N_sites"
-        if !isnothing(custom_ref_state_arg)
-            test_prefix *= "_ref_$(custom_ref_state_arg)"
-        end
-        test_prefix *= "_antihermitian"
-        if loss_type == :energy
-            test_prefix *= "_loss_energy"
-        end
-        if isfile(joinpath(folder, "$(test_prefix)_shared.jld2"))
-            antihermitian = true
-        else
-            antihermitian = false
-        end
+    # Derive antihermitian: without an explicit flag, assume the antihermitian
+    # convention iff its shared file exists on disk.
+    antihermitian = if !isnothing(antihermitian_arg)
+        antihermitian_arg
     else
-        antihermitian = antihermitian_arg
+        test_prefix = build_save_name_prefix(:trotter;
+            sites=N_sites,
+            custom_ref_state_arg=custom_ref_state_arg,
+            antihermitian=true,
+            loss_type=loss_type,
+        )
+        isfile(joinpath(folder, "$(test_prefix)_shared.jld2"))
     end
 
     # Derive q_target
-    q_target = nothing
     k_val = try
         indexer.k
     catch
         nothing
     end
-    if !isnothing(k_val) && !isnothing(dims_val)
-        q_target = Trotter.ravel_c(Tuple(k - 1 for k in k_val), Tuple(dims_val))
-    end
+    q_target = isnothing(k_val) ? nothing :
+               Trotter.ravel_c(Tuple(k - 1 for k in k_val), Tuple(dims_val))
 
-    local H_hop_mom, H_int_mom, basis_ints
-    if isnothing(q_target)
+    H_hop_mom, H_int_mom, basis_ints = if isnothing(q_target)
         verbose && println("Subspace does not conserve momentum. Constructing Hamiltonians in coordinate basis (:spin_first)...")
-        basis_ints = Trotter.get_basis_sector(indexer, dims_val, N_sites)
         lattice = Square(Tuple(dims_val), Periodic())
         subspace = HubbardSubspace(n_up_loaded, n_dn_loaded, lattice; k=nothing)
-        H_hop_mom, H_int_mom = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
+        H_hop, H_int = create_hubbard_matrices(subspace; indexer=indexer, sign_convention=:spin_first)
+        (H_hop, H_int, Trotter.get_basis_sector(indexer, dims_val, N_sites))
     else
         verbose && println("\nBuilding sector Hamiltonians in momentum basis...")
-        H_hop_mom, basis_dict, _ = Trotter.HubbardMomentumBasis(
+        H_hop, basis_dict, _ = Trotter.HubbardMomentumBasis(
             1.0, 0.0, dims_val, (n_up_loaded, n_dn_loaded); indexer=indexer
         )
-        H_int_mom, _, _ = Trotter.HubbardMomentumBasis(
+        H_int, _, _ = Trotter.HubbardMomentumBasis(
             0.0, 1.0, dims_val, (n_up_loaded, n_dn_loaded); indexer=indexer
         )
-        basis_ints = basis_dict["ints"]
+        (H_hop, H_int, basis_dict["ints"])
     end
 
     verbose && println("Hilbert space sector dim = $(length(basis_ints))")
@@ -956,16 +899,20 @@ function setup_system(
     gates = Trotter.enumerate_ferm_excitations(
         2, dims_val; conserve_mom=true, conserve_sz=true, include_diagonal=true,
     )
-    # tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_ints; antihermitian=antihermitian)
     num_gates = length(gates)
 
     return U_values, target_vecs, indexer, sign_convention, antihermitian, H_hop_mom, H_int_mom, basis_ints, gates, num_gates, N_sites, n_up_loaded, n_dn_loaded
 end
 
 """
-    get_exact_coefficients(folder, U_values, n_up_loaded, n_dn_loaded, custom_ref_state_arg, antihermitian, loss_type, sign_convention, gates, indexer, basis_ints)
+    get_exact_coefficients(folder, U_values, n_up_loaded, n_dn_loaded, custom_ref_state_arg, antihermitian, loss_type, sign_convention, gates, indexer, basis_ints; run_label=nothing)
 
 Loads the optimized exact-exponential coefficient vector and maps/reorders them to match the Trotter gate ordering.
+
+`run_label` selects a labelled set of saved coefficients -- the files written by
+`run_lanczos_scan_optimization.jl --run_label=<label>` -- instead of the unlabelled
+default set. Use it to read runs made under non-default optimizer settings (for example
+`--regularization=0`) without disturbing the originals.
 """
 function get_exact_coefficients(
     folder::String,
@@ -978,19 +925,18 @@ function get_exact_coefficients(
     sign_convention::Symbol,
     gates,
     indexer,
-    basis_ints
+    basis_ints;
+    run_label::Union{String,Nothing}=nothing
 )
     n_U = length(U_values)
-    unitary_prefix = "unitary_map_energy_symmetry=false_N=($n_up_loaded, $n_dn_loaded)"
-    if !isnothing(custom_ref_state_arg)
-        unitary_prefix *= "_ref_$(custom_ref_state_arg)"
-    end
-    if antihermitian
-        unitary_prefix *= "_antihermitian"
-    end
-    if loss_type == :energy
-        unitary_prefix *= "_loss_energy"
-    end
+    unitary_prefix = build_save_name_prefix(:exact;
+        electrons=(n_up_loaded, n_dn_loaded),
+        use_symmetry=false,
+        custom_ref_state_arg=custom_ref_state_arg,
+        antihermitian=antihermitian,
+        loss_type=loss_type,
+        suffix=run_label,
+    )
 
     exact_coeffs_raw = [
         load_exact_exp_coefficients(folder, unitary_prefix, u_i, U_values[u_i]) for u_i in 1:n_U
@@ -1117,10 +1063,7 @@ function compute_trotterized_energies_system_size(
     num_sites = Int[]
     gs_energies = Float64[]
     exact_exp_energies = Float64[]
-    trotter_energies = Dict{Int,Vector{Float64}}()
-    for P in trotter_orders
-        trotter_energies[P] = fill(NaN, n_systems)
-    end
+    trotter_energies = Dict{Int,Vector{Float64}}(P => fill(NaN, n_systems) for P in trotter_orders)
     trotter_opt_energies = fill(NaN, n_systems)
 
     for (s_idx, folder) in enumerate(system_folders)
@@ -1154,18 +1097,17 @@ function compute_trotterized_energies_system_size(
         )
 
         # 5. Compute exact-exp energy for this U
-        if !isnothing(t_keys) && !isnothing(exact_coeffs_raw[u_i])
+        exact_val = if !isnothing(t_keys) && !isnothing(exact_coeffs_raw[u_i])
             # Call compute_exact_exp_energies wrapping just this U
-            exact_val = compute_exact_exp_energies(
+            compute_exact_exp_energies(
                 [exact_coeffs_raw[u_i]], t_keys, indexer, collect(Int, indexer.lattice_dims), basis_ints, ref_state,
                 H_hop_mom, H_int_mom, [U_actual]; antihermitian=antihermitian, sign_convention=sign_convention
             )[1]
-            push!(exact_exp_energies, exact_val)
-            println("Exact exp energy: $exact_val")
         else
-            push!(exact_exp_energies, NaN)
-            println("Exact exp energy: NaN")
+            NaN
         end
+        push!(exact_exp_energies, exact_val)
+        println("Exact exp energy: $exact_val")
 
         # 6. Compute trotterized energies for each P
         if !isnothing(exact_coeffs[u_i])
@@ -1216,20 +1158,13 @@ function build_system_size_comparison_plot(
     legend_position::Symbol=:rt,
 )
     # Sort systems by: 1. Number of sites, 2. GS Energy (as proxy for size/filling uniqueness), 3. System name
-    sort_keys = [(num_sites[i], gs_energies[i], system_sizes[i]) for i in 1:length(system_sizes)]
-    perm = sortperm(sort_keys)
+    perm = sortperm([(num_sites[i], gs_energies[i], system_sizes[i]) for i in 1:length(system_sizes)])
 
     sorted_sizes = system_sizes[perm]
     sorted_gs = gs_energies[perm]
-    sorted_exact = exact_exp_energies[perm]
-    sorted_opt = trotter_opt_energies[perm]
+    sorted_trotter = Dict{Int,Vector{Float64}}(P => trotter_energies[P][perm] for P in trotter_orders)
 
-    sorted_trotter = Dict{Int,Vector{Float64}}()
-    for P in trotter_orders
-        sorted_trotter[P] = trotter_energies[P][perm]
-    end
-
-    x_coords = 1:length(system_sizes)
+    x_coords = collect(1:length(system_sizes))
 
     fig, ax = create_fig(num_cols, height_mm;
         xlabel=L"\textrm{System}",
@@ -1238,41 +1173,17 @@ function build_system_size_comparison_plot(
         xticks=(x_coords, sorted_sizes),
     )
 
-    palette = cmap2(length(trotter_orders))
-
-    valid_exact = .!isnan.(sorted_exact)
-    if any(valid_exact)
-        scatterlines!(ax, x_coords[valid_exact], max.(sorted_exact[valid_exact] .- sorted_gs[valid_exact], 1e-15);
-            label=L"\textrm{Exact exp}",
-            color=:black,
-            linewidth=2,
-            markersize=8,
-        )
-    end
-
-    for (idx, P) in enumerate(trotter_orders)
-        energies_P = sorted_trotter[P]
-        valid = .!isnan.(energies_P)
-        if any(valid)
-            scatterlines!(ax, x_coords[valid], max.(energies_P[valid] .- sorted_gs[valid], 1e-15);
-                label=L"P = %$P",
-                color=palette[idx],
-                linewidth=1.5,
-                markersize=6,
-                linestyle=:dash,
-            )
-        end
-    end
-
-    valid_opt = .!isnan.(sorted_opt)
-    if any(valid_opt)
-        scatterlines!(ax, x_coords[valid_opt], max.(sorted_opt[valid_opt] .- sorted_gs[valid_opt], 1e-15);
-            label=L"\textrm{Trotter opt}",
-            color=:crimson,
-            linewidth=2,
-            markersize=8,
-        )
-    end
+    plot_curve_group!(
+        ax, x_coords, excess_over(sorted_gs, 1e-15), trues(length(x_coords)),
+        cmap2(length(trotter_orders)), trotter_orders;
+        exact=exact_exp_energies[perm],
+        trotter=sorted_trotter,
+        opt=trotter_opt_energies[perm],
+        plotfun=scatterlines!,
+        exact_kw=(markersize=8,),
+        trotter_kw=(markersize=6, linestyle=:dash),
+        opt_kw=(markersize=8,),
+    )
 
     axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
 

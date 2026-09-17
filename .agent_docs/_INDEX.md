@@ -1,7 +1,7 @@
-# Agent Documentation Index
-Always check the relevant domain file before writing code or debugging.
+# Documentation Index
+Central index for codebase architecture, mathematical conventions, data schemas, and GPU pipelines.
 
-| Domain | File | Description |
-|---|---|---|
-| File Reading & Parsing | `data_pipeline.md` | How files are structured, what they mean, and which functions parse them. |
-| Mathematical & Array Conventions | `core_conventions.md` | Rules for vector ordering, sign conventions, and matrix properties. |
+---
+## Domains
+- [[trotter_gpu_pipeline]]: Details the GPU acceleration architecture for Trotterized unitary optimization, including host-to-device gate matrix streaming (Option B), checkpoint rematerialization, and `GpuGateOps`.
+- [[ed_file_formats]]: Schema and physical/mathematical correspondence for Lanczos ED `.h5` and optimization output `.jld2` files.

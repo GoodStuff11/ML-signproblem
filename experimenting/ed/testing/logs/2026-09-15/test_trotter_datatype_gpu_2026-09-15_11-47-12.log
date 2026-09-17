@@ -1,0 +1,78 @@
+================================================================================
+Timestamp: 2026-09-15T11:47:12.811
+Command run: julia testing/test_trotter_datatype_gpu.jl --use_gpu=false
+================================================================================
+==========================================================
+TROTTER OPTIMIZATION DATATYPE & GPU REGRESSION TESTS
+==========================================================
+Requested use_gpu: false
+Is CUDA loaded:    false
+Threads available: 20
+Basis dimension: 256
+
+--- Test 1: Float32 Antihermitian Overlap Loss & Gradient ---
+loss: 0.42301422357559204
+Forward time: 0.14778648
+Gradient time: 0.196792524
+CPU Float32 Loss: 0.42301417145964926, Gradient norm: 0.20127131637271223
+
+GPU not requested or CUDA not functional. Testing CPU paths for Float32 and ComplexF32...
+Sampling 5 initial configurations for multi-start...
+loss: 0.4246199131011963
+loss: 0.42465388774871826
+Forward time: 0.000420394
+Forward time: 0.000481547
+loss: 0.4246867299079895
+Forward time: 0.000608509
+loss: 0.4246683120727539
+Forward time: 0.000690854
+loss: 0.4247201681137085
+Forward time: 0.000907752
+Gradient time: 0.00031689
+Gradient time: 0.00032899
+Gradient time: 0.000328546
+Gradient time: 0.000426226
+Gradient time: 0.000319852
+Performing quick optimization on top 2 candidates...
+loss: 0.42465388774871826
+Forward time: 0.009393213
+loss: 0.4247201681137085
+Forward time: 0.009631672
+Gradient time: 0.000306344
+Gradient time: 0.000345566
+loss: 0.40510618686676025
+Forward time: 0.00053201
+loss: 0.4050522446632385
+Forward time: 0.000752835
+Gradient time: 0.000272002
+Gradient time: 0.000269462
+loss: 0.3734811544418335
+Forward time: 0.000345291
+loss: 0.3733940124511719
+Forward time: 0.000303248
+Gradient time: 0.000255494
+Gradient time: 0.000363448
+loss: 0.3659149408340454
+Forward time: 0.000332313
+loss: 0.3660028576850891
+Gradient time: 0.000233328
+Forward time: 0.000666247
+loss: 0.35875004529953003
+Forward time: 0.000343163
+Gradient time: 0.000230313
+Gradient time: 0.000624049
+loss: 0.35691726207733154
+Forward time: 0.000321619
+Gradient time: 0.00022859
+loss: 0.3588746190071106
+Forward time: 0.000595598
+Gradient time: 0.000569171
+loss: 0.3569568395614624
+Forward time: 0.0006983
+Gradient time: 0.000431279
+Selected best candidate with loss=0.35691726207733154
+PASSED: CPU Float32 multi-start initialization executed cleanly.
+
+==========================================================
+ALL DATATYPE REGRESSION TESTS PASSED SUCCESSFULLY!
+==========================================================
