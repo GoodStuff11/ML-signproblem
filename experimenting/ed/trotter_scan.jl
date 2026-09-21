@@ -34,6 +34,16 @@ indices (see [`embed_active_params`](@ref)/[`optimize_unitary`](@ref)); `target_
 later inspection. Since `u_indices` is expected to hold a single index in this mode, any
 loaded/warm-start coefficients are reduced to `active_indices` before being handed to
 `optimize_unitary`.
+
+# Shared coefficients (`param_map`)
+Pass `param_map` (a length-`length(gates)` contiguous surjection onto `1:n_params`, as
+returned second by [`enumerate_ferm_excitations_HVA`](@ref)) to drive several gates from a
+single variational parameter. The saved/optimized coefficient vector then lives in the
+REDUCED space of length `num_exponentials * n_params` rather than
+`num_exponentials * length(gates)`; `grow_coefficients` grows it in units of `n_params`,
+and `active_indices` (pruning) likewise indexes the reduced vector. `param_map` is recorded
+in the `_shared.jld2` file so downstream analysis can expand the coefficients again.
+`param_map=nothing` (the default) is the unchanged one-parameter-per-gate behaviour.
 """
 function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any},
     gates, tau_terms, basis, N::Int;
@@ -58,7 +68,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     grow_mode::Symbol=:chain,
     active_indices::Union{Nothing,AbstractVector{Int}}=nothing,
     target_fidelity::Union{Nothing,Float64}=nothing,
-    pruning_threshold::Union{Nothing,Float64}=nothing
+    pruning_threshold::Union{Nothing,Float64}=nothing,
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -167,7 +178,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 old_dict = JLD2.load(grow_file)["dict"]
                 old_coeffs = old_dict["coefficients"]
                 println("  Growing initial coefficients from num_exponentials=$(grow_from_num_exponentials) to $(num_exponentials) using $grow_file")
-                current_coeffs = grow_coefficients(old_coeffs, grow_from_num_exponentials, num_exponentials, num_gates)
+                current_coeffs = grow_coefficients(old_coeffs, grow_from_num_exponentials, num_exponentials, num_gates; param_map=param_map)
                 if haskey(old_dict, "metrics")
                     loaded_m = copy(old_dict["metrics"])
                 end
@@ -208,7 +219,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             antihermitian=antihermitian,
             use_gpu=use_gpu,
             datatype=effective_datatype,
-            metric_functions=metric_functions
+            metric_functions=metric_functions,
+            param_map=param_map
         )
 
         if use_gpu && _has_cuda()
@@ -227,7 +239,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         # Calculate comparison metrics
         state1_prep, _ = (effective_datatype <: Real) ? strip_global_phase(state1) : (state1, 1.0)
         state2_prep, _ = (effective_datatype <: Real) ? strip_global_phase(state2) : (state2, 1.0)
-        ref_evolved = apply_unitary(A_opt, gates, state1_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=effective_datatype)
+        ref_evolved = apply_unitary(A_opt, gates, state1_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=effective_datatype, param_map=param_map)
         ref_evolved_cpu = Array(ref_evolved)
         H_eval = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
             H_hopping + target_u * H_interaction
@@ -259,7 +271,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             shared_dict = Dict(
                 "gates" => gates,
                 "instructions" => instructions,
-                "u_range" => u_indices
+                "u_range" => u_indices,
+                "param_map" => param_map
             )
             JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
             shared_data_saved = true

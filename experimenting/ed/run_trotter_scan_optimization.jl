@@ -45,6 +45,32 @@ Arguments:
   --run_label=<string> (optional): Append this label to the saved-file prefix, so the run is always
                      freshly randomly initialized under a distinct filename rather than resuming from
                      (or overwriting) any existing coefficients already saved under the standard prefix.
+  --ansatz=<type> (optional): Which gate set to optimize. Default: "standard".
+                     Valid options:
+                     - "standard": momentum-conserving excitations (enumerate_ferm_excitations), one
+                       free parameter per gate, optimized inside the fixed-total-momentum ED sector.
+                     - "hva": the Hamiltonian Variational Ansatz (enumerate_ferm_excitations_HVA):
+                       real-space brick-wall nearest-neighbour hopping plus on-site n_up n_dn, with
+                       gates tied together by a param_map so a whole Hamiltonian term shares one
+                       coefficient. Real-space hopping does NOT conserve momentum, so this mode
+                       leaves the momentum sector and runs in the FULL real-space occupation basis
+                       (dimension C(N,n_up)*C(N,n_dn)); the ED target states are transformed into
+                       that basis and the transform is verified against the ED energy before use.
+                       Requires --antihermitian=false (the on-site gates are diagonal, and the
+                       antihermitian convention sends diagonal gates to the zero operator).
+  --hva_tie=<mode> (optional, --ansatz=hva only): Coefficient-sharing scheme. Default: "full".
+                     - "full": one coefficient for the on-site block and one per (axis, parity)
+                       hopping block, shared across both spin channels.
+                     - "spin": one coefficient per site, and one per bond shared by its up/down pair.
+                     - "none": every gate independent (no sharing).
+  --hva_pbc=<bool> (optional, --ansatz=hva only): Periodic bonds in the ansatz. Default: true, which
+                     matches the periodic Hubbard Hamiltonian the ED data was produced with. Throws
+                     for a periodic axis of odd length > 2 (no 2-colouring into commuting halves);
+                     pass --hva_pbc=false there to fall back to an open-boundary ansatz.
+  --match_dof[=<mode>] (optional, --ansatz=hva only): Ignore --num_exponentials as the HVA layer
+                     count and instead derive the number of HVA layers whose total free-parameter
+                     count matches the STANDARD ansatz at --num_exponentials layers. <mode> is one
+                     of "ceil" (default), "floor" or "round". See hva_layers_matching_dof.
 =#
 
 # Pre-scan ARGS for GPU flag before loading CUDA package
@@ -101,6 +127,10 @@ function parse_arguments(args::Vector{String})
     grow_mode = :chain
     target_fidelity = nothing
     run_label = nothing
+    ansatz = :standard
+    hva_tie = :full
+    hva_pbc = true
+    match_dof_mode = nothing
     filtered_args = String[]
 
     for arg in args
@@ -157,6 +187,31 @@ function parse_arguments(args::Vector{String})
             target_fidelity = parse(Float64, split(arg, "=", limit=2)[2])
         elseif startswith(arg, "--run_label=")
             run_label = String(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--ansatz=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val == "standard"
+                ansatz = :standard
+            elseif val == "hva"
+                ansatz = :hva
+            else
+                error("Invalid --ansatz option: '$val'. Valid options are: 'standard', 'hva'.")
+            end
+        elseif startswith(arg, "--hva_tie=")
+            val = String(split(arg, "=", limit=2)[2])
+            if val in ("full", "none", "spin")
+                hva_tie = Symbol(val)
+            else
+                error("Invalid --hva_tie option: '$val'. Valid options are: 'full', 'none', 'spin'.")
+            end
+        elseif arg == "--hva_pbc" || startswith(arg, "--hva_pbc=")
+            hva_pbc = occursin("=", arg) ? parse(Bool, split(arg, "=", limit=2)[2]) : true
+        elseif arg == "--match_dof" || startswith(arg, "--match_dof=")
+            val = occursin("=", arg) ? String(split(arg, "=", limit=2)[2]) : "ceil"
+            if val in ("ceil", "floor", "round")
+                match_dof_mode = Symbol(val)
+            else
+                error("Invalid --match_dof option: '$val'. Valid options are: 'ceil', 'floor', 'round'.")
+            end
         else
             push!(filtered_args, arg)
         end
@@ -170,6 +225,22 @@ function parse_arguments(args::Vector{String})
         error("--grow_from_exponentials=$grow_from_exponentials must be less than --num_exponentials=$num_exponentials")
     end
 
+    if ansatz === :hva
+        if antihermitian
+            error("--ansatz=hva is incompatible with --antihermitian: the HVA on-site gates are " *
+                  "diagonal, and tau_g_operator_sector maps diagonal gates to the ZERO operator " *
+                  "under the antihermitian convention, so their coefficients would be " *
+                  "unoptimizable. The HVA generators are Hermitian by construction; drop " *
+                  "--antihermitian.")
+        end
+        if !isnothing(grow_from_exponentials) && !isnothing(match_dof_mode)
+            error("--match_dof overrides --num_exponentials, which --grow_from_exponentials is " *
+                  "validated against; pick one.")
+        end
+    elseif !isnothing(match_dof_mode)
+        error("--match_dof only applies to --ansatz=hva (the standard ansatz IS the reference).")
+    end
+
     folder = data_folder(filtered_args[1])
     u_start = length(filtered_args) >= 2 ? filtered_args[2] : "25"
     u_end = length(filtered_args) >= 3 ? filtered_args[3] : nothing
@@ -178,17 +249,18 @@ function parse_arguments(args::Vector{String})
         datatype = ComplexF64
     end
 
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label = parse_arguments(ARGS)
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode = parse_arguments(ARGS)
 
         println("Number of threads: $(Threads.nthreads())")
         println("Use GPU: $use_gpu")
         println("Data Type: $datatype")
+        println("Ansatz: $ansatz" * (ansatz === :hva ? " (tie=$hva_tie, use_pbc=$hva_pbc)" : ""))
 
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
@@ -200,10 +272,10 @@ function (@main)(ARGS)
         Lvec = parse_lattice_dimension(folder)
         N_sites = prod(Lvec)
 
-        # 2. Computing the basis
+        # 2. Computing the basis (momentum sector -- the basis the ED data lives in)
         basis_sector = Trotter.get_basis_sector(indexer, Lvec, N_sites)
 
-        # 3. Find the Hamiltonian
+        # 3. Find the Hamiltonian, in the momentum sector
         @time H_hop_sector, basis_dict_sector, _ = Trotter.TamFermion.HubbardMomentumBasis(
             1.0, 0.0, Lvec, (n_up, n_dn); indexer=indexer
         )
@@ -211,8 +283,96 @@ function (@main)(ARGS)
             0.0, 1.0, Lvec, (n_up, n_dn); indexer=indexer
         )
 
-        # 4. Enumerate Trotter gates and tau terms
-        @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
+        # 4. Enumerate Trotter gates and tau terms.
+        #
+        # The standard ansatz conserves momentum and therefore stays inside the ED sector.
+        # The HVA is a real-space ansatz: its hopping gates move total momentum, so the
+        # whole problem has to be lifted out of the momentum sector into the full
+        # real-space occupation basis first (see trotter_realspace.jl).
+        param_map = nothing
+        if ansatz === :hva
+            @time gates, param_map = Trotter.enumerate_ferm_excitations_HVA(
+                Lvec; use_pbc=hva_pbc, tie=hva_tie)
+            n_params = Trotter.num_shared_params(param_map, length(gates))
+
+            if !isnothing(match_dof_mode)
+                gates_std = Trotter.enumerate_ferm_excitations(
+                    2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
+                info = Trotter.hva_layers_matching_dof(
+                    param_map, length(gates), gates_std, num_exponentials; mode=match_dof_mode)
+                println("--match_dof ($(match_dof_mode)): standard ansatz has " *
+                        "$(length(gates_std)) gates x $(num_exponentials) layers = " *
+                        "$(info.reference_dof) parameters; HVA has $(info.params_per_layer) " *
+                        "parameters/layer => $(info.layers) layers = $(info.hva_dof) parameters" *
+                        (info.exact ? " (exact match)." : " (nearest $(match_dof_mode))."))
+                num_exponentials = info.layers
+            end
+
+            println("HVA ansatz: $(length(gates)) gates, $n_params free parameters per layer, " *
+                    "$(num_exponentials) layers => $(num_exponentials * n_params) parameters total.")
+
+            # Lift basis, Hamiltonian and states out of the momentum sector.
+            basis_mom = basis_sector
+            basis_sector, _, _ = Trotter.realspace_basis(Lvec, (n_up, n_dn))
+            println("Real-space basis dimension: $(length(basis_sector)) " *
+                    "(momentum sector was $(length(basis_mom)))")
+
+            @time H_hop_real = Trotter.TamFermion.HubbardRealSpace(
+                1.0, 0.0, Lvec, (n_up, n_dn); use_pbc=true, returnBasis=false)
+            @time H_int_real = Trotter.TamFermion.HubbardRealSpace(
+                0.0, 1.0, Lvec, (n_up, n_dn); use_pbc=true, returnBasis=false)
+
+            @time state_vecs_real = Trotter.momentum_sector_to_realspace(
+                state_vecs, basis_mom, Lvec, (n_up, n_dn))
+
+            # Verify the transform against physics before anything is optimized: a
+            # convention mismatch would otherwise produce a plausible-but-wrong target.
+            verify_u = U_values[min(length(U_values), max(1, cld(length(U_values), 2)))]
+            H_mom_check = H_hop_sector + verify_u * H_int_sector
+            H_real_check = H_hop_real + verify_u * H_int_real
+            n_states_check = size(state_vecs_real, 1)
+            for i in unique(clamp.([1, cld(n_states_check, 2), n_states_check], 1, n_states_check))
+                v_mom = state_vecs isa AbstractMatrix ? state_vecs[i, :] : state_vecs[i]
+                chk = Trotter.check_realspace_transform(
+                    v_mom, state_vecs_real[i, :], H_mom_check, H_real_check;
+                    label="state row $i, U=$verify_u")
+                println("  transform check, row $i: |psi| $(round(chk.norm_mom, digits=12)) -> " *
+                        "$(round(chk.norm_real, digits=12)); <H> " *
+                        "$(round(chk.energy_mom, digits=10)) -> $(round(chk.energy_real, digits=10))")
+            end
+
+            # Tying a bond's up/down gates to one coefficient (--hva_tie=full or =spin)
+            # makes the whole circuit commute with spin exchange, which caps the
+            # reachable fidelity by the reference state's weight in the target's
+            # spin-exchange eigenspace. The Slater reference fills a DEGENERATE
+            # single-particle level and can land on different orbitals per spin, in
+            # which case that cap is 0.5 no matter how many layers are used. Say so up
+            # front rather than letting a scan converge to a mystery plateau.
+            if hva_tie in (:full, :spin) && n_up == n_dn
+                ref_real = state_vecs_real[1, :]
+                ref_parity = real(dot(ref_real,
+                    Trotter.apply_spin_exchange(ref_real, basis_sector, N_sites, (n_up, n_dn))))
+                best_bound = (1 + abs(ref_parity)) / 2
+                if best_bound < 0.999
+                    @warn "--hva_tie=$(hva_tie) ties the up/down spin channels, so the " *
+                          "circuit commutes with spin exchange P. The reference state is " *
+                          "not a P eigenstate (⟨ref|P|ref⟩ = $(round(ref_parity, digits=6))), " *
+                          "so against any P-eigenstate target the reachable fidelity is " *
+                          "capped at $(round(best_bound, digits=6)) NO MATTER how many " *
+                          "layers are used. Use --hva_tie=none for independent up/down " *
+                          "coefficients, or a spin-symmetric reference state."
+                else
+                    println("Reference state spin-exchange parity: " *
+                            "$(round(ref_parity, digits=10)) (no spin-tying fidelity cap)")
+                end
+            end
+
+            state_vecs = state_vecs_real
+            H_hop_sector = H_hop_real
+            H_int_sector = H_int_real
+        else
+            @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
+        end
         @time tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_sector; antihermitian=antihermitian)
 
         # 5. Set up scan range
@@ -220,16 +380,38 @@ function (@main)(ARGS)
             "starting level" => 1,
             "ending level" => 1,
             "num_exponentials" => num_exponentials,
-            "antihermitian" => antihermitian
+            "antihermitian" => antihermitian,
+            "ansatz" => ansatz
         )
+        if ansatz === :hva
+            scan_instructions["hva_tie"] = hva_tie
+            scan_instructions["hva_pbc"] = hva_pbc
+            scan_instructions["param_map"] = param_map
+        end
 
-        # u_build suffix only appears when increasing num_exponentials via --grow_from_exponentials;
-        # run_label (if given) is always appended so this run never resumes from, or overwrites,
-        # any existing coefficients saved under the standard (label-less) prefix.
-        suffix_parts = String[]
-        !isnothing(grow_from_exponentials) && push!(suffix_parts, "u_build")
-        !isnothing(run_label) && push!(suffix_parts, run_label)
-        suffix = isempty(suffix_parts) ? nothing : join(suffix_parts, "_")
+        # The HVA marker comes first and is always present for --ansatz=hva, so an HVA run
+        # can never resume from, or overwrite, a standard-ansatz file (the two coefficient
+        # vectors have different lengths and different meanings). u_build only appears when
+        # increasing num_exponentials via --grow_from_exponentials; run_label (if given) is
+        # always appended so the run never resumes from, or overwrites, any existing
+        # coefficients saved under the standard (label-less) prefix.
+        ansatz_suffix_parts = ansatz === :hva ?
+                              ["hva_tie=$(hva_tie)" * (hva_pbc ? "" : "_obc")] : String[]
+
+        # Prepend the ansatz marker to any suffix built below, so every prefix this script
+        # derives (grow-from, pruned, alternates) stays inside its own ansatz's namespace.
+        prefix_with_ansatz(s) = begin
+            parts = copy(ansatz_suffix_parts)
+            isnothing(s) || push!(parts, s)
+            isempty(parts) ? nothing : join(parts, "_")
+        end
+
+        suffix = begin
+            parts = String[]
+            !isnothing(grow_from_exponentials) && push!(parts, "u_build")
+            !isnothing(run_label) && push!(parts, run_label)
+            prefix_with_ansatz(isempty(parts) ? nothing : join(parts, "_"))
+        end
 
         save_name_prefix = build_save_name_prefix(
             :trotter;
@@ -250,7 +432,8 @@ function (@main)(ARGS)
                 custom_ref_state_arg=custom_ref_state_arg,
                 antihermitian=antihermitian,
                 loss_type=loss_type,
-                num_exponentials=grow_from_exponentials
+                num_exponentials=grow_from_exponentials,
+                suffix=prefix_with_ansatz(nothing)
             )
         else
             nothing
@@ -259,11 +442,9 @@ function (@main)(ARGS)
         # Pruned (--target_fidelity) runs must not overwrite the full, unpruned coefficients
         # they are pruned from, so their output goes under a distinctly-named prefix; the
         # unpruned save_name_prefix computed above keeps pointing at the un-pruned file.
-        pruned_suffix = if !isnothing(grow_from_exponentials)
-            "u_build_target_fidelity=$(target_fidelity)"
-        else
-            "target_fidelity=$(target_fidelity)"
-        end
+        pruned_suffix = prefix_with_ansatz(!isnothing(grow_from_exponentials) ?
+                                           "u_build_target_fidelity=$(target_fidelity)" :
+                                           "target_fidelity=$(target_fidelity)")
         output_name_prefix = isnothing(target_fidelity) ? save_name_prefix : build_save_name_prefix(
             :trotter;
             sites=N_sites,
@@ -292,10 +473,10 @@ function (@main)(ARGS)
                     antihermitian=antihermitian,
                     loss_type=loss_type,
                     num_exponentials=num_exponentials,
-                    suffix=alt_suffix
+                    suffix=prefix_with_ansatz(alt_suffix)
                 )
             else
-                alt_pruned_suffix = isnothing(alt_suffix) ? "target_fidelity=$(target_fidelity)" : "u_build_target_fidelity=$(target_fidelity)"
+                alt_pruned_suffix = prefix_with_ansatz(isnothing(alt_suffix) ? "target_fidelity=$(target_fidelity)" : "u_build_target_fidelity=$(target_fidelity)")
                 build_save_name_prefix(
                     :trotter;
                     sites=N_sites,
@@ -424,7 +605,8 @@ function (@main)(ARGS)
             grow_mode=grow_mode,
             active_indices=active_indices,
             target_fidelity=target_fidelity,
-            pruning_threshold=pruning_threshold
+            pruning_threshold=pruning_threshold,
+            param_map=param_map
         )
 
         return 0

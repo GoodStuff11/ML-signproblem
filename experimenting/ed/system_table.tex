@@ -1,0 +1,37 @@
+% Requires \usepackage{booktabs} (and \usepackage{amsmath} for \text).
+\begin{table}[htbp]
+  \centering
+  \caption{Hubbard systems used in this work. $N_s=L_x\times L_y$ is the number of
+  lattice sites and $N_\uparrow$, $N_\downarrow$ the numbers of spin-up and spin-down
+  electrons; the optimization is carried out at fixed $(N_\uparrow,N_\downarrow)$, i.e.\ in
+  the spin sector $S_z=(N_\uparrow-N_\downarrow)/2$, without resolving total spin $S$.
+  Momentum sectors are labelled by integers $(n_x,n_y)$ with
+  $\mathbf{k}=2\pi(n_x/L_x,\,n_y/L_y)$; the listed sectors are those degenerate with
+  the ground state. The optimization uses a single representative of that
+  degenerate set, whose Hilbert space dimension is $\dim\mathcal{H}_\mathbf{k}$;
+  $\dim\mathcal{H}_{N_\uparrow N_\downarrow}=\binom{N_s}{N_\uparrow}\binom{N_s}{N_\downarrow}$
+  is the dimension of the full fixed-particle-number sector.}
+  \label{tab:systems}
+  \begin{tabular}{lcccccrr}
+    \toprule
+    Lattice & $N_s$ & $N_\uparrow$ & $N_\downarrow$ & $S_z$ & Degenerate $\mathbf{k}$ sectors & $\dim\mathcal{H}_\mathbf{k}$ & $\dim\mathcal{H}_{N_\uparrow N_\downarrow}$ \\
+    \midrule
+    $3\times2$ & 6 & 2 & 2 & $0$ & $(0,0)$ & $39$ & $225$ \\
+    $3\times2$ & 6 & 3 & 2 & $\tfrac{1}{2}$ & $(1,0),\,(2,0)$ & $50$ & $300$ \\
+    $3\times2$ & 6 & 3 & 3 & $0$ & $(0,0)$ & $68$ & $400$ \\
+    $4\times2$ & 8 & 3 & 3 & $0$ & $(0,0)$ & $392$ & $3\,136$ \\
+    $3\times3$ & 9 & 3 & 2 & $\tfrac{1}{2}$ & $(0,1),\,(0,2),\,(1,0),\,(2,0)$ & $336$ & $3\,024$ \\
+    $3\times3$ & 9 & 3 & 3 & $0$ & $(0,0)$ & $792$ & $7\,056$ \\
+    $3\times3$ & 9 & 4 & 3 & $\tfrac{1}{2}$ & $(0,1),\,(0,2),\,(1,0),\,(2,0)$ & $1\,176$ & $10\,584$ \\
+    $3\times3$ & 9 & 4 & 4 & $0$ & $(0,0)$ & $1\,764$ & $15\,876$ \\
+    $3\times3$ & 9 & 5 & 4 & $\tfrac{1}{2}$ & $(0,1),\,(0,2),\,(1,0),\,(2,0)$ & $1\,764$ & $15\,876$ \\
+    $4\times3$ & 12 & 4 & 4 & $0$ & $(0,0)$ & $20\,439$ & $245\,025$ \\
+    $4\times3$ & 12 & 5 & 4 & $\tfrac{1}{2}$ & $(0,1),\,(0,2)$ & $32\,670$ & $392\,040$ \\
+    $4\times4$\textsuperscript{1} & 16 & 4 & 4 & $0$ & $(0,0),\,(0,2),\,(2,0)$ & $207\,184$ & $3\,312\,400$ \\
+    $4\times4$ & 16 & 5 & 4 & $\tfrac{1}{2}$ & $(0,1),\,(0,3),\,(1,0),\,(3,0)$ & $496\,860$ & $7\,949\,760$ \\
+    $4\times4$\textsuperscript{2} & 16 & 6 & 6 & $0$ & $(0,0),\,(0,2),\,(2,0)$ & $4\,008\,592$ & $64\,128\,064$ \\
+    \bottomrule
+  \end{tabular}
+  \\[2pt] \footnotesize\textsuperscript{1} The degenerate sectors do not all have the same dimension: $207\,168$ for $(0,2),\,(2,0)$; $207\,184$ for $(0,0)$.
+  \\[2pt] \footnotesize\textsuperscript{2} The ground-state manifold changes across the level crossing: $(0,0),\,(0,2),\,(2,0)$ for $U/t\in[0.25,4.75]$; $(0,0),\,(2,2)$ for $U/t\in[5.0,15.0]$.
+\end{table}

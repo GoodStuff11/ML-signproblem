@@ -137,3 +137,81 @@ function contract_shared_gradient(grad_a::AbstractVector{T}, param_map::Abstract
     end
     return grad_theta
 end
+
+"""
+    hva_layers_matching_dof(param_map, num_gates, reference_num_gates,
+                            reference_num_exponentials=1; mode=:ceil) → NamedTuple
+
+How many HVA (shared-coefficient) layers the ansatz needs for its variational
+degrees of freedom to match the *standard* (one-parameter-per-gate) ansatz built
+from `reference_num_gates` gates over `reference_num_exponentials` Trotter layers.
+
+The standard ansatz carries `reference_num_gates * reference_num_exponentials`
+free parameters. A shared-coefficient ansatz carries
+`num_shared_params(param_map, num_gates)` free parameters *per layer*, so the
+answer is that ratio, rounded per `mode` (`:ceil` — the default, so the HVA never
+ends up under-parameterized; `:floor`; `:round`) and clamped to at least 1.
+
+`reference_num_gates` may instead be the reference gate vector itself, and
+`param_map === nothing` means one parameter per gate.
+
+Returns `(; layers, params_per_layer, hva_dof, reference_dof, exact)`, where
+`exact` reports whether the two parameter counts coincide exactly rather than
+being rounded apart.
+
+# Example
+```julia
+gates_std = enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true)
+gates_hva, pmap = enumerate_ferm_excitations_HVA(Lvec)
+info = hva_layers_matching_dof(pmap, length(gates_hva), gates_std, 3)
+info.layers    # HVA layer count whose DOF count matches 3 standard layers
+```
+"""
+function hva_layers_matching_dof(param_map::Union{Nothing,AbstractVector{Int}},
+    num_gates::Int,
+    reference_num_gates::Int,
+    reference_num_exponentials::Int=1;
+    mode::Symbol=:ceil)
+
+    if !(mode in (:ceil, :floor, :round))
+        throw(ArgumentError("mode must be one of :ceil, :floor, :round; got :$mode"))
+    end
+    if num_gates <= 0
+        throw(ArgumentError("num_gates must be positive; got $num_gates"))
+    end
+    if reference_num_gates <= 0
+        throw(ArgumentError("reference_num_gates must be positive; got $reference_num_gates"))
+    end
+    if reference_num_exponentials <= 0
+        throw(ArgumentError(
+            "reference_num_exponentials must be positive; got $reference_num_exponentials"))
+    end
+
+    n_params = num_shared_params(param_map, num_gates)
+    if n_params <= 0
+        throw(ArgumentError("param_map yields $n_params parameters per layer"))
+    end
+
+    reference_dof = reference_num_gates * reference_num_exponentials
+    ratio = reference_dof / n_params
+    layers = if mode === :ceil
+        ceil(Int, ratio)
+    elseif mode === :floor
+        floor(Int, ratio)
+    else
+        round(Int, ratio)
+    end
+    layers = max(layers, 1)
+
+    return (layers=layers,
+        params_per_layer=n_params,
+        hva_dof=layers * n_params,
+        reference_dof=reference_dof,
+        exact=(layers * n_params == reference_dof))
+end
+
+hva_layers_matching_dof(param_map::Union{Nothing,AbstractVector{Int}}, num_gates::Int,
+    reference_gates::AbstractVector, reference_num_exponentials::Int=1;
+    mode::Symbol=:ceil) =
+    hva_layers_matching_dof(param_map, num_gates, length(reference_gates),
+        reference_num_exponentials; mode=mode)

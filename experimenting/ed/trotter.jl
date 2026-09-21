@@ -28,7 +28,9 @@ export UtilityFunctions, TamLib, TamFermion, TrotterOptimization
 export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state, extract_convergence_info, grow_coefficients,
        StridedCheckpoints, determine_checkpoint_stride, apply_unitary_checkpoints, backward_adjoint_propagation, apply_unitary,
        strip_global_phase, get_gpu_gate_ops, gpu_apply_gate_exp!, to_device_vector, to_device_matrix,
-       num_shared_params, expand_shared_coefficients, contract_shared_gradient, check_antihermitian_diagonal_gates
+       num_shared_params, expand_shared_coefficients, contract_shared_gradient, check_antihermitian_diagonal_gates,
+       hva_layers_matching_dof, realspace_basis, momentum_sector_to_realspace, check_realspace_transform,
+       apply_spin_exchange, spin_tied_fidelity_bound
 
 # Re-export TamFermion basis and gate utilities at Trotter level
 export get_basis_sector, enumerate_ferm_excitations, enumerate_ferm_excitations_HVA, fgateToTauSector, is_diagonal_gate
