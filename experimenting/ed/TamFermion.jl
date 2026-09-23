@@ -444,6 +444,9 @@ dimensions `Lvec`.  Returns a `Vector{FGate}`.
 
 Order `p` = number of creation + annihilation operators per spin channel,
 summed over both channels.
+
+Gates are returned sorted by `sortGatesByIJ`; `sort_gates=false` returns the
+unsorted enumeration order used before 2026-08-31.
 """
 function enumerate_ferm_excitations(p::Integer, Lvec,
     pos_conserve_mom::Bool=true,
@@ -454,7 +457,8 @@ function enumerate_ferm_excitations(p::Integer, Lvec,
     conserve_mom::Bool=pos_conserve_mom,
     conserve_sz::Bool=pos_conserve_sz,
     conserve_su2::Bool=pos_conserve_su2,
-    include_diagonal::Bool=pos_include_diagonal)
+    include_diagonal::Bool=pos_include_diagonal,
+    sort_gates::Bool=true)
 
     if conserve_su2
         throw(ErrorException("Total-spin (SU(2)) conservation is a different, non-abelian symmetry; not implemented."))
@@ -524,6 +528,9 @@ function enumerate_ferm_excitations(p::Integer, Lvec,
     # filter out hermitian conjugate
     filter!(g -> (g.cre_up, g.cre_dn) <= (g.ann_up, g.ann_dn), gates)
 
+    # sort_gates=false reproduces the gate order used before 2026-08-31 (commit 9efb09f),
+    # needed to remap coefficient files saved under that order.
+    sort_gates || return gates
     sorted_gates, _ = sortGatesByIJ(gates, N)
     return sorted_gates
 end

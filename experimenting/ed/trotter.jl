@@ -30,7 +30,9 @@ export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_stat
        strip_global_phase, get_gpu_gate_ops, gpu_apply_gate_exp!, to_device_vector, to_device_matrix,
        num_shared_params, expand_shared_coefficients, contract_shared_gradient, check_antihermitian_diagonal_gates,
        hva_layers_matching_dof, realspace_basis, momentum_sector_to_realspace, check_realspace_transform,
-       apply_spin_exchange, spin_tied_fidelity_bound
+       apply_spin_exchange, spin_tied_fidelity_bound,
+       normalize_stages, parse_stage_spec, is_stalled, prepare_loss_states, make_loss_function,
+       gate_key, gate_keys, remap_coefficients, align_warm_start
 
 # Re-export TamFermion basis and gate utilities at Trotter level
 export get_basis_sector, enumerate_ferm_excitations, enumerate_ferm_excitations_HVA, fgateToTauSector, is_diagonal_gate

@@ -71,6 +71,42 @@ Arguments:
                      count and instead derive the number of HVA layers whose total free-parameter
                      count matches the STANDARD ansatz at --num_exponentials layers. <mode> is one
                      of "ceil" (default), "floor" or "round". See hva_layers_matching_dof.
+
+Optimizer / escaping local minima:
+  --stages=<list> (optional): Comma-separated optimization stages, each OPT[:LOSS[:MAXITERS]] with
+                     OPT in LBFGS, GD, Adam and LOSS in overlap, energy (defaults: --loss and --maxiters).
+                     A stage on a different loss than --loss moves the parameters out of a local
+                     minimum of the primary loss; the best point by the primary loss is kept.
+                     Default: "LBFGS". The previous default was "LBFGS,GD,LBFGS": on the 4x4 runs
+                     the GD stage gained <= 2e-5 (up to 22.8 h), and the second LBFGS (a fresh-memory
+                     restart) 1.5-2e-3 over 200-500 iterations. A basin hop is such a restart plus a
+                     perturbation, so spend that budget with --basin_hops, or pass --stages=LBFGS,LBFGS.
+                     Example: --stages=LBFGS,LBFGS:energy:50,LBFGS
+  --lbfgs_memory=<int> (optional): L-BFGS history length m. Default: 30 (Optim's default is 10).
+  --stall_window=<int> (optional): Stop a stage early once the last <int> iterations improved the
+                     loss by less than --stall_rtol of the stage's total improvement. 0 disables.
+                     Default: 50.
+  --stall_rtol=<float> (optional): See --stall_window. Default: 0.005. Replayed on the saved
+                     4x4 N=(6,6) histories, 0.005 stops the first LBFGS stage early on 2 of 4 runs
+                     (57-202 iterations saved, <= 1e-3 higher loss); 0.01 stops all 4 (108-286
+                     saved, up to 4e-3 higher loss). The rule is relative to the stage's own
+                     improvement, so a stage that starts already converged (e.g. a resume) runs
+                     to its maxiters as before.
+  --multi_start_iters=<int> (optional): Iterations of the quick multi-start screen, per candidate
+                     and per primary-loss stage. Default: 30.
+  --basin_hops=<int> (optional): Basin-hopping rounds after the main stages: perturb the current
+                     point, re-optimize, accept if better (or by Metropolis at --hop_temperature),
+                     and always keep the best point. Default: 0 (off).
+  --hop_scale=<float> (optional): Perturbation size. Default: 0.1.
+  --hop_mode=<mode> (optional): "rms" (add hop_scale * rms(A) * N(0,1) to every coefficient) or
+                     "relative" (multiply each coefficient by 1 + hop_scale * N(0,1)). Default: "rms".
+  --hop_iters=<int> (optional): Max iterations of each hop's re-optimization. Default: 100.
+  --hop_stages=<list> (optional): Stages to run after each perturbation, same format as --stages
+                     (default MAXITERS is --hop_iters). Default: a single LBFGS stage on --loss.
+  --hop_temperature=<float> (optional): Metropolis temperature in loss units; 0 = greedy. Default: 0.
+  --hop_seed=<int> (optional): RNG seed for the perturbations.
+  --verify_warm_start=<bool> (optional): Remap loaded/grown coefficients onto the current gate
+                     order and check their loss before using them; see align_warm_start. Default: true.
 =#
 
 # Pre-scan ARGS for GPU flag before loading CUDA package
@@ -131,6 +167,12 @@ function parse_arguments(args::Vector{String})
     hva_tie = :full
     hva_pbc = true
     match_dof_mode = nothing
+    opt_cli = Dict{Symbol,Any}(
+        :stages => [(opt=:LBFGS,)], :lbfgs_memory => 30, :stall_window => 50, :stall_rtol => 0.005,
+        :multi_start_iters => 30, :basin_hops => 0, :hop_scale => 0.1, :hop_mode => :rms,
+        :hop_iters => 100, :hop_stages => nothing, :hop_temperature => 0.0, :hop_seed => nothing,
+        :verify_warm_start => true)
+    parse_stage_list(val) = [Trotter.parse_stage_spec(x) for x in split(val, ",") if !isempty(strip(x))]
     filtered_args = String[]
 
     for arg in args
@@ -212,6 +254,21 @@ function parse_arguments(args::Vector{String})
             else
                 error("Invalid --match_dof option: '$val'. Valid options are: 'ceil', 'floor', 'round'.")
             end
+        elseif startswith(arg, "--stages=")
+            opt_cli[:stages] = parse_stage_list(split(arg, "=", limit=2)[2])
+            isempty(opt_cli[:stages]) && error("--stages needs at least one stage")
+        elseif startswith(arg, "--hop_stages=")
+            opt_cli[:hop_stages] = parse_stage_list(split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--hop_mode=")
+            val = Symbol(split(arg, "=", limit=2)[2])
+            val in (:rms, :relative) || error("Invalid --hop_mode option: '$val'. Valid options are: 'rms', 'relative'.")
+            opt_cli[:hop_mode] = val
+        elseif (m = match(r"^--(lbfgs_memory|stall_window|multi_start_iters|basin_hops|hop_iters|hop_seed)=(.+)$", arg)) !== nothing
+            opt_cli[Symbol(m[1])] = parse(Int, m[2])
+        elseif (m = match(r"^--(stall_rtol|hop_scale|hop_temperature)=(.+)$", arg)) !== nothing
+            opt_cli[Symbol(m[1])] = parse(Float64, m[2])
+        elseif startswith(arg, "--verify_warm_start=")
+            opt_cli[:verify_warm_start] = parse(Bool, split(arg, "=", limit=2)[2])
         else
             push!(filtered_args, arg)
         end
@@ -249,15 +306,16 @@ function parse_arguments(args::Vector{String})
         datatype = ComplexF64
     end
 
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode = parse_arguments(ARGS)
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli = parse_arguments(ARGS)
 
         println("Number of threads: $(Threads.nthreads())")
+        println("Optimizer options: " * join(["$k=$v" for (k, v) in sort(collect(opt_cli), by=first)], ", "))
         println("Use GPU: $use_gpu")
         println("Data Type: $datatype")
         println("Ansatz: $ansatz" * (ansatz === :hva ? " (tie=$hva_tie, use_pbc=$hva_pbc)" : ""))
@@ -373,6 +431,11 @@ function (@main)(ARGS)
         else
             @time gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian)
         end
+        # Coefficient files saved before 2026-08-31 used the unsorted gate order; offer it to
+        # the warm-start verification so such files can still be resumed/grown from.
+        legacy_gate_orders = ansatz === :hva ? Pair{String,Vector{NTuple{4,UInt64}}}[] :
+            ["pre-2026-08-31 unsorted gate order" => Trotter.gate_keys(Trotter.enumerate_ferm_excitations(
+                2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian, sort_gates=false))]
         @time tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_sector; antihermitian=antihermitian)
 
         # 5. Set up scan range
@@ -591,8 +654,9 @@ function (@main)(ARGS)
         Trotter.interaction_scan_map_to_state(
             state_vecs, scan_instructions, gates, tau_terms, basis_sector, N_sites;
             maxiters=maxiters,
-            optimizer=[:LBFGS, :GradientDescent, :LBFGS],
+            optimizer=opt_cli[:stages],
             initialization_samples=10,
+            multi_start_iters=opt_cli[:multi_start_iters],
             H_hopping=H_hop_sector, H_interaction=H_int_sector,
             save_folder=folder, save_name=output_name_prefix,
             loss_type=loss_type,
@@ -606,7 +670,13 @@ function (@main)(ARGS)
             active_indices=active_indices,
             target_fidelity=target_fidelity,
             pruning_threshold=pruning_threshold,
-            param_map=param_map
+            param_map=param_map,
+            optimizer_options=(lbfgs_memory=opt_cli[:lbfgs_memory], stall_window=opt_cli[:stall_window],
+                stall_rtol=opt_cli[:stall_rtol], basin_hops=opt_cli[:basin_hops], hop_scale=opt_cli[:hop_scale],
+                hop_mode=opt_cli[:hop_mode], hop_iters=opt_cli[:hop_iters], hop_stages=opt_cli[:hop_stages],
+                hop_temperature=opt_cli[:hop_temperature], hop_seed=opt_cli[:hop_seed]),
+            verify_warm_start=opt_cli[:verify_warm_start],
+            legacy_gate_orders=legacy_gate_orders
         )
 
         return 0

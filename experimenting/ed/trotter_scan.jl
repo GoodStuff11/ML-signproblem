@@ -44,6 +44,20 @@ REDUCED space of length `num_exponentials * n_params` rather than
 and `active_indices` (pruning) likewise indexes the reduced vector. `param_map` is recorded
 in the `_shared.jld2` file so downstream analysis can expand the coefficients again.
 `param_map=nothing` (the default) is the unchanged one-parameter-per-gate behaviour.
+
+# Warm-start verification (`verify_warm_start`)
+Every coefficient vector taken from a file (`instructions["load_file"]` or a grow file) is
+passed through [`align_warm_start`](@ref) before use: it is remapped onto the current gate
+order (by the `gate_keys` saved with it, or, for older files, by trying `legacy_gate_orders`
+and the saved `_shared.jld2` gate list) and its loss is re-evaluated. A resumed or grown
+warm start (same U) that does not reproduce its saved loss, or a neighbouring-U warm start
+that does not beat the zero-coefficient loss, is discarded in favour of the default
+initialization instead of silently restarting from a random-looking point. Each saved file
+records `gate_keys`, `loss_type` and `num_exponentials`.
+
+# Optimizer options (`optimizer_options`)
+A `NamedTuple` splatted into [`optimize_unitary`](@ref), e.g.
+`(lbfgs_memory=30, stall_window=50, stall_rtol=0.005, basin_hops=3, hop_scale=0.1)`.
 """
 function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector}, instructions::Dict{String,Any},
     gates, tau_terms, basis, N::Int;
@@ -69,7 +83,10 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
     active_indices::Union{Nothing,AbstractVector{Int}}=nothing,
     target_fidelity::Union{Nothing,Float64}=nothing,
     pruning_threshold::Union{Nothing,Float64}=nothing,
-    param_map::Union{Nothing,AbstractVector{Int}}=nothing
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing,
+    optimizer_options::NamedTuple=(;),
+    verify_warm_start::Bool=true,
+    legacy_gate_orders=Pair{String,Vector{NTuple{4,UInt64}}}[]
 )
     # instructions["u_range"] should be a range of indices, e.g., 1:10
     # instructions["starting state"] should define the fixed reference state (state1)
@@ -119,6 +136,9 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     num_gates = length(gates)
     grown_once = false
+    current_gate_keys = gate_keys(gates)
+    M_full = num_exponentials * num_shared_params(param_map, num_gates)
+    load_file = get(instructions, "load_file", nothing)
 
     for u_idx in u_indices
         u_val_str = isnothing(u_vals) ? "" : " (U = $(u_vals[u_idx]))"
@@ -168,6 +188,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             end
         end
 
+        # Where the warm-start coefficients (if any) for this u_idx come from, for verification.
+        warm_source = isnothing(loaded_dict) ? nothing :
+                      (dict=loaded_dict, file=load_file, same_u=is_current_u_resume,
+                       label=(is_current_u_resume ? "resumed coefficients" : "warm start") * " from $(basename(string(load_file)))")
+
         # Bootstrap a larger ansatz from an existing smaller one (see docstring above for
         # :chain vs :per_u). Only applies when there is no already-resumable file at the
         # *current* num_exponentials for this u_idx (is_current_u_resume takes precedence).
@@ -183,14 +208,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                     loaded_m = copy(old_dict["metrics"])
                 end
                 grown_once = true
+                warm_source = (dict=old_dict, file=grow_file, same_u=true, label="grown warm start from $(basename(grow_file))")
             else
                 @warn "grow_from_num_exponentials set but no file found for u_idx=$u_idx: $grow_file. Falling back to default initialization."
             end
         end
-
-        # Reduce the warm-start vector to match optimize_unitary's active-parameter dimension;
-        # current_coeffs itself stays full-length (that is the schema saved/loaded elsewhere).
-        reduced_initial_coeffs = (!isnothing(active_indices) && !isnothing(current_coeffs)) ? current_coeffs[active_indices] : current_coeffs
 
         # Ensure valid datatype (Hermitian matrices require complex representation)
         effective_datatype = if !antihermitian && datatype <: Real
@@ -199,6 +221,35 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         else
             datatype
         end
+
+        if verify_warm_start && !isnothing(warm_source) && !isnothing(current_coeffs) && length(current_coeffs) == M_full
+            ref_prep, ov_target, H_prep = prepare_loss_states(state1, opt_target, state2, H, effective_datatype)
+            eval_loss = make_loss_function(loss_type, gates, tau_terms, ref_prep, ov_target, H_prep, basis, N;
+                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu,
+                datatype=effective_datatype, param_map=param_map)
+            saved = warm_source.dict
+            saved_loss_type = get(saved, "loss_type", string(loss_type))
+            expected_loss = (warm_source.same_u && saved_loss_type == string(loss_type) && haskey(saved, "metrics") &&
+                             haskey(saved["metrics"], "loss") && !isempty(saved["metrics"]["loss"])) ?
+                            Float64(saved["metrics"]["loss"][end]) : nothing
+            shared_file = isnothing(warm_source.file) ? nothing :
+                          replace(string(warm_source.file), r"_u_-?\d+\.jld2$" => "_shared.jld2")
+            aligned = align_warm_start(current_coeffs, saved, gates, eval_loss;
+                expected_loss=expected_loss, legacy_gate_orders=legacy_gate_orders,
+                shared_file=shared_file, param_map=param_map, label=warm_source.label)
+            if isnothing(aligned)
+                println("  Discarding $(warm_source.label); using the default initialization instead.")
+                current_coeffs = nothing
+                init_history = Float64[]
+                loaded_m = nothing
+            else
+                current_coeffs = aligned
+            end
+        end
+
+        # Reduce the warm-start vector to match optimize_unitary's active-parameter dimension;
+        # current_coeffs itself stays full-length (that is the schema saved/loaded elsewhere).
+        reduced_initial_coeffs = (!isnothing(active_indices) && !isnothing(current_coeffs)) ? current_coeffs[active_indices] : current_coeffs
 
         A_opt, final_loss, metrics = optimize_unitary(
             gates, tau_terms, state1, opt_target, basis, N;
@@ -220,7 +271,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
             use_gpu=use_gpu,
             datatype=effective_datatype,
             metric_functions=metric_functions,
-            param_map=param_map
+            param_map=param_map,
+            optimizer_options...
         )
 
         if use_gpu && _has_cuda()
@@ -272,7 +324,8 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 "gates" => gates,
                 "instructions" => instructions,
                 "u_range" => u_indices,
-                "param_map" => param_map
+                "param_map" => param_map,
+                "gate_keys" => current_gate_keys
             )
             JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
             shared_data_saved = true
@@ -285,7 +338,10 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 "coefficients" => A_opt,
                 "metrics" => metrics,
                 "norm1" => [norm(A_opt, 1)],
-                "norm2" => [norm(A_opt, 2)]
+                "norm2" => [norm(A_opt, 2)],
+                "gate_keys" => current_gate_keys,
+                "loss_type" => string(loss_type),
+                "num_exponentials" => num_exponentials
             )
             if !isnothing(active_indices)
                 iter_dict["active_indices"] = active_indices

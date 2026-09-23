@@ -19,6 +19,7 @@ import ..TamFermion
 using ..Trotter: @safe_threads
 using JLD2
 using Statistics
+using Random
 
 # Sub-components
 include("trotter_shared_params.jl")
@@ -27,6 +28,7 @@ include("trotter_gpu_kernels.jl")
 include("trotter_evolution.jl")
 include("trotter_loss.jl")
 include("trotter_core_optimization.jl")
+include("trotter_warm_start.jl")
 include("trotter_scan.jl")
 
 export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_state, extract_convergence_info, grow_coefficients,
@@ -34,6 +36,8 @@ export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_stat
        strip_global_phase, get_gpu_gate_ops, gpu_apply_gate_exp!, to_device_vector, to_device_matrix,
        num_shared_params, expand_shared_coefficients, contract_shared_gradient, check_antihermitian_diagonal_gates,
        hva_layers_matching_dof, realspace_basis, momentum_sector_to_realspace, check_realspace_transform,
-       apply_spin_exchange, spin_tied_fidelity_bound
+       apply_spin_exchange, spin_tied_fidelity_bound,
+       normalize_stages, parse_stage_spec, is_stalled, prepare_loss_states, make_loss_function,
+       gate_key, gate_keys, remap_coefficients, align_warm_start
 
 end # module TrotterOptimization

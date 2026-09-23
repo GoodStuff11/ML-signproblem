@@ -121,19 +121,109 @@ function embed_active_params(A_active::AbstractVector{T}, active_indices::Abstra
 end
 
 """
-    get_optimizer_algo(opt_sym::Symbol)
+    get_optimizer_algo(opt_sym::Symbol; lbfgs_memory=10)
 
-Map optimizer symbol to Optimization package algorithm instance.
+Map optimizer symbol to Optimization package algorithm instance. `lbfgs_memory` is the
+L-BFGS history length `m` (Optim's default is 10).
 """
-function get_optimizer_algo(opt_sym::Symbol)
+function get_optimizer_algo(opt_sym::Symbol; lbfgs_memory::Int=10)
     if opt_sym == :LBFGS
-        return LBFGS()
+        return LBFGS(m=lbfgs_memory)
     elseif opt_sym == :GradientDescent || opt_sym == :GD
         return GradientDescent()
     elseif opt_sym == :Adam
         return Adam(0.01)
     else
         error("Unsupported optimizer symbol: $opt_sym")
+    end
+end
+
+"""
+    normalize_stages(optimizer, loss_type, maxiters) -> Vector{NamedTuple{(:opt, :loss, :maxiters)}}
+
+Turn the `optimizer` argument of [`optimize_unitary`](@ref) into a list of stages. Each entry
+may be a `Symbol` (e.g. `:LBFGS`), an Optim algorithm instance, or a `NamedTuple` with any of
+`opt`, `loss` (`:overlap`/`:energy`) and `maxiters`; missing fields default to `:LBFGS`,
+`loss_type` and `maxiters`. Stages whose `loss` differs from `loss_type` optimize a different
+objective (e.g. energy between two overlap stages) to move the parameters out of a local
+minimum of the primary loss.
+"""
+normalize_stages(optimizer, loss_type::Symbol, maxiters::Int) =
+    [_normalize_stage(s, loss_type, maxiters) for s in (optimizer isa AbstractVector ? optimizer : [optimizer])]
+
+_normalize_stage(s::NamedTuple, loss_type, maxiters) =
+    (opt=get(s, :opt, :LBFGS), loss=get(s, :loss, loss_type), maxiters=get(s, :maxiters, maxiters))
+_normalize_stage(s, loss_type, maxiters) = (opt=s, loss=loss_type, maxiters=maxiters)
+
+"""
+    parse_stage_spec(spec::AbstractString) -> NamedTuple
+
+Parse `"OPT[:LOSS[:MAXITERS]]"`, e.g. `"LBFGS"`, `"LBFGS:energy"`, `"GD:overlap:50"`, into a
+stage for [`normalize_stages`](@ref). Omitted fields are filled in later with the run defaults.
+"""
+function parse_stage_spec(spec::AbstractString)
+    parts = split(strip(spec), ":")
+    (1 <= length(parts) <= 3 && !isempty(parts[1])) || error("Invalid stage spec '$spec' (expected OPT[:LOSS[:MAXITERS]])")
+    opt = Symbol(parts[1])
+    opt in (:LBFGS, :GradientDescent, :GD, :Adam) || error("Invalid optimizer '$(parts[1])' in stage spec '$spec'")
+    length(parts) == 1 && return (opt=opt,)
+    loss = Symbol(parts[2])
+    loss in (:overlap, :energy) || error("Invalid loss '$(parts[2])' in stage spec '$spec' (overlap or energy)")
+    length(parts) == 2 && return (opt=opt, loss=loss)
+    return (opt=opt, loss=loss, maxiters=parse(Int, parts[3]))
+end
+
+"""
+    is_stalled(history, window, rtol) -> Bool
+
+Early-stopping test on a stage's loss history. Using the running minimum `b`, the stage has
+stalled when the last `window` iterations improved it by at most `rtol` times the improvement
+made over the whole stage so far: `b[n-window] - b[n] <= rtol * (b[1] - b[n])`. Needs at least
+`2*window + 1` entries. `window <= 0` disables it.
+"""
+function is_stalled(history::AbstractVector{<:Real}, window::Int, rtol::Real)
+    n = length(history)
+    (window > 0 && n > 2 * window) || return false
+    b_now = minimum(history)
+    b_then = minimum(@view history[1:(n-window)])
+    return b_then - b_now <= rtol * (history[1] - b_now)
+end
+
+"""
+    prepare_loss_states(ref, target, state2, H, datatype) -> (ref_prep, overlap_target, H_mat)
+
+Phase-strip states for real datatypes (as the losses require) and split `target` into the
+state used by the overlap loss and the Hamiltonian used by the energy loss. Either of the last
+two may be `nothing` if it was not provided.
+"""
+function prepare_loss_states(ref::AbstractVector, target, state2, H, datatype::Type{<:Number})
+    prep(v) = isnothing(v) ? nothing : ((datatype <: Real) ? strip_global_phase(v)[1] : v)
+    ref_prep = prep(ref)
+    overlap_target = target isa AbstractVector ? prep(target) : prep(state2)
+    H_mat = target isa AbstractMatrix ? target : H
+    return ref_prep, overlap_target, H_mat
+end
+
+"""
+    make_loss_function(loss, gates, tau_terms, ref_prep, overlap_target, H_mat, basis, N; kwargs...) -> A -> loss
+
+Loss on the full (un-pruned) coefficient vector for `loss = :overlap` or `:energy`.
+"""
+function make_loss_function(loss::Symbol, gates, tau_terms, ref_prep, overlap_target, H_mat, basis, N::Int;
+    num_exponentials::Int=1, antihermitian::Bool=false, use_gpu::Bool=false, datatype::Type{<:Number}=ComplexF64,
+    param_map::Union{Nothing,AbstractVector{Int}}=nothing)
+    if loss == :overlap
+        isnothing(overlap_target) && error("An overlap-loss stage needs the target state (pass state2).")
+        return A -> adjoint_loss(A, gates, tau_terms, ref_prep, overlap_target, basis, N;
+            num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+            param_map=param_map)
+    elseif loss == :energy
+        isnothing(H_mat) && error("An energy-loss stage needs the Hamiltonian (pass H).")
+        return A -> energy_loss(A, gates, tau_terms, H_mat, ref_prep, basis, N;
+            num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+            param_map=param_map)
+    else
+        error("Unknown loss_type: $loss")
     end
 end
 
@@ -149,7 +239,8 @@ function find_multi_start_initialization(f, optf, M::Int;
     maxiters::Int=100,
     optimizer=:LBFGS,
     perturb_optimization::Float64=0.0,
-    use_gpu::Bool=false)
+    use_gpu::Bool=false,
+    lbfgs_memory::Int=10)
     # Returns (A_init, local_multistart_losses, local_multistart_gradients, local_best_start_idx, multistart_run, initial_gradient_samples)
     # initial_gradient_samples records (mag, gnorm, loss_val) for EVERY sampled random initialization
     # (not just the survivors that pass the is_good filter below), for barren-plateau-style analysis
@@ -213,7 +304,7 @@ function find_multi_start_initialization(f, optf, M::Int;
                 used_perturb = perturb_optimization^(1 + (idx - 1) / 3)
                 curr_A = curr_A * (1 - used_perturb) + used_perturb * mean(abs.(curr_A)) * (2 * rand(length(curr_A)) .- 1)
             end
-            opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
+            opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt; lbfgs_memory=lbfgs_memory) : opt
             cb = (state, loss_val) -> begin
                 push!(candidate_history, loss_val)
                 push!(candidate_gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
@@ -309,42 +400,46 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     antihermitian::Bool=false,
     use_gpu::Bool=false,
     datatype::Type{<:Number}=ComplexF64,
-    metric_functions::Dict{String,Function}=Dict{String,Function}())
+    metric_functions::Dict{String,Function}=Dict{String,Function}(),
+    lbfgs_memory::Int=10,
+    stall_window::Int=0,
+    stall_rtol::Float64=0.005,
+    basin_hops::Int=0,
+    hop_scale::Float64=0.1,
+    hop_mode::Symbol=:rms,
+    hop_iters::Int=100,
+    hop_stages=nothing,
+    hop_temperature::Float64=0.0,
+    hop_seed::Union{Nothing,Int}=nothing)
+
+    loss_type in (:overlap, :energy) || error("Unknown loss_type: $loss_type")
+    hop_mode in (:rms, :relative) || error("Invalid hop_mode: $hop_mode. Valid options are :rms, :relative.")
 
     # Handle conversion from Complex to Real data type if specified
-    ref_prep, _ = (datatype <: Real) ? strip_global_phase(ref) : (ref, 1.0)
-    target_prep = if target isa AbstractVector
-        (datatype <: Real) ? strip_global_phase(target)[1] : target
-    else
-        target
-    end
+    ref_prep, state2_prep, H_mat = prepare_loss_states(ref, target, state2, H, datatype)
 
     check_antihermitian_diagonal_gates(gates, antihermitian)
 
     n_params = num_shared_params(param_map, length(gates))
     M_full = num_exponentials * n_params
 
-    f = (A, p=nothing) -> begin
-        A_full = isnothing(active_indices) ? A : embed_active_params(A, active_indices, M_full)
-        if loss_type == :overlap
-            return adjoint_loss(A_full, gates, tau_terms, ref_prep, target_prep, basis, N;
-                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
-                param_map=param_map)
-        elseif loss_type == :energy
-            return energy_loss(A_full, gates, tau_terms, target_prep, ref_prep, basis, N;
-                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
-                param_map=param_map)
-        else
-            error("Unknown loss_type: $loss_type")
-        end
+    # One loss closure per loss type, built on demand (a stage may optimize a loss other
+    # than the primary `loss_type`). `f` is the primary loss.
+    loss_fns = Dict{Symbol,Function}()
+    loss_fn(lt::Symbol) = get!(loss_fns, lt) do
+        f_full = make_loss_function(lt, gates, tau_terms, ref_prep, state2_prep, H_mat, basis, N;
+            num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+            param_map=param_map)
+        (A, p=nothing) -> f_full(isnothing(active_indices) ? A : embed_active_params(A, active_indices, M_full))
     end
+    f = loss_fn(loss_type)
 
     optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())
     M = isnothing(active_indices) ? M_full : length(active_indices)
 
-    state2_vec = target isa AbstractVector ? target : state2
-    state2_prep = !isnothing(state2_vec) ? ((datatype <: Real) ? strip_global_phase(state2_vec)[1] : state2_vec) : nothing
-    H_mat = target isa AbstractMatrix ? target : H
+    stages = normalize_stages(optimizer, loss_type, maxiters)
+    primary_opts = [s.opt for s in stages if s.loss == loss_type]
+    isempty(primary_opts) && push!(primary_opts, :LBFGS)
 
     multistart_run = false
     local_multistart_losses = Vector{Float64}[]
@@ -360,9 +455,10 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
             multi_start_samples=multi_start_samples,
             multi_start_iters=multi_start_iters,
             maxiters=maxiters,
-            optimizer=optimizer,
+            optimizer=primary_opts,
             perturb_optimization=perturb_optimization,
-            use_gpu=use_gpu)
+            use_gpu=use_gpu,
+            lbfgs_memory=lbfgs_memory)
     else
         A_init = (2 * rand(M) .- 1) * 0.01
     end
@@ -418,38 +514,110 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         return A_zero, initial_loss, metrics
     end
 
-    optimizers = (optimizer isa AbstractVector) ? optimizer : [optimizer]
     curr_A = copy(A_init)
-    curr_loss = initial_loss
     final_history = copy(initial_history)
     final_gradient_history = Vector{Float64}[]
     stage_convergence_info = Dict{String,Any}[]
 
-    cb = (state, loss_val) -> begin
-        push!(final_history, loss_val)
-        push!(final_gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
-        return false
+    # Track the best point by the PRIMARY loss: stages on another loss, and basin hops, may
+    # move away from it, and the returned coefficients must never be worse than the start.
+    best_A = copy(A_init)
+    best_loss = initial_loss
+
+    # Run one stage from `A0`. Primary-loss iterations are appended to the main history
+    # when `record`; every stage's own history is returned.
+    function run_stage(A0, st, label; record::Bool)
+        f_st = loss_fn(st.loss)
+        is_primary = st.loss == loss_type
+        optf_st = is_primary ? optf : Optimization.OptimizationFunction(f_st, Optimization.AutoZygote())
+        stage_hist = Float64[]
+        stalled = Ref(false)
+        cb = (state, loss_val) -> begin
+            push!(stage_hist, loss_val)
+            if record && is_primary
+                push!(final_history, loss_val)
+                push!(final_gradient_history, isnothing(state.grad) ? fill(NaN, length(state.u)) : copy(state.grad))
+            end
+            if is_stalled(stage_hist, stall_window, stall_rtol)
+                stalled[] = true
+                return true
+            end
+            return false
+        end
+        opt_algo = (st.opt isa Symbol) ? get_optimizer_algo(st.opt; lbfgs_memory=lbfgs_memory) : st.opt
+        prob = Optimization.OptimizationProblem(optf_st, A0)
+        println("Running $label with $(st.opt) on $(st.loss) loss (maxiters=$(st.maxiters), use_gpu=$use_gpu)...")
+        sol = Optimization.solve(prob, opt_algo, maxiters=st.maxiters, callback=cb)
+        primary_val = is_primary ? Float64(sol.objective) : Float64(f(sol.u))
+
+        conv_info = extract_convergence_info(sol)
+        if stalled[]
+            conv_info["primary_reason"] = "Stalled (< $(stall_rtol) of the stage's improvement over the last $(stall_window) iterations)"
+        end
+        conv_info["optimizer"] = string(st.opt)
+        conv_info["loss"] = string(st.loss)
+        conv_info["stalled"] = stalled[]
+        conv_info["primary_loss"] = primary_val
+        println("    $label ($(st.opt), $(st.loss)) stopped by: $(conv_info["primary_reason"]) (Iterations: $(conv_info["iterations"]), Final |g|: $(conv_info["g_residual"]))" *
+                (is_primary ? "" : " -> $loss_type loss $primary_val"))
+        return sol.u, primary_val, conv_info, stage_hist
     end
 
-    for (idx, opt) in enumerate(optimizers)
+    for (idx, st) in enumerate(stages)
         if idx > 1 && perturb_optimization > 1e-9
             used_perturb = perturb_optimization^(1 + (idx - 1) / 3)
             curr_A = curr_A * (1 - used_perturb) + used_perturb * mean(abs.(curr_A)) * (2 * rand(length(curr_A)) .- 1)
         end
-        opt_algo = (opt isa Symbol) ? get_optimizer_algo(opt) : opt
-        prob = Optimization.OptimizationProblem(optf, curr_A)
-        println("Running main optimization step $idx with $opt (maxiters=$maxiters, use_gpu=$use_gpu)...")
-        sol = Optimization.solve(prob, opt_algo, maxiters=maxiters, callback=cb)
-        curr_A = sol.u
-        curr_loss = sol.objective
-
-        conv_info = extract_convergence_info(sol)
-        conv_info["optimizer"] = string(opt)
+        curr_A, primary_val, conv_info, _ = run_stage(curr_A, st, "main optimization step $idx"; record=true)
         conv_info["stage"] = idx
         push!(stage_convergence_info, conv_info)
-        println("    Step $idx ($opt) stopped by: $(conv_info["primary_reason"]) (Iterations: $(conv_info["iterations"]), Final |g|: $(conv_info["g_residual"]))")
+        if primary_val < best_loss
+            best_A, best_loss = copy(curr_A), primary_val
+        end
     end
 
+    # Basin hopping: perturb the current point, re-optimize, accept greedily (or with a
+    # Metropolis rule at `hop_temperature > 0`), and always keep the best point seen.
+    hop_records = Dict{String,Any}[]
+    if basin_hops > 0
+        rng = isnothing(hop_seed) ? Random.default_rng() : Random.MersenneTwister(hop_seed)
+        hop_stage_list = isnothing(hop_stages) ?
+                         [(opt=first(primary_opts), loss=loss_type, maxiters=hop_iters)] :
+                         normalize_stages(hop_stages, loss_type, hop_iters)
+        hop_A, hop_loss = copy(best_A), best_loss
+        println("Basin hopping: $basin_hops hops from loss $hop_loss (hop_scale=$hop_scale, hop_mode=$hop_mode, " *
+                "stages=$([string(s.opt, ":", s.loss, ":", s.maxiters) for s in hop_stage_list]), T=$hop_temperature)")
+        for h in 1:basin_hops
+            trial_A = if hop_mode == :relative
+                hop_A .* (1 .+ hop_scale .* randn(rng, length(hop_A)))
+            else
+                rms = sqrt(mean(abs2, hop_A))
+                hop_A .+ hop_scale * (rms > 0 ? rms : 1.0) .* randn(rng, length(hop_A))
+            end
+            start_loss = Float64(f(trial_A))
+            trial_loss = start_loss
+            hop_hist = Float64[]
+            hop_conv = Dict{String,Any}[]
+            for (s_idx, st) in enumerate(hop_stage_list)
+                trial_A, trial_loss, conv_info, hist = run_stage(trial_A, st, "hop $h stage $s_idx"; record=false)
+                append!(hop_hist, hist)
+                push!(hop_conv, conv_info)
+            end
+            accepted = trial_loss < hop_loss ||
+                       (hop_temperature > 0 && rand(rng) < exp(-(trial_loss - hop_loss) / hop_temperature))
+            improved = trial_loss < best_loss
+            improved && ((best_A, best_loss) = (copy(trial_A), trial_loss))
+            accepted && ((hop_A, hop_loss) = (trial_A, trial_loss))
+            println("  Hop $h/$basin_hops: perturbed loss $start_loss -> $trial_loss " *
+                    "($(accepted ? "accepted" : "rejected")$(improved ? ", new best" : ""); best $best_loss)")
+            push!(hop_records, Dict{String,Any}("hop" => h, "start_loss" => start_loss, "final_loss" => trial_loss,
+                "accepted" => accepted, "new_best" => improved, "best_loss" => best_loss,
+                "history" => hop_hist, "convergence_info" => hop_conv))
+        end
+    end
+    metrics["basin_hops"] = Any[hop_records]
+
+    curr_A, curr_loss = best_A, best_loss
     curr_A = isnothing(active_indices) ? curr_A : embed_active_params(curr_A, active_indices, M_full)
 
     push!(metrics["loss"], curr_loss)
