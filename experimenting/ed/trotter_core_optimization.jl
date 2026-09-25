@@ -501,6 +501,11 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     end
 
     println("Initial loss ($loss_type): $initial_loss")
+    # Energy of the overlap target under the energy-loss Hamiltonian (the ED ground energy
+    # when the target is the ED ground state), so the two losses can be compared on one scale.
+    if !isnothing(H_mat) && !isnothing(state2_prep)
+        println("Target state energy <target|H|target>: $(real(dot(state2_prep, H_mat * state2_prep)) / real(dot(state2_prep, state2_prep)))")
+    end
 
     if loss_type == :overlap && 0 <= initial_loss < 1e-12
         println("States are already equal")
