@@ -333,14 +333,33 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         # Save shared data once we have it
         if !isnothing(save_folder) && !shared_data_saved
             println("saving shared data...")
+            shared_path = joinpath(save_folder, "$(save_name)_shared.jld2")
+            # Files saved without `gate_keys` (before 2026-09) are only interpretable through the
+            # gate order in this shared file, so never replace an existing shared gate list with a
+            # reordering of it; per-U files record their own order in `gate_keys` anyway.
+            shared_gates = run_gates
+            if isfile(shared_path)
+                old_shared = try
+                    JLD2.load(shared_path)["dict"]
+                catch
+                    nothing
+                end
+                if !isnothing(old_shared) && haskey(old_shared, "gates")
+                    old_keys = gate_keys(old_shared["gates"])
+                    if old_keys != gate_keys(run_gates) && !isnothing(gate_permutation(old_keys, gate_keys(run_gates)))
+                        println("  keeping the gate order already in $(basename(shared_path)) (this run's order is recorded per U in gate_keys)")
+                        shared_gates = run_gates[gate_permutation(old_keys, gate_keys(run_gates))]
+                    end
+                end
+            end
             shared_dict = Dict(
-                "gates" => run_gates,
+                "gates" => shared_gates,
                 "instructions" => instructions,
                 "u_range" => u_indices,
                 "param_map" => param_map,
-                "gate_keys" => gate_keys(run_gates)
+                "gate_keys" => gate_keys(shared_gates)
             )
-            JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
+            JLD2.jldsave(shared_path; dict=shared_dict)
             shared_data_saved = true
         end
 

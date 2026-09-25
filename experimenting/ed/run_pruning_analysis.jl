@@ -327,6 +327,16 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
             total_params = length(A_base)
             num_gates = length(gates)
             stored_num_exp = length(A_base) ÷ num_gates
+            # The gate order is part of the circuit. Files record the order they were optimized
+            # in (`gate_keys`), which can differ per U index (e.g. files resumed from before
+            # 2026-08-31 keep the unsorted order); the shared gate list is only a fallback.
+            file_gates = if haskey(iter_data, "gate_keys")
+                perm = Trotter.gate_permutation(iter_data["gate_keys"], Trotter.gate_keys(gates))
+                isnothing(perm) && error("$(basename(iter_files[k])): its gate_keys are not the shared gate set")
+                gates[perm]
+            else
+                gates
+            end
 
             println("Processing Trotter Map $k / $num_maps (U index: $ending_U_index)")
             for (l, threshold) in enumerate(thresholds)
@@ -340,7 +350,7 @@ function run_pruning_analysis(folder, type, custom_ref_state_arg, antihermitian,
 
                 # Apply unitary sequence
                 psi = TrotterOptimization.apply_unitary(
-                    A_pruned, gates, state1, basis_ints, N_sites, stored_num_exp;
+                    A_pruned, file_gates, state1, basis_ints, N_sites, stored_num_exp;
                     antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype
                 )
 

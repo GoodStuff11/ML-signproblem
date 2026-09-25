@@ -138,6 +138,15 @@ mktempdir() do dir
     # and the file it wrote resumes again, via its recorded gate_keys
     got_r = align_warm_start(d["coefficients"], d, s.gates, eval1; expected_loss=Float64(d["metrics"]["loss"][end]))
     @assert !isnothing(got_r) && got_r.perm == p_leg
+    @assert Trotter.gate_keys(JLD2.load(joinpath(dir, "resumed_shared.jld2"))["dict"]["gates"]) == leg
+    # a fresh run (current order) at another U must not reorder the existing shared gate list,
+    # which files without gate_keys depend on; its own file records the current order
+    Trotter.interaction_scan_map_to_state(state_vecs, Dict{String,Any}("u_range" => 32:32, "num_exponentials" => 1),
+        s.gates, s.tau, s.basis, s.N; maxiters=1, optimizer=:LBFGS, U_values=U_values, antihermitian=true,
+        initialization_samples=2, multi_start_samples=1, multi_start_iters=1,
+        save_folder=dir, save_name="resumed")
+    @assert Trotter.gate_keys(JLD2.load(joinpath(dir, "resumed_shared.jld2"))["dict"]["gates"]) == leg "shared gate order was overwritten"
+    @assert JLD2.load(joinpath(dir, "resumed_u_32.jld2"))["dict"]["gate_keys"] == cur
 end
 println("resumed scan test passed")
 
