@@ -39,11 +39,21 @@ Options:
   --hva_pbc=<bool>           Periodic bonds in the ansatz. Default: true when every lattice
                              axis is even (or length <= 2), false otherwise -- a periodic
                              axis of odd length > 2 cannot be 2-coloured and would throw.
+  --ref=<slater|eigenstate>  Which state the circuit starts from. Default: slater.
+                             "slater"     -- a single Slater determinant, prepended as row 1
+                                             of the ED data (U_values then starts at 0.0).
+                             "eigenstate" -- the ED ground state at the LOWEST U in the data
+                                             (no row is prepended). NOTE this shifts the U
+                                             indexing by one: with "slater" u_idx=9 is U=2.0,
+                                             with "eigenstate" u_idx=8 is U=2.0. The `U` column
+                                             in the CSV records the actual value either way.
   --custom_ref_state=<value> Reference state ("slater" or a basis index). Default: "slater".
   --control                  Also run the standard momentum-conserving Trotter ansatz
                              (antihermitian, 1 layer) as a calibration row. This should
                              reproduce the stored repeat_optimization_*.csv numbers.
   --seed=<n>                 Base RNG seed. Default: 20260915.
+  --use_gpu[=<bool>]         Run the circuit evolution and adjoint gradients on a CUDA GPU.
+                             CUDA is only loaded when this is set. Default: false.
   --out=<path>               Output CSV. Default:
                              benchmarks/hva_parameter_sweep_<folder>_u<idx>.csv
 
@@ -56,6 +66,23 @@ holding the interaction strength `U_values[u_idx]`. Everything else matches, so
 layer count are also encoded in the `ansatz` column as `hva_<tie>_P<layers>`,
 which keeps the (ansatz, loss_type, run) uniqueness that collector checks.
 =#
+
+# Pre-scan ARGS for the GPU flag so CUDA is only loaded when it is requested.
+_use_gpu_prescan = let val = false
+    for arg in ARGS
+        if arg == "--use_gpu" || arg == "--use_gpu=true"
+            val = true
+        elseif arg == "--use_gpu=false"
+            val = false
+        end
+    end
+    val
+end
+
+if _use_gpu_prescan
+    ENV["JULIA_CUDA_USE_COMPAT"] = "true"
+    using CUDA
+end
 
 using LinearAlgebra
 using Combinatorics
@@ -96,8 +123,10 @@ function parse_arguments(args::Vector{String})
     losses = [:overlap]
     hva_pbc = nothing
     custom_ref_state_arg = "slater"
+    ref_mode = nothing
     control = false
     seed = 20260915
+    use_gpu = false
     out_path = nothing
     positional = String[]
 
@@ -130,12 +159,19 @@ function parse_arguments(args::Vector{String})
             end
         elseif arg == "--hva_pbc" || startswith(arg, "--hva_pbc=")
             hva_pbc = occursin("=", arg) ? parse(Bool, split(arg, "=", limit=2)[2]) : true
+        elseif startswith(arg, "--ref=")
+            v = String(split(arg, "=", limit=2)[2])
+            v in ("slater", "eigenstate") ||
+                error("Invalid --ref entry: '$v'. Valid: slater, eigenstate.")
+            ref_mode = Symbol(v)
         elseif startswith(arg, "--custom_ref_state=")
             custom_ref_state_arg = String(split(arg, "=", limit=2)[2])
             # elseif arg == "--control"
             #     control = true
         elseif startswith(arg, "--seed=")
             seed = parse(Int, split(arg, "=", limit=2)[2])
+        elseif arg == "--use_gpu" || startswith(arg, "--use_gpu=")
+            use_gpu = occursin("=", arg) ? parse(Bool, split(arg, "=", limit=2)[2]) : true
         elseif startswith(arg, "--out=")
             out_path = String(split(arg, "=", limit=2)[2])
         else
@@ -150,6 +186,10 @@ function parse_arguments(args::Vector{String})
     folder = data_folder(folder_arg)
     u_idx = parse(Int, positional[2])
 
+    # --ref wins; otherwise fall back to the old --custom_ref_state spelling.
+    ref_mode = isnothing(ref_mode) ?
+               (custom_ref_state_arg == "slater" ? :slater : :eigenstate) : ref_mode
+
     run_start = isnothing(run_start) ? 1 : run_start
     run_end = isnothing(run_end) ? runs : run_end
 
@@ -160,7 +200,7 @@ function parse_arguments(args::Vector{String})
 
     return (; folder, folder_arg, u_idx, ties, layers, runs, run_start, run_end,
         maxiters, initialization_samples, losses, hva_pbc, custom_ref_state_arg,
-        control, seed, out_path)
+        ref_mode, control, seed, use_gpu, out_path)
 end
 
 function (@main)(ARGS)
@@ -176,17 +216,28 @@ function (@main)(ARGS)
         println("maxiters:               $(cfg.maxiters)")
         println("initialization_samples: $(cfg.initialization_samples)")
         println("runs:                   $(cfg.run_start):$(cfg.run_end) of $(cfg.runs)")
+        println("reference:              $(cfg.ref_mode)")
         println("output CSV:             $(cfg.out_path)")
+        if cfg.use_gpu
+            CUDA.functional() || error("--use_gpu was given but CUDA is not functional on this node")
+            println("use_gpu:                true ($(CUDA.name(CUDA.device())))")
+        else
+            println("use_gpu:                false")
+        end
 
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
             load_ED_data(cfg.folder; verbose=true, sign_convention=:spin_first,
-                use_slater_reference=cfg.custom_ref_state_arg == "slater")
+                use_slater_reference=cfg.ref_mode === :slater)
 
         n_up, n_dn = N_elec
         Lvec = parse_lattice_dimension(cfg.folder)
         N_sites = prod(Lvec)
         target_u = U_values[cfg.u_idx]
         println("Lvec = $Lvec, nvec = ($n_up, $n_dn), U = $target_u")
+        if cfg.ref_mode === :eigenstate
+            println("reference = ED ground state at U = $(U_values[1]) " *
+                    "(no Slater row prepended, so u_idx is shifted by one vs --ref=slater)")
+        end
 
         hva_pbc = if !isnothing(cfg.hva_pbc)
             cfg.hva_pbc
@@ -310,9 +361,9 @@ function (@main)(ARGS)
                             loss_type=loss_type, H=H_real, state2=s2_r, num_exponentials=P,
                             param_map=pmap, maxiters=cfg.maxiters, optimizer=OPTIMIZER_CHAIN,
                             initialization_samples=cfg.initialization_samples,
-                            antihermitian=false, use_gpu=false, datatype=ComplexF64)
+                            antihermitian=false, use_gpu=cfg.use_gpu, datatype=ComplexF64)
                         psi = Array(Trotter.apply_unitary(A, gates, s1_r, basis_real, N_sites, P;
-                            antihermitian=false, use_gpu=false, datatype=ComplexF64, param_map=pmap))
+                            antihermitian=false, use_gpu=cfg.use_gpu, datatype=ComplexF64, param_map=pmap))
                         record(label, loss_type, run, seed, floss,
                             1.0 - abs2(dot(s2_r, psi)), real(dot(psi, H_real * psi)),
                             length(A), P, n_per_layer,

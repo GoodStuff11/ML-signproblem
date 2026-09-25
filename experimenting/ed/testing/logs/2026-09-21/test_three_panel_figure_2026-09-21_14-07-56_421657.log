@@ -1,0 +1,14 @@
+================================================================================
+Timestamp: 2026-09-21T14:07:56.820
+Command run: julia testing/test_three_panel_figure.jl 
+================================================================================
+=== Starting test_three_panel_figure ===
+Saved 3-panel figure to: /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/three_panel_figure.png, /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/three_panel_figure.pdf, and /home/jek354/research/ML-signproblem/experimenting/ed/testing/../good_images/final/three_panel_figure.svg
+Panel 1 systems: ["N=(3, 2)_3x2", "N=(3, 3)_3x2", "N=(3, 3)_4x2", "N=(5, 4)_3x3", "N=(5, 4)_4x3"]
+Panel 2 systems: ["N=(2, 2)_3x2", "N=(3, 2)_3x3", "N=(3, 3)_3x3", "N=(4, 3)_3x3", "N=(4, 4)_3x3"]
+Panel 3 dimH_list: [39.0, 50.0, 68.0, 336.0, 392.0, 792.0, 1176.0, 1764.0, 1764.0, 32670.0, 4.008592e6]
+U = 4.0: 11 losses, min = 1.5076828674409626e-13, max = 0.00489431619644165
+U = 8.0: 11 losses, min = 1.0436096431476471e-14, max = 0.07511115074157715
+U = 12.0: 11 losses, min = 3.9968028886505635e-15, max = 0.1281854510307312
+U = 15.0: 11 losses, min = 6.217248937900877e-15, max = 0.1658027172088623
+=== TEST PASSED SUCCESSFULLY: test_three_panel_figure ===

@@ -55,12 +55,34 @@ const FOLDER = get_data_root()
 const LEGEND_ARGS = Dict(:rowgap=>-6, :padding=>(3,3,0,0), :labelsize=>9)
 set_theme!(theme_latexfonts(), fontsize=10)
 
-function generate_three_panel_figure(; output_dir::String)
-    fig = Figure(size = (1050, 300), figure_padding = 6)
+function get_figsize(num_cols::Int, height_mm::Float64=55.0)
+    px_per_mm = 96 / 25.4
+    φ = (1+sqrt(5))/2
+    if num_cols == 1
+        width_mm = 89 # mm
+    elseif num_cols == 2
+        width_mm = 180 # mm
+    else
+        error("Can only have num_cols == 1 or 2 (given: $num_cols)")
+    end
+    width_px = width_mm * px_per_mm
+    height_px = height_mm * px_per_mm
+    return (width_px, height_px)
+end
 
+function create_fig(num_cols::Int, height_mm::Float64=55.0; aspect=nothing, kwargs...)
+    fig = Figure(size=get_figsize(num_cols, height_mm), figure_padding=5)
+    ax_aspect = (aspect == :auto || isnothing(aspect)) ? nothing : aspect
+    ax = Axis(fig[1, 1]; 
+        aspect = ax_aspect,
+        kwargs...
+    )
+    return fig, ax
+end
+
+function generate_three_panel_figure(; output_dir::String, height_mm::Float64=55.0)
     # Panel 1: Improvement ratio for systems starting at baseline
-    ax1 = Axis(fig[1, 1];
-        aspect = (1 + sqrt(5)) / 2,
+    fig, ax1 = create_fig(2, height_mm;
         xlabel = L"U",
         ylabel = L"\frac{|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2}{|\langle E_0(U)|E_0(0)\rangle|^2}",
         limits = ((0, 15), (1, 15.5)),
@@ -69,7 +91,6 @@ function generate_three_panel_figure(; output_dir::String)
 
     # Panel 2: Improvement ratio for systems starting noticeably > baseline
     ax2 = Axis(fig[1, 2];
-        aspect = (1 + sqrt(5)) / 2,
         xlabel = L"U",
         limits = ((0, 15), (1, 15.5)),
         yticks = [1, 5, 10, 15]
@@ -78,17 +99,16 @@ function generate_three_panel_figure(; output_dir::String)
 
     # Panel 3: Infidelity vs dimH across multiple U values
     ax3 = Axis(fig[1, 3];
-        aspect = (1 + sqrt(5)) / 2,
         xlabel = L"\dim \mathcal{H}",
         ylabel = L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
         xscale = log10,
         yscale = log10,
-        limits = ((15, 60000), (1e-15, 1.0)),
+        limits = ((15, 1e7), (1e-15, 1.0)),
     )
 
     u_indices = 2:60
-    palette_colors = cmap2(length(FILE_LABEL_PAIRS))
-    selected_U_values = [4.0, 8.0, 12.0]
+    palette_colors = cmap2(length(FILE_LABEL_PAIRS) + 1)
+    selected_U_values = [4.0, 8.0, 12.0, 15.0]
     num_u = length(selected_U_values)
 
     dimH_list = Float64[]
@@ -128,7 +148,7 @@ function generate_three_panel_figure(; output_dir::String)
             end
             h5open(joinpath(sys_dir, valid_files[1]), "r") do h5data
                 interaction_data = read(h5data["data/uvec"])
-                hilbert_space_size = length(read(h5data["data/evecs/0"])[:, 1, 1])
+                hilbert_space_size = size(h5data["data/evecs/0"], 1)
             end
         end
 
@@ -177,6 +197,33 @@ function generate_three_panel_figure(; output_dir::String)
         end
     end
 
+    # Append 4x4 data to Panel 3
+    sys_dir_4x4 = joinpath(FOLDER, "N=(6, 6)_4x4")
+    if isdir(sys_dir_4x4)
+        hilbert_space_size_4x4 = 4008592
+        push!(dimH_list, Float64(hilbert_space_size_4x4))
+
+        u_files_4x4 = Dict(
+            4.0 => "trotter_N=16_ref_slater_antihermitian_u_17.jld2",
+            8.0 => "trotter_N=16_ref_slater_antihermitian_u_33.jld2",
+            12.0 => "trotter_N=16_ref_slater_antihermitian_u_49.jld2",
+            15.0 => "trotter_N=16_ref_slater_antihermitian_u_61.jld2",
+        )
+
+        for (k, u_target) in enumerate(selected_U_values)
+            if haskey(u_files_4x4, u_target)
+                fpath = joinpath(sys_dir_4x4, u_files_4x4[u_target])
+                if isfile(fpath)
+                    m = load(fpath)["dict"]["metrics"]
+                    loss_opt = Float64(m["loss"][2])
+                    push!(losses_by_u[k], loss_opt)
+                else
+                    @warn "4x4 file $fpath not found."
+                end
+            end
+        end
+    end
+
     # Axis legends for Panel 1 and Panel 2
     axislegend(ax1; position = :lt, backgroundcolor = (:white, 0.85), LEGEND_ARGS...)
     axislegend(ax2; position = :lt, backgroundcolor = (:white, 0.85), LEGEND_ARGS...)
@@ -222,11 +269,23 @@ function generate_three_panel_figure(; output_dir::String)
     end
     png_path = joinpath(output_dir, "three_panel_figure.png")
     pdf_path = joinpath(output_dir, "three_panel_figure.pdf")
+    svg_path = joinpath(output_dir, "three_panel_figure.svg")
     save(png_path, fig)
     save(pdf_path, fig)
-    println("Saved 3-panel figure to: $png_path and $pdf_path")
+    save(svg_path, fig)
+    println("Saved 3-panel figure to: $png_path, $pdf_path, and $svg_path")
     println("Panel 1 systems: ", panel1_systems)
     println("Panel 2 systems: ", panel2_systems)
+    println("Panel 3 dimH_list: ", dimH_list)
+    for (k, u_target) in enumerate(selected_U_values)
+        println("U = $u_target: $(length(losses_by_u[k])) losses, min = $(minimum(losses_by_u[k])), max = $(maximum(losses_by_u[k]))")
+    end
+
+    @assert 4008592.0 in dimH_list "4x4 Hilbert space dimension (4008592) must be present in dimH_list"
+    @assert length(dimH_list) == 11 "Expected 11 systems in Panel 3 (10 original + 4x4)"
+    for k in 1:num_u
+        @assert length(losses_by_u[k]) == 11 "Expected 11 loss values for U = $(selected_U_values[k])"
+    end
     return fig
 end
 
@@ -237,6 +296,8 @@ function (@main)(ARGS)
         output_dir = joinpath(@__DIR__, "..", "good_images", "final")
         fig = generate_three_panel_figure(output_dir=output_dir)
         @assert fig isa Figure "Output must be a Makie Figure"
+        @assert isfile(joinpath(output_dir, "three_panel_figure.png")) "PNG output must exist"
+        @assert filesize(joinpath(output_dir, "three_panel_figure.png")) > 0 "PNG output must not be empty"
         println("=== TEST PASSED SUCCESSFULLY: test_three_panel_figure ===")
     end
 end

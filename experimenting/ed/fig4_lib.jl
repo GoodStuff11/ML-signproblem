@@ -53,10 +53,11 @@ function get_figsize(num_cols::Int, height_mm::Float64=55.0)
     return (width_px, height_px)
 end
 
-function create_fig(num_cols::Int, height_mm::Float64=55.0; kwargs...)
+function create_fig(num_cols::Int, height_mm::Float64=55.0; aspect=nothing, kwargs...)
     fig = Figure(size=get_figsize(num_cols, height_mm), figure_padding=5)
+    ax_aspect = (aspect == :auto || isnothing(aspect)) ? nothing : aspect
     ax = Axis(fig[1, 1];
-        aspect=(1 + sqrt(5)) / 2,
+        aspect=ax_aspect,
         kwargs...
     )
     return fig, ax
@@ -592,17 +593,37 @@ function compute_trotterized_energies(
 end
 
 """
-    load_trotter_opt_energies_and_overlaps(folder, N_sites, n_U_or_U_values; custom_ref_state_arg, antihermitian, loss_type, gs_energies)
+Run label for the directly-optimized Trotter reference curve (the red "Optimized trotter"
+line in figures (a)/(a-alt)/(b)). `"barren_study_mi1000"` selects the runs made by
+`run_trotter_scan_optimization.jl --maxiters=1000 --run_label=barren_study_mi1000`.
+
+The original `barren_study` runs were made at the driver's DEFAULT `--maxiters=100`, which
+with the 3-stage `[:LBFGS, :GradientDescent, :LBFGS]` chain capped them at 303 iterations.
+Nine of the ten systems stopped at exactly that cap with terminal gradient norms of
+1e-3..4e-3 -- i.e. truncated mid-descent, not converged -- while the exact-exponential
+curve they are plotted against ran to |grad| ~ 3e-5. Comparing the two therefore measured
+the optimizer budget rather than the ansatz. These `_mi1000` runs remove that cap.
+
+Set to `nothing` to fall back to the unlabelled `trotter_..._u_<i>.jld2` files.
+"""
+const TROTTER_OPT_RUN_LABEL = "barren_study_mi1000"
+
+"""
+    load_trotter_opt_energies_and_overlaps(folder, N_sites, n_U_or_U_values; custom_ref_state_arg, antihermitian, loss_type, gs_energies, run_label)
         -> (Vector{Float64}, Vector{Float64})
 
-Load the final overlap-optimized Trotter energies and overlaps from trotter_N=<N_sites>_u_<i>.jld2 files.
+Load the final overlap-optimized Trotter energies and overlaps from
+trotter_N=<N_sites>_..._<run_label>_u_<i>.jld2 files. `run_label` defaults to
+[`TROTTER_OPT_RUN_LABEL`](@ref). Any U value whose file is missing is left as NaN, so
+callers can fall back to another source.
 """
 function load_trotter_opt_energies_and_overlaps(
     folder::String, N_sites::Int, n_U_or_U_values::Union{Int,Vector{Float64}};
     custom_ref_state_arg::Union{String,Nothing}=nothing,
     antihermitian::Bool=false,
     loss_type::Symbol=:overlap,
-    gs_energies::Union{Vector{Float64},Nothing}=nothing
+    gs_energies::Union{Vector{Float64},Nothing}=nothing,
+    run_label::Union{String,Nothing}=TROTTER_OPT_RUN_LABEL
 )
     U_values = n_U_or_U_values isa Vector{Float64} ? n_U_or_U_values : fill(NaN, n_U_or_U_values)
     n_U = length(U_values)
@@ -611,7 +632,7 @@ function load_trotter_opt_energies_and_overlaps(
         custom_ref_state_arg=custom_ref_state_arg,
         antihermitian=antihermitian,
         loss_type=loss_type,
-        suffix="noreg"
+        suffix=run_label
     )
     energies = fill(NaN, n_U)
     overlaps = fill(NaN, n_U)
@@ -654,14 +675,16 @@ function load_trotter_opt_energies(
     custom_ref_state_arg::Union{String,Nothing}=nothing,
     antihermitian::Bool=false,
     loss_type::Symbol=:overlap,
-    gs_energies::Union{Vector{Float64},Nothing}=nothing
+    gs_energies::Union{Vector{Float64},Nothing}=nothing,
+    run_label::Union{String,Nothing}=TROTTER_OPT_RUN_LABEL
 )
     energies, _ = load_trotter_opt_energies_and_overlaps(
         folder, N_sites, n_U_or_U_values;
         custom_ref_state_arg=custom_ref_state_arg,
         antihermitian=antihermitian,
         loss_type=loss_type,
-        gs_energies=gs_energies
+        gs_energies=gs_energies,
+        run_label=run_label
     )
     return energies
 end
