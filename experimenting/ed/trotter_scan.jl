@@ -47,9 +47,13 @@ in the `_shared.jld2` file so downstream analysis can expand the coefficients ag
 
 # Warm-start verification (`verify_warm_start`)
 Every coefficient vector taken from a file (`instructions["load_file"]` or a grow file) is
-passed through [`align_warm_start`](@ref) before use: it is remapped onto the current gate
-order (by the `gate_keys` saved with it, or, for older files, by trying `legacy_gate_orders`
-and the saved `_shared.jld2` gate list) and its loss is re-evaluated. A resumed or grown
+passed through [`align_warm_start`](@ref) before use: the gate order it was optimized in is
+identified (by the `gate_keys` saved with it, or, for older files, by trying the current
+order, `legacy_gate_orders` and the saved `_shared.jld2` gate list) and its loss is
+re-evaluated in that order. The scan then keeps optimizing (and saves) with the gates in
+that order -- the coefficients are never reordered, since reordering the gates of a product
+of non-commuting exponentials changes the circuit. Every later `u_idx` of the scan inherits
+that order along with the warm-start coefficients. A resumed or grown
 warm start (same U) that does not reproduce its saved loss, or a neighbouring-U warm start
 that does not beat the zero-coefficient loss, is discarded in favour of the default
 initialization instead of silently restarting from a random-looking point. Each saved file
@@ -136,7 +140,10 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
     num_gates = length(gates)
     grown_once = false
-    current_gate_keys = gate_keys(gates)
+    # Gate order the scan is currently optimizing in. It is the given `gates` order unless a
+    # warm start was optimized in a different (e.g. pre-2026-08-31) order; then it is that
+    # order, so the loaded coefficients describe the same circuit they were saved from.
+    run_gates, run_tau = gates, tau_terms
     M_full = num_exponentials * num_shared_params(param_map, num_gates)
     load_file = get(instructions, "load_file", nothing)
 
@@ -224,9 +231,10 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
 
         if verify_warm_start && !isnothing(warm_source) && !isnothing(current_coeffs) && length(current_coeffs) == M_full
             ref_prep, ov_target, H_prep = prepare_loss_states(state1, opt_target, state2, H, effective_datatype)
-            eval_loss = make_loss_function(loss_type, gates, tau_terms, ref_prep, ov_target, H_prep, basis, N;
+            # Loss of coefficients A driving the gates in order gates[perm].
+            eval_loss = (A, perm) -> make_loss_function(loss_type, gates[perm], tau_terms[perm], ref_prep, ov_target, H_prep, basis, N;
                 num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu,
-                datatype=effective_datatype, param_map=param_map)
+                datatype=effective_datatype, param_map=param_map)(A)
             saved = warm_source.dict
             saved_loss_type = get(saved, "loss_type", string(loss_type))
             expected_loss = (warm_source.same_u && saved_loss_type == string(loss_type) && haskey(saved, "metrics") &&
@@ -242,8 +250,13 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 current_coeffs = nothing
                 init_history = Float64[]
                 loaded_m = nothing
+                run_gates, run_tau = gates, tau_terms
             else
-                current_coeffs = aligned
+                current_coeffs = aligned.coefficients
+                run_gates, run_tau = gates[aligned.perm], tau_terms[aligned.perm]
+                if aligned.perm != 1:num_gates
+                    println("  Optimizing in the warm start's gate order ($(aligned.name)), not the current default order.")
+                end
             end
         end
 
@@ -252,7 +265,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         reduced_initial_coeffs = (!isnothing(active_indices) && !isnothing(current_coeffs)) ? current_coeffs[active_indices] : current_coeffs
 
         A_opt, final_loss, metrics = optimize_unitary(
-            gates, tau_terms, state1, opt_target, basis, N;
+            run_gates, run_tau, state1, opt_target, basis, N;
             loss_type=loss_type,
             H=H,
             state2=state2,
@@ -291,7 +304,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         # Calculate comparison metrics
         state1_prep, _ = (effective_datatype <: Real) ? strip_global_phase(state1) : (state1, 1.0)
         state2_prep, _ = (effective_datatype <: Real) ? strip_global_phase(state2) : (state2, 1.0)
-        ref_evolved = apply_unitary(A_opt, gates, state1_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=effective_datatype, param_map=param_map)
+        ref_evolved = apply_unitary(A_opt, run_gates, state1_prep, basis, N, num_exponentials; antihermitian=antihermitian, use_gpu=use_gpu, datatype=effective_datatype, param_map=param_map)
         ref_evolved_cpu = Array(ref_evolved)
         H_eval = if !isnothing(H_hopping) && !isnothing(H_interaction) && !isnothing(target_u)
             H_hopping + target_u * H_interaction
@@ -321,11 +334,11 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
         if !isnothing(save_folder) && !shared_data_saved
             println("saving shared data...")
             shared_dict = Dict(
-                "gates" => gates,
+                "gates" => run_gates,
                 "instructions" => instructions,
                 "u_range" => u_indices,
                 "param_map" => param_map,
-                "gate_keys" => current_gate_keys
+                "gate_keys" => gate_keys(run_gates)
             )
             JLD2.jldsave(joinpath(save_folder, "$(save_name)_shared.jld2"); dict=shared_dict)
             shared_data_saved = true
@@ -339,7 +352,7 @@ function interaction_scan_map_to_state(degen_rm_U::Union{AbstractMatrix,Vector},
                 "metrics" => metrics,
                 "norm1" => [norm(A_opt, 1)],
                 "norm2" => [norm(A_opt, 2)],
-                "gate_keys" => current_gate_keys,
+                "gate_keys" => gate_keys(run_gates),
                 "loss_type" => string(loss_type),
                 "num_exponentials" => num_exponentials
             )

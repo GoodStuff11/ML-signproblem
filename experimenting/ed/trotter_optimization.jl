@@ -38,6 +38,6 @@ export adjoint_loss, energy_loss, optimize_unitary, interaction_scan_map_to_stat
        hva_layers_matching_dof, realspace_basis, momentum_sector_to_realspace, check_realspace_transform,
        apply_spin_exchange, spin_tied_fidelity_bound,
        normalize_stages, parse_stage_spec, is_stalled, prepare_loss_states, make_loss_function,
-       gate_key, gate_keys, remap_coefficients, align_warm_start
+       gate_key, gate_keys, gate_permutation, align_warm_start
 
 end # module TrotterOptimization
