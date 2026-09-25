@@ -253,6 +253,28 @@ end
 
 _std1(v) = length(v) > 1 ? std(v) : 0.0
 
+"""
+    run_config(body, label)
+
+Run one benchmark configuration. An error (e.g. a CUDA out-of-memory for the largest
+systems / layer counts) is reported and skipped instead of aborting the remaining
+configurations; no CSV row is written for it. Memory is released either way. (A host
+out-of-memory kill cannot be caught; the CPU submit scripts run large systems one layer
+count per process for that reason.)
+"""
+function run_config(body, label::String)
+    try
+        body()
+    catch e
+        e isa InterruptException && rethrow()
+        println("    FAILED ($label): ", first(sprint(showerror, e), 500))
+        println("    -> no row written; continuing with the next configuration")
+    finally
+        GC.gc()
+        _USE_GPU && CUDA.reclaim()
+    end
+end
+
 # ── CSV output ────────────────────────────────────────────────────────────────
 
 const CSV_COLUMNS = [
@@ -364,13 +386,13 @@ function benchmark_trotter(io, opts)
             end
 
             println("\n--- trotter | $system | loss=$loss | P=$P | params=$M ---")
-            t = time_calls(f, A; warmup=opts[:warmup], reps=opts[:reps])
-            loss_value = f(A)
-            report_and_write!(io, opts, t; code="trotter", system=system, lattice=join(sys.Lvec, "x"),
-                n_up=n_up, n_dn=n_dn, dim=dim, loss=loss, num_exponentials=P, n_params=M,
-                u_index=u_index, U=U, loss_value=loss_value, setup_s=setup_s)
-
-            _USE_GPU && CUDA.reclaim()
+            run_config("trotter | $system | loss=$loss | P=$P") do
+                t = time_calls(f, A; warmup=opts[:warmup], reps=opts[:reps])
+                loss_value = f(A)
+                report_and_write!(io, opts, t; code="trotter", system=system, lattice=join(sys.Lvec, "x"),
+                    n_up=n_up, n_dn=n_dn, dim=dim, loss=loss, num_exponentials=P, n_params=M,
+                    u_index=u_index, U=U, loss_value=loss_value, setup_s=setup_s)
+            end
         end
     end
 end
@@ -436,13 +458,13 @@ function benchmark_exact(io, opts)
                      (2 * rand(P) .- 1) * opts[:magnitude]
 
             println("\n--- exact | $system | loss=$loss | params=$P (structure built in $(round(struct_s, digits=2))s) ---")
-            t = time_calls(f, t_vals; warmup=opts[:warmup], reps=opts[:reps])
-            loss_value = f(t_vals)
-            report_and_write!(io, opts, t; code="exact", system=system, lattice=join(sys.Lvec, "x"),
-                n_up=n_up, n_dn=n_dn, dim=dim, loss=loss, num_exponentials=1, n_params=P,
-                u_index=u_index, U=U, loss_value=loss_value, setup_s=setup_s + struct_s)
-
-            _USE_GPU && CUDA.reclaim()
+            run_config("exact | $system | loss=$loss") do
+                t = time_calls(f, t_vals; warmup=opts[:warmup], reps=opts[:reps])
+                loss_value = f(t_vals)
+                report_and_write!(io, opts, t; code="exact", system=system, lattice=join(sys.Lvec, "x"),
+                    n_up=n_up, n_dn=n_dn, dim=dim, loss=loss, num_exponentials=1, n_params=P,
+                    u_index=u_index, U=U, loss_value=loss_value, setup_s=setup_s + struct_s)
+            end
         end
     end
 end
