@@ -125,6 +125,16 @@ println("  stages: ", [(c["loss"], c["primary_loss"], c["stalled"]) for c in ci]
 println("  hops: ", [(h["start_loss"], h["final_loss"], h["accepted"]) for h in hops])
 println("stage/hop tests passed (final loss $loss_h)")
 
+# Adam stage (regression: `Adam` was ambiguous between Optim and Optimisers)
+A_a, loss_a, m_a = optimize_unitary(s.gates, s.tau, s.ref, s.target, s.basis, s.N;
+    antihermitian=true, H=Hproj, initial_coefficients=A0, maxiters=15,
+    optimizer=[:LBFGS, Trotter.parse_stage_spec("Adam:energy:20"), :LBFGS], stall_window=5)
+ci_a = m_a["convergence_info"][end]
+@assert [(c["optimizer"], c["loss"]) for c in ci_a] == [("LBFGS", "overlap"), ("Adam", "energy"), ("LBFGS", "overlap")]
+@assert isapprox(ov(A_a), loss_a; atol=1e-8) && loss_a <= ov(A0)
+println("  Adam stage: ", [(c["optimizer"], c["loss"], c["primary_loss"], c["iterations"]) for c in ci_a])
+println("Adam stage test passed (final loss $loss_a)")
+
 println("--- 5. real 3x3 u_33 file (informational) ---")
 f33 = joinpath(data_folder("N=(3, 3)_3x3"), "trotter_N=9_ref_slater_antihermitian_u_33.jld2")
 if isfile(f33)

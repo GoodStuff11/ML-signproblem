@@ -132,7 +132,9 @@ function get_optimizer_algo(opt_sym::Symbol; lbfgs_memory::Int=10)
     elseif opt_sym == :GradientDescent || opt_sym == :GD
         return GradientDescent()
     elseif opt_sym == :Adam
-        return Adam(0.01)
+        # Qualified: Optim (via OptimizationOptimJL) also exports an `Adam`, so the bare name
+        # is ambiguous. This is Optimisers' Adam with learning rate 0.01.
+        return OptimizationOptimisers.Adam(0.01)
     else
         error("Unsupported optimizer symbol: $opt_sym")
     end
@@ -551,6 +553,10 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
         primary_val = is_primary ? Float64(sol.objective) : Float64(f(sol.u))
 
         conv_info = extract_convergence_info(sol)
+        if conv_info["iterations"] == 0 && !isempty(stage_hist)
+            # Non-Optim solvers (e.g. Optimisers' Adam) carry no Optim iteration count.
+            conv_info["iterations"] = length(stage_hist)
+        end
         if stalled[]
             conv_info["primary_reason"] = "Stalled (< $(stall_rtol) of the stage's improvement over the last $(stall_window) iterations)"
         end
