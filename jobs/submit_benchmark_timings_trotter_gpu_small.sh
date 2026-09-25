@@ -20,7 +20,7 @@ julia --project=.. benchmarks/benchmark_timings.jl \
     --use_gpu \
     --systems="N=(3, 2)_3x2;N=(3, 3)_4x2" \
     --losses=overlap,energy \
-    --exponentials=1,2,4,8 \
+    --exponentials=1 \
     --reps=5 --warmup=1 \
     --antihermitian=true --custom_ref_state=slater \
     --tag=gpu
