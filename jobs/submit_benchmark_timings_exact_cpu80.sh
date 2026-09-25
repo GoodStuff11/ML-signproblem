@@ -13,7 +13,7 @@
 # this a 1-core run.
 # Writes ONLY experimenting/ed/benchmarks/timings_exact_cpu80.csv (plus the tee'd stdout log).
 cd /home/jek354/research/ML-signproblem/experimenting/ed
-julia -t 80 --project=.. benchmark_timings.jl \
+julia -t 80 --project=.. benchmarks/benchmark_timings.jl \
     --code=exact \
     --use_gpu=false \
     --losses=overlap,energy \

@@ -12,7 +12,7 @@
 # Forward-pass / gradient timings for the trotter code on one GPU.
 # Writes ONLY experimenting/ed/benchmarks/timings_trotter_gpu.csv (plus the tee'd stdout log).
 cd /home/jek354/research/ML-signproblem/experimenting/ed
-julia --project=.. benchmark_timings.jl \
+julia --project=.. benchmarks/benchmark_timings.jl \
     --code=trotter \
     --use_gpu \
     --losses=overlap,energy \

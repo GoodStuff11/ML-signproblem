@@ -26,8 +26,8 @@ ed_optimization.jl both define `adjoint_loss`, and `@safe_threads` silently fall
 back to serial execution whenever CUDA is loaded, so a GPU run and an 80-thread CPU
 run also have to be separate processes.
 
-Usage:
-  julia --project=.. benchmark_timings.jl --code=<trotter|exact> [options]
+Usage (from experimenting/ed):
+  julia --project=.. benchmarks/benchmark_timings.jl --code=<trotter|exact> [options]
 
 Options:
   --code=<trotter|exact>   (required) Which implementation to benchmark.
@@ -49,8 +49,8 @@ Options:
   --tag=<string>           Free-form label written into every row. Default: "".
 
 Examples:
-  julia --project=.. benchmark_timings.jl --code=trotter --use_gpu
-  julia -t 80 --project=.. benchmark_timings.jl --code=exact --losses=overlap
+  julia --project=.. benchmarks/benchmark_timings.jl --code=trotter --use_gpu
+  julia -t 80 --project=.. benchmarks/benchmark_timings.jl --code=exact --losses=overlap
 =#
 
 # ── Pre-scan ARGS for the GPU flag before loading CUDA ────────────────────────
@@ -104,20 +104,23 @@ using JLD2
 using HDF5
 using Zygote
 
-include("data_path.jl")
-include("logging.jl")
-include("utility_functions.jl")
+# This script lives in experimenting/ed/benchmarks/; the code it benchmarks is one level up.
+const ED_DIR = dirname(@__DIR__)
+
+include(joinpath(ED_DIR, "data_path.jl"))
+include(joinpath(ED_DIR, "logging.jl"))
+include(joinpath(ED_DIR, "utility_functions.jl"))
 using .UtilityFunctions
-include("ed_objects.jl")
-include("ed_functions.jl")
+include(joinpath(ED_DIR, "ed_objects.jl"))
+include(joinpath(ED_DIR, "ed_functions.jl"))
 
 if _CODE == :trotter
-    include("trotter.jl")
+    include(joinpath(ED_DIR, "trotter.jl"))
     import .Trotter
 else
     using Optimization, OptimizationOptimJL, OptimizationOptimisers
     using KrylovKit
-    include("ed_optimization.jl")
+    include(joinpath(ED_DIR, "ed_optimization.jl"))
 end
 
 # ── Argument parsing ──────────────────────────────────────────────────────────
@@ -195,7 +198,7 @@ function parse_arguments(args::Vector{String})
 
     if isnothing(opts[:out])
         device = _USE_GPU ? "gpu" : "cpu$(Threads.nthreads())"
-        opts[:out] = joinpath(@__DIR__, "benchmarks", "timings_$(_CODE)_$(device).csv")
+        opts[:out] = joinpath(@__DIR__, "timings_$(_CODE)_$(device).csv")
     end
     return opts
 end
@@ -503,7 +506,7 @@ end
 # ── Entry point ───────────────────────────────────────────────────────────────
 
 function (@main)(ARGS)
-    log_path = make_log_path(@__DIR__, "benchmark_timings")
+    log_path = make_log_path(ED_DIR, "benchmark_timings")
     with_logging(log_path) do
         run_benchmark(ARGS)
     end
