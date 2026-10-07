@@ -17,11 +17,12 @@
 # but CSV rows + the log is written. N=(5, 4)_4x4 runs first so its rows are flushed to the
 # CSV even if N=(6, 6)_4x4 runs out of (GPU) memory.
 # Appends to experimenting/ed/benchmarks/timings_exact_gpu.csv.
+# Override the system list with e.g.: SYSTEMS="N=(6, 6)_4x4" sbatch <this script>
 cd /home/jek354/research/ML-signproblem/experimenting/ed
 julia --project=.. benchmarks/benchmark_timings.jl \
     --code=exact \
     --use_gpu \
-    --systems="N=(5, 4)_4x4;N=(6, 6)_4x4" \
+    --systems="${SYSTEMS:-N=(5, 4)_4x4;N=(6, 6)_4x4}" \
     --losses=overlap,energy \
     --reps=1 --warmup=0 \
     --antihermitian=true --custom_ref_state=slater \

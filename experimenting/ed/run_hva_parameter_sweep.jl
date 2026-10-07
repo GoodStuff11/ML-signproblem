@@ -61,7 +61,10 @@ The CSV schema extends `run_repeat_optimization_experiment.jl` with three column
 `n_layers` (the HVA layer count P, 1 for the standard-ansatz control) and
 `n_params_per_layer` (shared parameters per layer under the active tying scheme),
 so `n_params == n_layers * n_params_per_layer`, and appends a trailing `U` column
-holding the interaction strength `U_values[u_idx]`. Everything else matches, so
+holding the interaction strength `U_values[u_idx]`, then `max_rss_mb`: the process's
+peak resident host memory (MiB, `Sys.maxrss()`) when the row was written. It is a
+process-wide high-water mark, so it is exact per row only when a job runs a single
+(tie, layers, loss, run); GPU memory is not included. Everything else matches, so
 `benchmarks/collect_repeat_optimization_csv.py` still works. The tying scheme and
 layer count are also encoded in the `ansatz` column as `hva_<tie>_P<layers>`,
 which keeps the (ansatz, loss_type, run) uniqueness that collector checks.
@@ -109,7 +112,7 @@ include("trotter.jl")
 include("ed_objects.jl")
 include("ed_functions.jl")
 
-const CSV_HEADER = "ansatz,loss_type,run,seed,final_loss,infidelity,energy,n_params,n_layers,n_params_per_layer,initial_loss,elapsed_s,U"
+const CSV_HEADER = "ansatz,loss_type,run,seed,final_loss,infidelity,energy,n_params,n_layers,n_params_per_layer,initial_loss,elapsed_s,U,max_rss_mb"
 const OPTIMIZER_CHAIN = [:LBFGS, :GradientDescent, :LBFGS]
 
 function parse_arguments(args::Vector{String})
@@ -297,9 +300,9 @@ function (@main)(ARGS)
 
         function record(ansatz, loss_type, run, seed, floss, infid, energy, n_params,
             n_layers, n_params_per_layer, init_loss, dt)
-            @printf(io, "%s,%s,%d,%d,%.17g,%.17g,%.17g,%d,%d,%d,%.17g,%.3f,%.17g\n",
+            @printf(io, "%s,%s,%d,%d,%.17g,%.17g,%.17g,%d,%d,%d,%.17g,%.3f,%.17g,%.1f\n",
                 ansatz, loss_type, run, seed, floss, infid, energy, n_params,
-                n_layers, n_params_per_layer, init_loss, dt, target_u)
+                n_layers, n_params_per_layer, init_loss, dt, target_u, Sys.maxrss() / 2^20)
             flush(io)
             @printf("  %-18s %-8s run %-3d n_params=%-5d layers=%-4d params/layer=%-5d infidelity=%.4e  (%.1f s)\n",
                 ansatz, loss_type, run, n_params, n_layers, n_params_per_layer, infid, dt)

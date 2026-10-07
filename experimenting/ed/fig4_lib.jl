@@ -65,6 +65,7 @@ end
 
 const LEGEND_ARGS = Dict(:rowgap => -8, :padding => (3, 3, 0, 0))
 set_theme!(theme_latexfonts(), fontsize=10)
+# set_theme!(font = "Arial", fontsize = 10)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # DATA LOADING HELPERS

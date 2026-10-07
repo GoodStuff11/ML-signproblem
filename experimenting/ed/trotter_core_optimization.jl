@@ -428,12 +428,13 @@ function optimize_unitary(gates, tau_terms, ref::AbstractVector, target::Union{A
     # One loss closure per loss type, built on demand (a stage may optimize a loss other
     # than the primary `loss_type`). `f` is the primary loss.
     loss_fns = Dict{Symbol,Function}()
-    loss_fn(lt::Symbol) = get!(loss_fns, lt) do
-        f_full = make_loss_function(lt, gates, tau_terms, ref_prep, state2_prep, H_mat, basis, N;
-            num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
-            param_map=param_map)
-        (A, p=nothing) -> f_full(isnothing(active_indices) ? A : embed_active_params(A, active_indices, M_full))
-    end
+    loss_fn(lt::Symbol) =
+        get!(loss_fns, lt) do
+            f_full = make_loss_function(lt, gates, tau_terms, ref_prep, state2_prep, H_mat, basis, N;
+                num_exponentials=num_exponentials, antihermitian=antihermitian, use_gpu=use_gpu, datatype=datatype,
+                param_map=param_map)
+            (A, p=nothing) -> f_full(isnothing(active_indices) ? A : embed_active_params(A, active_indices, M_full))
+        end
     f = loss_fn(loss_type)
 
     optf = Optimization.OptimizationFunction(f, Optimization.AutoZygote())

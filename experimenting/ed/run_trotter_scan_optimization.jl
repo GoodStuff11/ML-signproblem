@@ -434,8 +434,8 @@ function (@main)(ARGS)
         # Coefficient files saved before 2026-08-31 used the unsorted gate order; offer it to
         # the warm-start verification so such files can still be resumed/grown from.
         legacy_gate_orders = ansatz === :hva ? Pair{String,Vector{NTuple{4,UInt64}}}[] :
-            ["pre-2026-08-31 unsorted gate order" => Trotter.gate_keys(Trotter.enumerate_ferm_excitations(
-                2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian, sort_gates=false))]
+                             ["pre-2026-08-31 unsorted gate order" => Trotter.gate_keys(Trotter.enumerate_ferm_excitations(
+            2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=!antihermitian, sort_gates=false))]
         @time tau_terms = Trotter.fgateToTauSector(gates, N_sites, basis_sector; antihermitian=antihermitian)
 
         # 5. Set up scan range
@@ -658,7 +658,7 @@ function (@main)(ARGS)
             initialization_samples=10,
             multi_start_iters=opt_cli[:multi_start_iters],
             H_hopping=H_hop_sector, H_interaction=H_int_sector,
-            save_folder=folder, save_name=output_name_prefix,
+            save_folder=nothing, save_name=output_name_prefix,
             loss_type=loss_type,
             U_values=U_values,
             antihermitian=antihermitian,
