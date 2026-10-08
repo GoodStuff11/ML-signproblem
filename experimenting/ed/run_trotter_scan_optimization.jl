@@ -658,7 +658,7 @@ function (@main)(ARGS)
             initialization_samples=10,
             multi_start_iters=opt_cli[:multi_start_iters],
             H_hopping=H_hop_sector, H_interaction=H_int_sector,
-            save_folder=nothing, save_name=output_name_prefix,
+            save_folder=folder, save_name=output_name_prefix,
             loss_type=loss_type,
             U_values=U_values,
             antihermitian=antihermitian,

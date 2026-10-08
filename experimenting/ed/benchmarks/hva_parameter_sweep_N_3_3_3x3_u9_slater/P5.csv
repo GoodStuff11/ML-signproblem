@@ -1,0 +1,2 @@
+ansatz,loss_type,run,seed,final_loss,infidelity,energy,n_params,n_layers,n_params_per_layer,initial_loss,elapsed_s,U,max_rss_mb
+hva_full_P5,overlap,1,20260916,0.83372368296527477,0.83372368296527477,-10.181383107226985,25,5,5,0.83618899159242621,384.903,2,2134.8
