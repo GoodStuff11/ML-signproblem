@@ -3,14 +3,14 @@ fig_lib.jl
 
 Shared plotting library for the paper notebooks (figure2_3.ipynb, figure4.ipynb,
 trotter_exp_testing.ipynb) and the scripts that make the same figures
-(trotter_exp_testing.jl, testing/test_*.jl). It holds plotting code only:
+(trotter_exp_testing.jl, testing/test_*.jl). It holds the general plotting tools
+only, nothing specific to one figure:
   * the figure conventions: journal-width figure sizes, the LaTeX-font theme, the
     colour maps and the legend arguments;
   * panel labels "(a)", "(b)", ... and free-text panel annotations ("U = 8",
-    "F >= 0.95", ...);
-  * the plot builders of the Trotter-vs-exact-exponential comparison figures.
-The data loading and the energy/overlap computations those builders plot live in
-fig4_lib.jl; this file loads only CairoMakie and LaTeXStrings and no ED code.
+    "F >= 0.95", ...).
+Figure 4's data, computations and plot builders live in fig4_lib.jl, which loads
+this file itself. This file loads only CairoMakie and LaTeXStrings and no ED code.
 A notebook or script must `include("fig_lib.jl")` and never re-define any of the
 functions or constants below; change them here so every figure stays consistent.
 This file defines no `(@main)` entry point and is never run directly.
@@ -19,7 +19,8 @@ Workflow for making a figure
 ----------------------------
  1. Load the library once, at the top of the notebook / script:
         include("fig_lib.jl")          # also sets the theme (LaTeX fonts, 10 pt)
-        include("fig4_lib.jl")         # only if you need fig4_lib.jl's data / computations
+    or, for figure 4's data, computations and plot builders as well,
+        include("fig4_lib.jl")         # loads fig_lib.jl too
  2. Create the figure at the journal width, with its first panel:
         fig, ax1 = create_fig(2, 55.0; xlabel=L"U", ylabel=L"E")
     `num_cols` is 1 (89 mm, single column) or 2 (180 mm, full page width) and the
@@ -217,224 +218,4 @@ function annotate_panel!(ax, str; corner::Symbol=:lb, placement::Symbol=:inside,
     plt = text!(ax, at...; text=str, space=space, align=align, kwargs...)
     translate!(plt, 0, 0, 10)
     return plt
-end
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# PLOTTING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-const EXACT_EXP_KW = (label=L"\textrm{Exact exp}", color=:black, linewidth=2)
-const TROTTER_OPT_KW = (label=L"\textrm{Trotter opt}", color=:crimson, linewidth=2)
-
-"""
-    plot_curve_group!(ax, x, transform, mask, palette, trotter_orders;
-                      exact, trotter, opt, plotfun, exact_kw, trotter_kw, opt_kw)
-
-Draw the standard curve family — exact-exponential, one curve per Trotter order `P`,
-and Trotter-optimized — on `ax`. Each series is drawn only where it is non-NaN and
-`mask` holds, and the plotted y-values are `transform(series)`. Passing `nothing`
-for a series omits it; a series with no valid points is skipped.
-"""
-function plot_curve_group!(
-    ax, x, transform, mask, palette, trotter_orders::Vector{Int};
-    exact::Union{Nothing,Vector{Float64}}=nothing,
-    trotter::Union{Nothing,Dict{Int,Vector{Float64}}}=nothing,
-    opt::Union{Nothing,Vector{Float64}}=nothing,
-    plotfun=lines!,
-    exact_kw=(;), trotter_kw=(;), opt_kw=(;)
-)
-    function draw!(y, kw)
-        valid = .!isnan.(y) .& mask
-        any(valid) && plotfun(ax, x[valid], transform(y)[valid]; kw...)
-    end
-
-    isnothing(exact) || draw!(exact, merge(EXACT_EXP_KW, exact_kw))
-    if !isnothing(trotter)
-        for (idx, P) in enumerate(trotter_orders)
-            draw!(trotter[P], merge((label=L"P = %$P", color=palette[idx], linewidth=1.5), trotter_kw))
-        end
-    end
-    isnothing(opt) || draw!(opt, merge(TROTTER_OPT_KW, opt_kw))
-    return ax
-end
-
-"""
-    create_u_fig(num_cols, height_mm, ylabel; ylim, logscale) -> (Figure, Axis)
-
-Figure with the U axis shared by all the U-sweep comparison plots.
-"""
-function create_u_fig(num_cols::Int, height_mm::Float64, ylabel;
-    ylim::Tuple=(1e-5, nothing), logscale::Bool=true
-)
-    return create_fig(num_cols, height_mm;
-        xlabel=L"U",
-        ylabel=ylabel,
-        (logscale ? (yscale=log10,) : (;))...,
-        limits=((0, 15), ylim),
-    )
-end
-
-# Clamped so log-scaled axes never receive a non-positive value.
-excess_over(baseline, floor_val=1e-16) = y -> max.(y .- baseline, floor_val)
-infidelity(y) = max.(1.0 .- y, 1e-16)
-
-"""
-    build_comparison_plot(U_values, gs_energies, exact_exp_energies,
-                          trotter_energies, trotter_opt_energies,
-                          trotter_orders, n_up, n_dn, lvec; custom_ref_state_arg, loss_type, num_cols, height_mm, legend_position) -> Figure
-"""
-function build_comparison_plot(
-    U_values::Vector{Float64},
-    gs_energies::Vector{Float64},
-    exact_exp_energies::Vector{Float64},
-    trotter_energies::Dict{Int,Vector{Float64}},
-    trotter_opt_energies::Vector{Float64},
-    trotter_orders::Vector{Int},
-    n_up::Int, n_dn::Int, lvec::Vector{Int};
-    custom_ref_state_arg::Union{String,Nothing}=nothing,
-    loss_type::Symbol=:overlap,
-    num_cols::Int=2,
-    height_mm::Float64=70.0,
-    legend_position::Symbol=:rb,
-    ylim::Tuple=(1e-5, nothing),
-)
-    fig, ax = create_u_fig(num_cols, height_mm, L"E - E_0(U)"; ylim=ylim)
-
-    plot_curve_group!(
-        ax, U_values, excess_over(gs_energies), U_values .> 0,
-        cmap2(length(trotter_orders)), trotter_orders;
-        exact=exact_exp_energies,
-        trotter=trotter_energies,
-        opt=trotter_opt_energies,
-        exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
-    )
-
-    axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-
-    return fig
-end
-
-"""
-    build_overlap_comparison_plot(U_values, exact_exp_overlaps, trotter_overlaps, trotter_opt_overlaps,
-                                  trotter_orders, n_up, n_dn, lvec;
-                                  trotter_to_exact_overlaps=nothing, custom_ref_state_arg=nothing,
-                                  loss_type=:overlap, metric=:infidelity,
-                                  num_cols=2, height_mm=70.0, legend_position=:rb) -> Figure
-
-Constructs and returns a CairoMakie figure comparing overlaps across Trotter orders P = 1, 2, 4, 8,
-the exact exponential state, and the Trotter-optimized baseline using `axislegend`.
-
-When `metric=:infidelity` (default):
-    Plots 1 - |⟨E_0(U)|𝒰|E_0(0)⟩|² on a log10 scale against the target ground state.
-    Shows the crossover where Exact Exponential outperforms Trotter-optimized at higher U.
-When `metric=:trotter_error` or `metric=:exact_infidelity`:
-    Plots 1 - |⟨ψ_exact|𝒰_P|ψ_ref⟩|² on a log10 scale, showing the clear O(1/P²) scaling across Trotter orders.
-When `metric=:overlap`:
-    Plots |⟨E_0(U)|𝒰|E_0(0)⟩|² directly.
-"""
-function build_overlap_comparison_plot(
-    U_values::Vector{Float64},
-    exact_exp_overlaps::Vector{Float64},
-    trotter_overlaps::Dict{Int,Vector{Float64}},
-    trotter_opt_overlaps::Vector{Float64},
-    trotter_orders::Vector{Int},
-    n_up::Int, n_dn::Int, lvec::Vector{Int};
-    trotter_to_exact_overlaps::Union{Nothing,Dict{Int,Vector{Float64}}}=nothing,
-    custom_ref_state_arg::Union{String,Nothing}=nothing,
-    loss_type::Symbol=:overlap,
-    metric::Symbol=:infidelity,
-    num_cols::Int=2,
-    height_mm::Float64=70.0,
-    legend_position::Symbol=:rb,
-    ylim::Tuple=(1e-5, nothing),
-)
-    palette = cmap2(length(trotter_orders))
-    mask = U_values .> 0
-
-    if metric == :infidelity || metric == :ground_state
-        fig, ax = create_u_fig(num_cols, height_mm,
-            L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2"; ylim=ylim)
-        plot_curve_group!(ax, U_values, infidelity, mask, palette, trotter_orders;
-            exact=exact_exp_overlaps,
-            trotter=trotter_overlaps,
-            opt=trotter_opt_overlaps,
-            exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
-        )
-    elseif metric == :trotter_error || metric == :exact_infidelity
-        fig, ax = create_u_fig(num_cols, height_mm,
-            L"1 - |\langle \psi_{\textrm{exact}}|\mathcal{U}_P|\psi_{\textrm{ref}}\rangle|^2"; ylim=ylim)
-        # Discretization error only: the exact-exp and Trotter-opt curves are 0 by construction.
-        plot_curve_group!(ax, U_values, infidelity, mask, palette, trotter_orders;
-            trotter=trotter_to_exact_overlaps,
-            trotter_kw=(linestyle=:solid,),
-        )
-    else
-        fig, ax = create_u_fig(num_cols, height_mm,
-            L"|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2"; ylim=(-0.05, 1.05), logscale=false)
-        plot_curve_group!(ax, U_values, identity, mask, palette, trotter_orders;
-            exact=exact_exp_overlaps,
-            trotter=trotter_overlaps,
-            opt=trotter_opt_overlaps,
-            exact_kw=(linestyle=:solid,), trotter_kw=(linestyle=:dash,), opt_kw=(linestyle=:solid,),
-        )
-    end
-
-    axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-    return fig
-end
-
-# ═══════════════════════════════════════════════════════════════════════════════
-# SYSTEM SIZE PLOTTING
-# ═══════════════════════════════════════════════════════════════════════════════
-
-"""
-    build_system_size_comparison_plot(system_sizes, num_sites, gs_energies, exact_exp_energies, trotter_energies, trotter_opt_energies, trotter_orders, U_value, loss_type; num_cols, height_mm, legend_position) -> Figure
-
-Plots energy differences (E - E_gs) vs system sizes at a single U value.
-"""
-function build_system_size_comparison_plot(
-    system_sizes::Vector{String},
-    num_sites::Vector{Int},
-    gs_energies::Vector{Float64},
-    exact_exp_energies::Vector{Float64},
-    trotter_energies::Dict{Int,Vector{Float64}},
-    trotter_opt_energies::Vector{Float64},
-    trotter_orders::Vector{Int},
-    U_value::Float64,
-    loss_type::Symbol;
-    num_cols::Int=2,
-    height_mm::Float64=70.0,
-    legend_position::Symbol=:rt,
-)
-    # Sort systems by: 1. Number of sites, 2. GS Energy (as proxy for size/filling uniqueness), 3. System name
-    perm = sortperm([(num_sites[i], gs_energies[i], system_sizes[i]) for i in 1:length(system_sizes)])
-
-    sorted_sizes = system_sizes[perm]
-    sorted_gs = gs_energies[perm]
-    sorted_trotter = Dict{Int,Vector{Float64}}(P => trotter_energies[P][perm] for P in trotter_orders)
-
-    x_coords = collect(1:length(system_sizes))
-
-    fig, ax = create_fig(num_cols, height_mm;
-        xlabel=L"\textrm{System}",
-        ylabel=L"E - E_0(U)",
-        yscale=log10,
-        xticks=(x_coords, sorted_sizes),
-    )
-
-    plot_curve_group!(
-        ax, x_coords, excess_over(sorted_gs, 1e-15), trues(length(x_coords)),
-        cmap2(length(trotter_orders)), trotter_orders;
-        exact=exact_exp_energies[perm],
-        trotter=sorted_trotter,
-        opt=trotter_opt_energies[perm],
-        plotfun=scatterlines!,
-        exact_kw=(markersize=8,),
-        trotter_kw=(markersize=6, linestyle=:dash),
-        opt_kw=(markersize=8,),
-    )
-
-    axislegend(ax; position=legend_position, backgroundcolor=(:white, 0.8), LEGEND_ARGS...)
-
-    return fig
 end

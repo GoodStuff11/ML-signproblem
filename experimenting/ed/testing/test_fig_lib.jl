@@ -14,13 +14,16 @@ that makes a figure with `create_fig` takes it from fig_lib.jl:
  2. Selectable text: the saved PDF's text is extracted with Ghostscript (txtwrite), and
     every panel label and annotation (including L"U=8" and L"\mathcal{F}\geq 0.95") must
     be found in it as text.
- 3. Static audit of the plotting / computation split: fig_lib.jl loads only CairoMakie
-    and LaTeXStrings and includes no ED code; fig4_lib.jl makes no plotting calls; the
-    two define no name in common. Every .ipynb / .jl file under experimenting/ed that
-    calls `create_fig` includes fig_lib.jl, every one that calls a fig4_lib.jl function
-    includes fig4_lib.jl (directly, or through trotter_exp_testing.jl), and none
-    redefines a top-level function or constant of either library. Then each library is
-    loaded on its own in a fresh Julia process.
+ 3. Static audit of the library split: fig_lib.jl defines exactly the general plotting
+    tools (conventions, panel labels, annotations), loads only CairoMakie and
+    LaTeXStrings and includes no other file; everything figure-4 -- data, computations
+    and plot builders -- is in fig4_lib.jl, which includes fig_lib.jl; the two define no
+    name in common. Every .ipynb / .jl file under experimenting/ed that calls
+    `create_fig` loads fig_lib.jl (directly or through fig4_lib.jl), every one that
+    calls a fig4_lib.jl function includes fig4_lib.jl (directly, or through
+    trotter_exp_testing.jl), and none redefines a top-level function or constant of
+    either library. Then each library is loaded on its own in a fresh Julia process,
+    and fig4_lib.jl's three plot builders are run on synthetic data there and saved.
  4. (only with --render_notebooks) Runs the notebooks' setup cells, each notebook in a
     fresh Julia process (in Main, as the Jupyter kernel does), to check fig_lib.jl loads
     alongside their code; then runs the
@@ -261,23 +264,25 @@ function test_audit()
     lib_names = toplevel_definitions(fig_src)
     fig4_names = toplevel_definitions(fig4_src)
 
-    @testset "fig_lib.jl is plotting only, fig4_lib.jl computations only" begin
-        @test all(n -> n in lib_names, [:create_fig, :get_figsize, :cmap1, :cmap2, :LEGEND_ARGS,
-            :label_panels!, :annotate_panel!, :panel_axes, :build_comparison_plot,
-            :build_overlap_comparison_plot, :build_system_size_comparison_plot])
+    @testset "fig_lib.jl general plotting only, everything figure-4 in fig4_lib.jl" begin
+        @test sort(collect(lib_names)) == sort([:cmap1, :cmap2, :get_figsize, :create_fig, :LEGEND_ARGS,
+            :PANEL_AXIS_TYPES, :grid_path, :panel_axes, :corner_geometry, :place_corner_text!,
+            :label_panels!, :annotate_panel!])
+        println("  fig_lib.jl defines: $(sort(collect(lib_names)))")
+        fig4_plotting = [:EXACT_EXP_KW, :TROTTER_OPT_KW, :plot_curve_group!, :create_u_fig, :excess_over,
+            :infidelity, :build_comparison_plot, :build_overlap_comparison_plot, :build_system_size_comparison_plot]
+        @test all(n -> n in fig4_names, fig4_plotting)
         @test all(n -> n in fig4_names, [:load_shared_dict, :build_exact_to_trotter_mapping,
             :compute_gs_states, :load_trotter_opt_energies_and_overlaps, :setup_system,
             :compute_trotterized_energies_u_sweep, :compute_trotterized_energies_system_size])
         @test isempty(intersect(lib_names, fig4_names))
+        @test occursin(r"include\(\"fig_lib\.jl\"\)", fig4_src)  # fig4_lib.jl brings the general tools along
         uses = [m[1] for m in eachmatch(r"(?m)^using ([A-Za-z.]+)", fig_src)]
         fig_code = replace(replace(fig_src, r"#=.*?=#"s => ""), r"#.*" => "")  # drop comments (the header's examples)
         code_includes = [m.match for m in eachmatch(r"\binclude\(.*", fig_code)]
         println("  fig_lib.jl `using`: $uses, `include`s in code: $(isempty(code_includes) ? "none" : code_includes)")
         @test sort(uses) == ["CairoMakie", "LaTeXStrings"]
         @test isempty(code_includes)
-        plot_calls = [m.match for m in eachmatch(r"\b(Figure|Axis|Label|Legend|lines!|scatter!|scatterlines!|text!|axislegend|create_fig|save)\(", fig4_src)]
-        println("  plotting calls in fig4_lib.jl: $(isempty(plot_calls) ? "none" : plot_calls)")
-        @test isempty(plot_calls)
     end
 
     files = String[]
@@ -294,8 +299,8 @@ function test_audit()
         path in (joinpath(ED_DIR, "fig_lib.jl"), joinpath(ED_DIR, "fig4_lib.jl"), @__FILE__()) && continue
         code = endswith(path, ".ipynb") ? notebook_code(path) : read(path, String)
         via_tet = occursin(r"include\((joinpath\(.*)?\"(\.\./)?trotter_exp_testing\.jl\"\)", code)
-        loads_fig = occursin(r"include\(.*fig_lib\.jl\"", code) || via_tet
         loads_fig4 = occursin(r"include\(.*fig4_lib\.jl\"", code) || via_tet
+        loads_fig = occursin(r"include\(.*fig_lib\.jl\"", code) || loads_fig4  # fig4_lib.jl includes fig_lib.jl
         calls_fig = occursin(r"\bcreate_fig\(", code)
         calls_fig4 = (loads_fig || loads_fig4) && occursin(fig4_call, code)
         (calls_fig || calls_fig4) || continue
@@ -322,23 +327,51 @@ function test_audit()
     @test issubset(["figure4.ipynb", "trotter_exp_testing.ipynb", "testing/verify_trotter_opt_run_label.jl"], fig4_users)
     # trotter_exp_testing.jl itself must load both (its notebook and test reach them through it)
     tet = read(joinpath(ED_DIR, "trotter_exp_testing.jl"), String)
-    @test occursin("include(\"fig_lib.jl\")", tet) && occursin("include(\"fig4_lib.jl\")", tet)
+    @test occursin("include(\"fig4_lib.jl\")", tet)
 end
 
-# Each library on its own, in a fresh process: fig_lib.jl must load without any ED code,
-# fig4_lib.jl without any plotting code.
-function test_standalone()
+# fig4_lib.jl's plot builders, called on synthetic data in a fresh process that loads only
+# fig4_lib.jl: each must return a Figure that saves to PDF. ARGS = [fig4_lib.jl, output dir].
+const BUILDER_CHECK = raw"""
+include(ARGS[1])
+U = collect(0.25:0.25:15.0); n = length(U); orders = [1, 2, 4]
+gs = -1.0 .- U ./ 10
+exact = gs .+ 1e-3 .* (1 .+ U)
+trot = Dict(P => exact .+ 1e-2 ./ P^2 for P in orders)
+opt = gs .+ 5e-4 .* (1 .+ U)
+ov(x) = clamp.(1 .- x, 0, 1)
+figs = [
+    "comparison" => build_comparison_plot(U, gs, exact, trot, opt, orders, 2, 2, [3, 2]),
+    "overlap" => build_overlap_comparison_plot(U, ov(exact .- gs), Dict(P => ov(trot[P] .- gs) for P in orders),
+        ov(opt .- gs), orders, 2, 2, [3, 2]; trotter_to_exact_overlaps=Dict(P => ov(1e-3 ./ P^2 .* ones(n)) for P in orders)),
+    "system_size" => build_system_size_comparison_plot(["3x2", "3x3", "4x3"], [6, 9, 12], [-1.0, -2.0, -3.0],
+        [-0.99, -1.98, -2.95], Dict(P => [-0.98, -1.95, -2.9] for P in orders), [-0.995, -1.99, -2.97], orders, 8.0, :overlap),
+]
+for (name, fig) in figs
+    path = joinpath(ARGS[2], "fig4_builder_$(name).pdf")
+    save(path, fig)
+    ok = fig isa Figure && filesize(path) > 0
+    println("  fig4_lib.jl builder $name: returns a Figure, saved $(basename(path)): $ok")
+    ok || exit(4)
+end
+"""
+
+# Each library on its own, in a fresh process: fig_lib.jl must load without any ED code or
+# figure-4 code, and fig4_lib.jl must bring its computations, its plot builders and fig_lib.jl.
+function test_standalone(output_dir)
     project = normpath(joinpath(ED_DIR, ".."))
     checks = [
-        ("fig_lib.jl", "all(n -> isdefined(Main, n), (:create_fig, :label_panels!, :build_comparison_plot)) && " *
-                       "!any(n -> isdefined(Main, n), (:load_saved_dict, :build_save_name_prefix, :compute_gs_states))"),
-        ("fig4_lib.jl", "all(n -> isdefined(Main, n), (:compute_gs_states, :setup_system, :load_saved_dict)) && " *
-                        "!any(n -> isdefined(Main, n), (:create_fig, :label_panels!, :build_comparison_plot, :CairoMakie))"),
+        ("fig_lib.jl", "all(n -> isdefined(Main, n), (:create_fig, :label_panels!, :annotate_panel!)) && " *
+                       "!any(n -> isdefined(Main, n), (:build_comparison_plot, :load_saved_dict, :build_save_name_prefix, :compute_gs_states))"),
+        ("fig4_lib.jl", "all(n -> isdefined(Main, n), (:compute_gs_states, :setup_system, :load_saved_dict, " *
+                        ":build_comparison_plot, :build_system_size_comparison_plot, :create_fig, :label_panels!))"),
     ]
     for (lib, cond) in checks
-        code = "include($(repr(joinpath(ED_DIR, lib)))); ok = $cond; println(\"  $lib alone in a fresh process: \", ok ? \"loads, defines only its own side\" : \"WRONG\"); exit(ok ? 0 : 3)"
+        code = "include($(repr(joinpath(ED_DIR, lib)))); ok = $cond; println(\"  $lib alone in a fresh process: \", ok ? \"loads, defines what it should\" : \"WRONG\"); exit(ok ? 0 : 3)"
         @test success(pipeline(`$(Base.julia_cmd()) --project=$project -e $code`; stdout=stdout, stderr=stderr))
     end
+    @test success(pipeline(`$(Base.julia_cmd()) --project=$project -e $BUILDER_CHECK $(joinpath(ED_DIR, "fig4_lib.jl")) $output_dir`;
+        stdout=stdout, stderr=stderr))
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -423,7 +456,7 @@ function (@main)(ARGS)
         @testset "fig_lib.jl" begin
             @testset "API + selectable PDF text" test_api(config.output_dir, config.pypdf_python)
             @testset "notebooks/scripts use fig_lib.jl / fig4_lib.jl" test_audit()
-            @testset "each library loads on its own" test_standalone()
+            @testset "each library loads on its own" test_standalone(config.output_dir)
             config.render_notebooks && @testset "notebook figures" test_notebooks(config.output_dir)
         end
         println("Test figures are in: $(config.output_dir)")
