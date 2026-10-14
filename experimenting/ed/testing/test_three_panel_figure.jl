@@ -25,7 +25,15 @@ using ExponentialUtilities
 using LsqFit
 using HDF5
 
-include("../fig_lib.jl")  # figure conventions, panel labels, ED helpers
+if !isdefined(Main, :UtilityFunctions)
+    include("../utility_functions.jl")
+end
+include("../ed_objects.jl")
+include("../ed_functions.jl")
+include("../ed_optimization.jl")
+include("../data_path.jl")
+include("../logging.jl")
+include("../fig_lib.jl")  # figure conventions, panel labels
 
 const FILE_LABEL_PAIRS = [
     (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2,2)),

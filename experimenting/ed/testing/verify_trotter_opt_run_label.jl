@@ -1,7 +1,7 @@
 #=
 verify_trotter_opt_run_label.jl
 
-Checks that fig_lib.jl's `load_trotter_opt_energies_and_overlaps` -- the function that
+Checks that fig4_lib.jl's `load_trotter_opt_energies_and_overlaps` -- the function that
 supplies the red "Optimized trotter" curve in figure4.ipynb's panels (a)/(a-alt)/(b) --
 actually resolves to the un-truncated `--maxiters=1000` re-runs
 (`--run_label=barren_study_mi1000`) rather than silently returning NaN.
@@ -20,7 +20,7 @@ Usage:
   julia --project=.. testing/verify_trotter_opt_run_label.jl
 =#
 
-include(joinpath(@__DIR__, "..", "fig_lib.jl"))
+include(joinpath(@__DIR__, "..", "fig4_lib.jl"))
 using JLD2, Printf
 
 const SYSTEMS = [

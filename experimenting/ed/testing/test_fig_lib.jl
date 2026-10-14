@@ -14,9 +14,13 @@ that makes a figure with `create_fig` takes it from fig_lib.jl:
  2. Selectable text: the saved PDF's text is extracted with Ghostscript (txtwrite), and
     every panel label and annotation (including L"U=8" and L"\mathcal{F}\geq 0.95") must
     be found in it as text.
- 3. Static audit: every .ipynb / .jl file under experimenting/ed that calls `create_fig`
-    includes fig_lib.jl (directly, or through trotter_exp_testing.jl) and defines none
-    of fig_lib.jl's top-level functions or constants itself.
+ 3. Static audit of the plotting / computation split: fig_lib.jl loads only CairoMakie
+    and LaTeXStrings and includes no ED code; fig4_lib.jl makes no plotting calls; the
+    two define no name in common. Every .ipynb / .jl file under experimenting/ed that
+    calls `create_fig` includes fig_lib.jl, every one that calls a fig4_lib.jl function
+    includes fig4_lib.jl (directly, or through trotter_exp_testing.jl), and none
+    redefines a top-level function or constant of either library. Then each library is
+    loaded on its own in a fresh Julia process.
  4. (only with --render_notebooks) Runs the notebooks' setup cells, each notebook in a
     fresh Julia process (in Main, as the Jupyter kernel does), to check fig_lib.jl loads
     alongside their code; then runs the
@@ -45,6 +49,7 @@ Requires the `gs` (Ghostscript) executable on PATH for parts 2 and 4.
 using Test
 using JSON
 
+include(joinpath(@__DIR__, "..", "logging.jl"))
 include(joinpath(@__DIR__, "..", "fig_lib.jl"))
 
 const ED_DIR = normpath(joinpath(@__DIR__, ".."))
@@ -251,9 +256,30 @@ end
 notebook_code(path) = join((join(c["source"]) for c in JSON.parsefile(path)["cells"] if c["cell_type"] == "code"), "\n")
 
 function test_audit()
-    lib_names = toplevel_definitions(read(joinpath(ED_DIR, "fig_lib.jl"), String))
-    @test all(n -> n in lib_names, [:create_fig, :get_figsize, :cmap1, :cmap2, :LEGEND_ARGS,
-        :label_panels!, :annotate_panel!, :panel_axes])
+    fig_src = read(joinpath(ED_DIR, "fig_lib.jl"), String)
+    fig4_src = read(joinpath(ED_DIR, "fig4_lib.jl"), String)
+    lib_names = toplevel_definitions(fig_src)
+    fig4_names = toplevel_definitions(fig4_src)
+
+    @testset "fig_lib.jl is plotting only, fig4_lib.jl computations only" begin
+        @test all(n -> n in lib_names, [:create_fig, :get_figsize, :cmap1, :cmap2, :LEGEND_ARGS,
+            :label_panels!, :annotate_panel!, :panel_axes, :build_comparison_plot,
+            :build_overlap_comparison_plot, :build_system_size_comparison_plot])
+        @test all(n -> n in fig4_names, [:load_shared_dict, :build_exact_to_trotter_mapping,
+            :compute_gs_states, :load_trotter_opt_energies_and_overlaps, :setup_system,
+            :compute_trotterized_energies_u_sweep, :compute_trotterized_energies_system_size])
+        @test isempty(intersect(lib_names, fig4_names))
+        uses = [m[1] for m in eachmatch(r"(?m)^using ([A-Za-z.]+)", fig_src)]
+        fig_code = replace(replace(fig_src, r"#=.*?=#"s => ""), r"#.*" => "")  # drop comments (the header's examples)
+        code_includes = [m.match for m in eachmatch(r"\binclude\(.*", fig_code)]
+        println("  fig_lib.jl `using`: $uses, `include`s in code: $(isempty(code_includes) ? "none" : code_includes)")
+        @test sort(uses) == ["CairoMakie", "LaTeXStrings"]
+        @test isempty(code_includes)
+        plot_calls = [m.match for m in eachmatch(r"\b(Figure|Axis|Label|Legend|lines!|scatter!|scatterlines!|text!|axislegend|create_fig|save)\(", fig4_src)]
+        println("  plotting calls in fig4_lib.jl: $(isempty(plot_calls) ? "none" : plot_calls)")
+        @test isempty(plot_calls)
+    end
+
     files = String[]
     for (root, _, fs) in walkdir(ED_DIR)
         occursin("/.ipynb_checkpoints", root) && continue
@@ -261,31 +287,58 @@ function test_audit()
             (endswith(f, ".ipynb") || endswith(f, ".jl")) && push!(files, joinpath(root, f))
         end
     end
+    fig4_call = Regex("\\b(" * join(sort([String(n) for n in fig4_names if occursin(r"^[a-z]", String(n))]; by=length, rev=true), "|") * ")\\(")
     users = String[]
+    fig4_users = String[]
     for path in sort(files)
-        path == joinpath(ED_DIR, "fig_lib.jl") && continue
-        path == @__FILE__() && continue
+        path in (joinpath(ED_DIR, "fig_lib.jl"), joinpath(ED_DIR, "fig4_lib.jl"), @__FILE__()) && continue
         code = endswith(path, ".ipynb") ? notebook_code(path) : read(path, String)
-        occursin(r"\bcreate_fig\(", code) || continue
-        push!(users, relpath(path, ED_DIR))
+        via_tet = occursin(r"include\((joinpath\(.*)?\"(\.\./)?trotter_exp_testing\.jl\"\)", code)
+        loads_fig = occursin(r"include\(.*fig_lib\.jl\"", code) || via_tet
+        loads_fig4 = occursin(r"include\(.*fig4_lib\.jl\"", code) || via_tet
+        calls_fig = occursin(r"\bcreate_fig\(", code)
+        calls_fig4 = (loads_fig || loads_fig4) && occursin(fig4_call, code)
+        (calls_fig || calls_fig4) || continue
+        name = relpath(path, ED_DIR)
+        calls_fig && push!(users, name)
+        calls_fig4 && push!(fig4_users, name)
         defs = try
             toplevel_definitions(code)
         catch err
-            @warn "could not parse $(relpath(path, ED_DIR)); using a regex for its definitions" err
+            @warn "could not parse $name; using a regex for its definitions" err
             Set(Symbol.(m[1] for m in eachmatch(r"(?m)^(?:function |const )?([A-Za-z_][A-Za-z0-9_!]*)\s*(?:\(|=)", code)))
         end
-        clash = sort(collect(intersect(defs, lib_names)))
-        loads = occursin(r"include\(.*fig_lib\.jl\"", code) || occursin(r"include\(\"(\.\./)?trotter_exp_testing\.jl\"\)", code)
-        println("  $(rpad(relpath(path, ED_DIR), 55)) includes fig_lib.jl: $loads   redefines library names: $(isempty(clash) ? "none" : clash)")
-        @test loads
+        clash = sort(collect(intersect(defs, union(lib_names, fig4_names))))
+        println("  $(rpad(name, 55)) plots: $(calls_fig) includes fig_lib.jl: $loads_fig   ",
+                "uses fig4_lib.jl functions: $(calls_fig4) includes fig4_lib.jl: $loads_fig4   ",
+                "redefines library names: $(isempty(clash) ? "none" : clash)")
+        calls_fig && @test loads_fig
+        calls_fig4 && @test loads_fig4
         @test isempty(clash)
     end
     @test sort(users) == sort(["figure2_3.ipynb", "figure4.ipynb", "trotter_exp_testing.ipynb",
         "testing/test_infidelity_and_dimH_plots.jl", "testing/test_plot_pruning_and_sparsity_threshold.jl",
         "testing/test_three_panel_figure.jl"])
-    # trotter_exp_testing.jl itself must load fig_lib.jl (the notebook and test reach it through it)
-    @test occursin("include(\"fig_lib.jl\")", read(joinpath(ED_DIR, "trotter_exp_testing.jl"), String))
-    @test !isfile(joinpath(ED_DIR, "fig4_lib.jl"))
+    @test issubset(["figure4.ipynb", "trotter_exp_testing.ipynb", "testing/verify_trotter_opt_run_label.jl"], fig4_users)
+    # trotter_exp_testing.jl itself must load both (its notebook and test reach them through it)
+    tet = read(joinpath(ED_DIR, "trotter_exp_testing.jl"), String)
+    @test occursin("include(\"fig_lib.jl\")", tet) && occursin("include(\"fig4_lib.jl\")", tet)
+end
+
+# Each library on its own, in a fresh process: fig_lib.jl must load without any ED code,
+# fig4_lib.jl without any plotting code.
+function test_standalone()
+    project = normpath(joinpath(ED_DIR, ".."))
+    checks = [
+        ("fig_lib.jl", "all(n -> isdefined(Main, n), (:create_fig, :label_panels!, :build_comparison_plot)) && " *
+                       "!any(n -> isdefined(Main, n), (:load_saved_dict, :build_save_name_prefix, :compute_gs_states))"),
+        ("fig4_lib.jl", "all(n -> isdefined(Main, n), (:compute_gs_states, :setup_system, :load_saved_dict)) && " *
+                        "!any(n -> isdefined(Main, n), (:create_fig, :label_panels!, :build_comparison_plot, :CairoMakie))"),
+    ]
+    for (lib, cond) in checks
+        code = "include($(repr(joinpath(ED_DIR, lib)))); ok = $cond; println(\"  $lib alone in a fresh process: \", ok ? \"loads, defines only its own side\" : \"WRONG\"); exit(ok ? 0 : 3)"
+        @test success(pipeline(`$(Base.julia_cmd()) --project=$project -e $code`; stdout=stdout, stderr=stderr))
+    end
 end
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -369,7 +422,8 @@ function (@main)(ARGS)
         println("Writing test figures to: $(config.output_dir)")
         @testset "fig_lib.jl" begin
             @testset "API + selectable PDF text" test_api(config.output_dir, config.pypdf_python)
-            @testset "notebooks/scripts use fig_lib.jl" test_audit()
+            @testset "notebooks/scripts use fig_lib.jl / fig4_lib.jl" test_audit()
+            @testset "each library loads on its own" test_standalone()
             config.render_notebooks && @testset "notebook figures" test_notebooks(config.output_dir)
         end
         println("Test figures are in: $(config.output_dir)")

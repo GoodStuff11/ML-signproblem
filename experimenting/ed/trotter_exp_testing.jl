@@ -62,8 +62,12 @@ Examples:
      julia --project=.. trotter_exp_testing.jl 3x2 3x3 --u=4.0 --trotter_orders=1,2,4
 =#
 
-if !isdefined(Main, :create_fig)  # a notebook may have loaded fig_lib.jl already
-    include("fig_lib.jl")
+# a notebook may have loaded these already
+if !isdefined(Main, :compute_trotterized_energies_u_sweep)
+    include("fig4_lib.jl")  # data loading + energy/overlap computations
+end
+if !isdefined(Main, :create_fig)
+    include("fig_lib.jl")   # figure conventions + plot builders
 end
 
 # ═══════════════════════════════════════════════════════════════════════════════
