@@ -22,17 +22,7 @@ using ExponentialUtilities
 using LsqFit
 using HDF5
 
-if !isdefined(Main, :UtilityFunctions)
-    include("../utility_functions.jl")
-end
-include("../ed_objects.jl")
-include("../ed_functions.jl")
-include("../ed_optimization.jl")
-include("../data_path.jl")
-include("../logging.jl")
-
-cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
-cmap2(L) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
+include("../fig_lib.jl")  # figure conventions, panel labels, ED helpers
 
 const FILE_LABEL_PAIRS = [
     (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2,2)),
@@ -54,33 +44,6 @@ const BASE_FONTSIZE   = 16
 const BASE_LINEWIDTH  = 2.5
 const BASE_MARKERSIZE = 12
 
-function get_figsize(num_cols::Int, height_mm::Float64=55.0)
-    px_per_mm = 96 / 25.4
-    φ = (1+sqrt(5))/2
-    if num_cols == 1
-        width_mm = 89
-    elseif num_cols == 2
-        width_mm = 180
-    else
-        error("Can only have num_cols == 1 or 2 (given: $num_cols)")
-    end
-    width_px = width_mm * px_per_mm
-    height_px = height_mm * px_per_mm
-    println("Using width=$(width_mm/25.4)\" and height=$(height_mm/25.4)\"")
-    return (width_px, height_px)
-end
-
-function create_fig(num_cols::Int, height_mm::Float64; kwargs...)
-    fig = Figure(size=get_figsize(num_cols, height_mm), figure_padding=5)
-    ax = Axis(fig[1, 1]; 
-        aspect = (1+sqrt(5))/2,
-        kwargs...
-    )
-    return fig, ax
-end
-
-const LEGEND_ARGS = Dict(:rowgap=>-8, :padding=>(3,3,0,0))
-set_theme!(theme_latexfonts(), fontsize=10)
 
 function find_root_bisection(f, a, b; tol=1e-5, max_iters=100)
     fa = f(a)
@@ -132,6 +95,7 @@ function plot_pruning_and_sparsity_at_threshold(
     threshold=0.95
 )
     fig, ax1 = create_fig(2, 70.0;
+        aspect = (1+sqrt(5))/2,  # the golden-ratio panels this script's figure was designed with
         xlabel = L"\textrm{Sparsity}",
         ylabel = L"|\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
         yticks = 0:0.1:1,

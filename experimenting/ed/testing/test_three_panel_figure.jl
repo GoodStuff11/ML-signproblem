@@ -25,17 +25,7 @@ using ExponentialUtilities
 using LsqFit
 using HDF5
 
-if !isdefined(Main, :UtilityFunctions)
-    include("../utility_functions.jl")
-end
-include("../ed_objects.jl")
-include("../ed_functions.jl")
-include("../ed_optimization.jl")
-include("../data_path.jl")
-include("../logging.jl")
-
-cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
-cmap2(L) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
+include("../fig_lib.jl")  # figure conventions, panel labels, ED helpers
 
 const FILE_LABEL_PAIRS = [
     (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2,2)),
@@ -52,33 +42,8 @@ const FILE_LABEL_PAIRS = [
 
 const FOLDER = get_data_root()
 
-const LEGEND_ARGS = Dict(:rowgap=>-6, :padding=>(3,3,0,0), :labelsize=>9)
-set_theme!(theme_latexfonts(), fontsize=10)
-
-function get_figsize(num_cols::Int, height_mm::Float64=55.0)
-    px_per_mm = 96 / 25.4
-    φ = (1+sqrt(5))/2
-    if num_cols == 1
-        width_mm = 89 # mm
-    elseif num_cols == 2
-        width_mm = 180 # mm
-    else
-        error("Can only have num_cols == 1 or 2 (given: $num_cols)")
-    end
-    width_px = width_mm * px_per_mm
-    height_px = height_mm * px_per_mm
-    return (width_px, height_px)
-end
-
-function create_fig(num_cols::Int, height_mm::Float64=55.0; aspect=nothing, kwargs...)
-    fig = Figure(size=get_figsize(num_cols, height_mm), figure_padding=5)
-    ax_aspect = (aspect == :auto || isnothing(aspect)) ? nothing : aspect
-    ax = Axis(fig[1, 1]; 
-        aspect = ax_aspect,
-        kwargs...
-    )
-    return fig, ax
-end
+# tighter legends than fig_lib.jl's LEGEND_ARGS, to fit three panels side by side
+const THREE_PANEL_LEGEND_ARGS = merge(LEGEND_ARGS, Dict(:rowgap=>-6, :labelsize=>9))
 
 function generate_three_panel_figure(; output_dir::String, height_mm::Float64=55.0)
     # Panel 1: Improvement ratio for systems starting at baseline
@@ -225,8 +190,8 @@ function generate_three_panel_figure(; output_dir::String, height_mm::Float64=55
     end
 
     # Axis legends for Panel 1 and Panel 2
-    axislegend(ax1; position = :lt, backgroundcolor = (:white, 0.85), LEGEND_ARGS...)
-    axislegend(ax2; position = :lt, backgroundcolor = (:white, 0.85), LEGEND_ARGS...)
+    axislegend(ax1; position = :lt, backgroundcolor = (:white, 0.85), THREE_PANEL_LEGEND_ARGS...)
+    axislegend(ax2; position = :lt, backgroundcolor = (:white, 0.85), THREE_PANEL_LEGEND_ARGS...)
 
     # Panel 3: For each U value, plot connecting line and scatter points
     order = sortperm(dimH_list)
@@ -254,12 +219,10 @@ function generate_three_panel_figure(; output_dir::String, height_mm::Float64=55
     ]
     u_legend_labels = [L"U = %$(round(Int, u))" for u in selected_U_values]
     axislegend(ax3, u_legend_elements, u_legend_labels;
-        position = :rb, backgroundcolor = (:white, 0.85), LEGEND_ARGS...)
+        position = :rb, backgroundcolor = (:white, 0.85), THREE_PANEL_LEGEND_ARGS...)
 
-    # Bottom-left corner annotations
-    text!(ax1, 0.0, 0.0; text = "(a)", space = :relative, align = (:left, :bottom), offset = (8, 8), fontsize = 12)
-    text!(ax2, 0.0, 0.0; text = "(b)", space = :relative, align = (:left, :bottom), offset = (8, 8), fontsize = 12)
-    text!(ax3, 0.0, 0.0; text = "(c)", space = :relative, align = (:left, :bottom), offset = (8, 8), fontsize = 12)
+    # (a), (b), (c) in the bottom-left corner of each panel
+    label_panels!(fig; placement = :inside, corner = :lb, pad = 8, fontsize = 12)
 
     colgap!(fig.layout, 1, 6)
     colgap!(fig.layout, 2, 18)

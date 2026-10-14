@@ -32,17 +32,7 @@ using ExponentialUtilities
 using LsqFit
 using HDF5
 
-if !isdefined(Main, :UtilityFunctions)
-    include("../utility_functions.jl")
-end
-include("../ed_objects.jl")
-include("../ed_functions.jl")
-include("../ed_optimization.jl")
-include("../data_path.jl")
-include("../logging.jl")
-
-cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
-cmap2(L) = [Makie.ColorSchemes.managua[z] for z in range(0, 1, length=L)]
+include("../fig_lib.jl")  # figure conventions, panel labels, ED helpers
 
 const FILE_LABEL_PAIRS = [
     (L"3\times 2\;(2,2)",   "N=(2, 2)_3x2", (2,2)),
@@ -64,31 +54,6 @@ const BASE_FONTSIZE   = 16
 const BASE_LINEWIDTH  = 2.5
 const BASE_MARKERSIZE = 12
 
-function get_figsize(num_cols::Int, height_mm::Float64=55.0)
-    px_per_mm = 96 / 25.4
-    if num_cols == 1
-        width_mm = 89
-    elseif num_cols == 2
-        width_mm = 180
-    else
-        error("Can only have num_cols == 1 or 2 (given: $num_cols)")
-    end
-    width_px = width_mm * px_per_mm
-    height_px = height_mm * px_per_mm
-    return (width_px, height_px)
-end
-
-function create_fig(num_cols::Int, height_mm::Float64; kwargs...)
-    fig = Figure(size=get_figsize(num_cols, height_mm), figure_padding=5)
-    ax = Axis(fig[1, 1]; 
-        aspect = (1+sqrt(5))/2,
-        kwargs...
-    )
-    return fig, ax
-end
-
-const LEGEND_ARGS = Dict(:rowgap=>-8, :padding=>(3,3,0,0))
-set_theme!(theme_latexfonts(), fontsize=10)
 
 #=
     parse_cli_args(args) -> Dict{Symbol, Any}
@@ -122,6 +87,7 @@ Generates the 2-panel figure:
 =#
 function generate_infidelity_and_dimH_figure(selected_U_values::Vector{Float64}; output_dir::String)
     fig, ax_loss = create_fig(2, 70.0;
+        aspect = (1+sqrt(5))/2,  # the golden-ratio panels this script's figure was designed with
         xlabel = L"U",
         ylabel = L"1 - |\langle E_0(U)|\mathcal{U}|E_0(0)\rangle|^2",
         yscale = log10,

@@ -62,7 +62,9 @@ Examples:
      julia --project=.. trotter_exp_testing.jl 3x2 3x3 --u=4.0 --trotter_orders=1,2,4
 =#
 
-include("trotter_analysis_lib.jl")
+if !isdefined(Main, :create_fig)  # a notebook may have loaded fig_lib.jl already
+    include("fig_lib.jl")
+end
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ARGUMENT PARSING
