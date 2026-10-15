@@ -50,7 +50,22 @@ Circuit options:
                         Sharing changes the reported free-parameter count, not the gate count or depth.
   --hva_pbc=<true|false> (optional, --ansatz=hva only): periodic bonds (`use_pbc`). Default: true.
                         enumerate_ferm_excitations_HVA rejects true for an odd axis length > 2
-                        (e.g. 3x2); use false there.
+                        (e.g. 3x2); use false there. --hva_qubit_circuit=swap_network needs false.
+  --hva_qubit_circuit=<circuit> (optional, --ansatz=hva with a Yordanov encoding only): how the HVA is
+                        compiled for Jordan–Wigner qubits. Default: "swap_network".
+                        Valid options:
+                        - "swap_network": the fermionic-swap network of Cade et al., PRB 102, 235122
+                          (2020) (cade_swap_network_cost): snake Jordan–Wigner order, column FSWAPs
+                          that make every vertical hop string-free, horizontal hops folded into the
+                          FSWAPs. Open boundaries only. Reports Cade's native gate count and depth and
+                          the CNOT-level numbers (2 CNOTs per native gate); --jw_ordering,
+                          --parity_network, --gate_order, --reorder and --fuse_single_qubit do not apply.
+                        - "per_term": every HVA term compiled on its own with the Yordanov circuits and
+                          its full Z string, no swaps (yordanov_encoding_cost). Overstates the HVA's
+                          depth several-fold; kept for comparison.
+  --snake_axis=<axis> (optional, --hva_qubit_circuit=swap_network only): axis the snake rows run along.
+                        Default: "auto". Valid options: "auto" (whichever gives the smaller depth),
+                        "1" (rows along Lx), "2" (rows along Ly).
   --num_exponentials=<n> (optional): number of Trotter layers (the gate list is repeated n times).
                         Default: 1, or inferred from the length of --coefficients_file's coefficients.
   --antihermitian=<true|false> (optional): generator convention. true: factors exp(a(τ - τ†)),
@@ -124,7 +139,7 @@ Examples:
   julia --project=.. ucc_hardware_encoding.jl --lattice=4x3 --encoding=yordanov --jw_ordering=interleaved --optimize=true
   julia --project=.. ucc_hardware_encoding.jl --lattice=4x4 --gate_order=best --order_trials=64
   julia --project=.. ucc_hardware_encoding.jl --lattice=3x2 --num_exponentials=2 --encoding=fermionic --fuse=false
-  julia --project=.. ucc_hardware_encoding.jl --lattice=4x2 --ansatz=hva --antihermitian=false
+  julia --project=.. ucc_hardware_encoding.jl --lattice=4x3 --ansatz=hva --hva_pbc=false --antihermitian=false --num_exponentials=12
   julia --project=.. ucc_hardware_encoding.jl --lattice=3x2 \
       --coefficients_file="<data root>/N=(2, 2)_3x2/trotter_N=6_ref_slater_antihermitian_target_fidelity=0.9998_u_30.jld2"
 =#
@@ -714,6 +729,203 @@ function yordanov_encoding_cost(gates::AbstractVector, N::Integer;
 end
 
 # ═══════════════════════════════════════════════════════════════════════
+# CADE ET AL. 2020 (HVA on Jordan–Wigner qubits with a fermionic-swap network)
+# ═══════════════════════════════════════════════════════════════════════
+
+"""
+    SwapNetworkOp
+
+One native two-qubit gate of the Cade et al. swap-network circuit (see [`cade_swap_network`](@ref)).
+
+- `kind`: `:fswap` (fermionic swap), `:hop` (exp(iθ(c†_a c_b + h.c.)) on two Jordan–Wigner-adjacent
+  qubits, no Z string), `:fswap_hop` (a hop followed by an FSWAP on the same pair, one gate up to
+  single-qubit Z rotations, Cade et al. footnote 5) or `:onsite` (exp(iθ n_a n_b) on the spin-up and
+  spin-down qubits of one site, diagonal, so no string whatever their positions).
+- `qubits`: the two 0-based Jordan–Wigner positions it acts on.
+- `modes`: the 0-based modes (file-header convention) on those positions before the gate.
+- `bond`: `:horizontal`, `:vertical`, `:onsite`, or `:none` for a bare FSWAP.
+"""
+struct SwapNetworkOp
+    kind::Symbol
+    qubits::Tuple{Int,Int}
+    modes::Tuple{Int,Int}
+    bond::Symbol
+end
+
+"""
+    cade_swap_network(Lvec; row_axis=1, num_exponentials=1) -> NamedTuple
+
+Build, gate by gate, the qubit circuit of the efficient Hamiltonian-variational (EHV) ansatz of
+C. Cade, L. Mineh, A. Montanaro and S. Stanisic, "Strategies for solving the Fermi-Hubbard model on
+near-term quantum computers", Phys. Rev. B 102, 235122 (2020), arXiv:1912.06007, Sec. I C, Figs. 1, 3, 4,
+for open boundaries.
+
+Layout (Cade Fig. 1): the lattice is cut into rows along axis `row_axis` (1 or 2 of `Lvec`); a row has
+`n_x = Lvec[row_axis]` sites ("columns") and there are `n_y` rows. Each spin has its own snake-shaped
+Jordan–Wigner line: row r (0-based) occupies positions r·n_x … r·n_x + n_x − 1 of that spin's line,
+left to right for even r and right to left for odd r; the spin-up line is positions 0 … N−1 and the
+spin-down line N … 2N−1. Horizontal neighbours are then Jordan–Wigner-adjacent, and so are the
+two sites at each turn of the snake; every other vertical bond carries a Z string.
+
+One layer (Cade Sec. I C, Fig. 4):
+1. all on-site terms, one gate per site (depth 1);
+2. `n_x` repetitions of U_R·U_L, where U_L swaps column slots (0,1), (2,3), … and U_R swaps
+   (1,2), (3,4), … in every row with FSWAPs. Column swaps bring a new column to each end of the rows,
+   where the vertical bond between two rows is Jordan–Wigner-adjacent; every vertical bond is applied
+   as a bare hop the first time its two sites are adjacent at a turn. The first U_L carries the
+   horizontal bonds of slots (0,1), (2,3), … and the last U_R those of (1,2), (3,4), …, each as one
+   combined `:fswap_hop` gate (Cade footnote 5), so the horizontal terms cost no extra depth.
+After `n_x` repetitions every column is back in its slot (checked; an error is thrown otherwise), so
+layers can be stacked. Rows of length 1 need no swaps (every vertical bond lies on a turn); a single
+row has no vertical bonds and its horizontal bonds are applied as two layers of bare hops.
+
+The ops are in program order; gates on disjoint qubits run in parallel ([`schedule_blocks`](@ref) with
+`reorder=false`, every gate of duration 1). For n_x ≥ 2 this gives 2n_x + 1 native layers per layer:
+Cade's Table I for even n_x, one less than Cade's 2n_x + 2 for odd n_x
+(`testing/test_ucc_hardware_encoding.jl`, which also checks the circuit against the fermionic operators).
+
+Returns `(ops, depth, n_x, n_y, row_axis, position)` where `position[m+1]` is the initial
+Jordan–Wigner position of mode m and `depth` is the native-gate depth of all layers.
+"""
+function cade_swap_network(Lvec; row_axis::Integer=1, num_exponentials::Integer=1)
+    length(Lvec) == 2 || throw(ArgumentError("cade_swap_network is for 2D lattices (Lx, Ly), got $Lvec"))
+    row_axis in (1, 2) || throw(ArgumentError("row_axis must be 1 or 2, got $row_axis"))
+    Lx, Ly = Lvec
+    N = Lx * Ly
+    nx = row_axis == 1 ? Lx : Ly                 # sites per row (columns)
+    ny = row_axis == 1 ? Ly : Lx                 # rows
+    # site (0-based C order of `enumerate_ferm_excitations_HVA`: s = x*Ly + y) of (row, column)
+    site(r, c) = row_axis == 1 ? c * Ly + r : r * Ly + c
+    slotpos(r, c) = r * nx + (iseven(r) ? c : nx - 1 - c)   # position on one spin's snake line
+
+    colat = collect(0:nx-1)                      # colat[slot+1] = column now in that slot (same in every row)
+    at = zeros(Int, 2N)                          # at[q+1] = mode on qubit q
+    for σ in 0:1, r in 0:ny-1, c in 0:nx-1
+        at[σ*N+slotpos(r, c)+1] = σ * N + site(r, c)
+    end
+    position = zeros(Int, 2N)
+    for q in 0:2N-1
+        position[at[q+1]+1] = q
+    end
+
+    ops = SwapNetworkOp[]
+    function gate!(kind, qa, qb, bond)
+        push!(ops, SwapNetworkOp(kind, (qa, qb), (at[qa+1], at[qb+1]), bond))
+        if kind in (:fswap, :fswap_hop)
+            at[qa+1], at[qb+1] = at[qb+1], at[qa+1]
+        end
+    end
+    function column_swaps!(first_slot, fused)
+        for c in first_slot:2:nx-2
+            colat[c+1], colat[c+2] = colat[c+2], colat[c+1]
+        end
+        for σ in 0:1, r in 0:ny-1, c in first_slot:2:nx-2
+            gate!(fused ? :fswap_hop : :fswap, σ * N + slotpos(r, c), σ * N + slotpos(r, c + 1),
+                fused ? :horizontal : :none)
+        end
+    end
+    function turn_hops!(done)
+        # turn between rows r and r+1: slot nx-1 for even r, slot 0 for odd r
+        for r in Iterators.flatten((0:2:ny-2, 1:2:ny-2))   # even turns, then odd: disjoint within each group
+            t = iseven(r) ? nx - 1 : 0
+            col = colat[t+1]
+            done[r+1, col+1] && continue
+            done[r+1, col+1] = true
+            for σ in 0:1
+                gate!(:hop, σ * N + slotpos(r, t), σ * N + slotpos(r + 1, t), :vertical)
+            end
+        end
+    end
+
+    for _ in 1:num_exponentials
+        for s in 0:N-1
+            gate!(:onsite, position_of(at, s), position_of(at, N + s), :onsite)
+        end
+        if ny == 1
+            for first_slot in (0, 1), σ in 0:1, c in first_slot:2:nx-2
+                gate!(:hop, σ * N + slotpos(0, c), σ * N + slotpos(0, c + 1), :horizontal)
+            end
+            continue
+        end
+        done = falses(ny - 1, nx)                # done[r+1, col+1]: vertical bond (r, col)-(r+1, col)
+        if nx == 1
+            turn_hops!(done)
+        else
+            for rep in 1:nx
+                column_swaps!(0, rep == 1)                     # U_L (first one carries H1)
+                turn_hops!(done)
+                column_swaps!(1, rep == nx)                    # U_R (last one carries H2)
+                turn_hops!(done)
+            end
+        end
+        all(done) || error("cade_swap_network: $(count(!, done)) vertical bonds never became adjacent ($(nx)x$(ny) rows)")
+        colat == 0:nx-1 || error("cade_swap_network: columns did not return to their slots after $nx repetitions")
+    end
+    resources = [collect(op.qubits) for op in ops]
+    _, _, depth = schedule_blocks(resources, ones(Int, length(ops)), [Int[] for _ in ops], 2N, 2N; reorder=false)
+    return (ops=ops, depth=depth, n_x=nx, n_y=ny, row_axis=row_axis, position=position)
+end
+
+position_of(at::Vector{Int}, mode::Integer) = findfirst(==(mode), at) - 1
+
+"""
+    cade_swap_network_cost(Lvec; num_exponentials=1, row_axis=:auto, param_map=nothing) -> NamedTuple
+
+Cost of the HVA on a Jordan–Wigner qubit processor with the fermionic-swap network of Cade et al.
+(2020), from the explicit circuit of [`cade_swap_network`](@ref). Use this, not
+[`yordanov_encoding_cost`](@ref), for the HVA: the latter compiles every vertical hop with its full
+Z string and no swaps, which overstates the HVA's depth several-fold.
+
+- `row_axis`: `1` or `2` (the axis the snake rows run along; depth grows with that axis' length), or
+  `:auto` (default) for whichever gives the smaller depth (Cade: n_x = min(n_x, n_y) is best).
+- `param_map`: the tie map of `enumerate_ferm_excitations_HVA(Lvec; use_pbc=false, tie)`, for the
+  free-parameter count (one parameter per distinct entry per layer); `nothing` counts one parameter
+  per HVA term. The swap network's vertical-hop order differs from the standard HVA (Cade's "EHV"),
+  but the parameter sharing is the same.
+
+Units. Cade count every native gate (FSWAP, hop, combined FSWAP-hop, on-site phase) as one two-qubit
+gate of depth 1; these are `n_native_two_qubit` and `native_depth`. Each of them is a two-CNOT gate:
+a hop is exp(iθ(XX+YY)/2) and FSWAP = SWAP·CZ is locally equivalent to iSWAP, as is their combination;
+the on-site term is a controlled phase. `n_two_qubit = 2 n_native_two_qubit` and
+`depth = 2 native_depth` are therefore CNOT-level numbers, comparable with [`yordanov_encoding_cost`](@ref).
+Single-qubit gates are not modelled (`n_single_qubit = nothing`).
+"""
+function cade_swap_network_cost(Lvec; num_exponentials::Integer=1, row_axis=:auto, param_map=nothing)
+    axes = row_axis === :auto ? (1, 2) : (row_axis,)
+    best = nothing
+    for a in axes
+        net = cade_swap_network(Lvec; row_axis=a, num_exponentials=num_exponentials)
+        if isnothing(best) || (net.depth, length(net.ops)) < (best.depth, length(best.ops))
+            best = net
+        end
+    end
+    N = prod(Lvec)
+    resources = [collect(op.qubits) for op in best.ops]
+    counts_by_kind = Dict{Symbol,Int}()
+    for op in best.ops
+        counts_by_kind[op.kind] = get(counts_by_kind, op.kind, 0) + 1
+    end
+    n_terms = count(op -> op.bond !== :none, best.ops)
+    n_params = isnothing(param_map) ? n_terms : num_exponentials * length(unique(param_map))
+    return (
+        encoding="Cade et al., PRB 102, 235122 (2020): Jordan–Wigner qubits with a fermionic-swap network",
+        n_two_qubit=2 * length(best.ops),
+        n_single_qubit=nothing,
+        depth=2 * best.depth,
+        n_native_two_qubit=length(best.ops),
+        native_depth=best.depth,
+        n_qubits=2N,
+        n_excitations=n_terms,
+        n_parameters=n_params,
+        counts_by_kind=counts_by_kind,
+        bounds=depth_bounds(resources, ones(Int, length(best.ops)), resources, 2N),
+        order_strategy="Cade swap network, rows along axis $(best.row_axis) (n_x = $(best.n_x), n_y = $(best.n_y))",
+        ops=best.ops,
+        settings=(row_axis=best.row_axis, num_exponentials=num_exponentials),
+    )
+end
+
+# ═══════════════════════════════════════════════════════════════════════
 # GONZÁLEZ-CUADRA ET AL. 2023 (fermionic register, native fermionic gates)
 # ═══════════════════════════════════════════════════════════════════════
 
@@ -1037,7 +1249,8 @@ function parse_ucc_hardware_arguments(args::Vector{String})
         :drop_tol => 0.0, :encoding => :both, :optimize => "both", :gate_order => :given,
         :order_trials => 32, :reorder => nothing, :parity_network => nothing, :jw_ordering => nothing,
         :fuse_single_qubit => nothing, :fuse => nothing, :choose_pairing => nothing,
-        :spin_conserving => true, :objective => :depth)
+        :spin_conserving => true, :objective => :depth,
+        :hva_qubit_circuit => :swap_network, :snake_axis => :auto)
     bools = (:hva_pbc, :antihermitian, :reorder, :fuse_single_qubit, :fuse, :choose_pairing, :spin_conserving)
     for arg in args
         startswith(arg, "--") || throw(ArgumentError("unexpected argument \"$arg\" (all options are --name=value)"))
@@ -1078,11 +1291,21 @@ function parse_ucc_hardware_arguments(args::Vector{String})
             o[key] = _parse_choice(name, val, (:optimized, :blocked, :interleaved))
         elseif key === :objective
             o[key] = _parse_choice(name, val, (:depth, :two_qubit))
+        elseif key === :hva_qubit_circuit
+            o[key] = _parse_choice(name, val, (:swap_network, :per_term))
+        elseif key === :snake_axis
+            val in ("auto", "1", "2") || throw(ArgumentError("--snake_axis must be one of auto, 1, 2, got \"$val\""))
+            o[key] = val == "auto" ? :auto : parse(Int, val)
         end
     end
     isnothing(o[:lattice]) && throw(ArgumentError("--lattice=<Lx>x<Ly> is required"))
     if o[:ansatz] === :hva && o[:antihermitian] && isnothing(o[:coefficients_file])
         throw(ArgumentError("--ansatz=hva requires --antihermitian=false (its on-site gates are diagonal)"))
+    end
+    if o[:ansatz] === :hva && isnothing(o[:coefficients_file]) && o[:hva_qubit_circuit] === :swap_network &&
+       o[:encoding] in (:yordanov, :both) && o[:hva_pbc]
+        throw(ArgumentError("--hva_qubit_circuit=swap_network (the default for --ansatz=hva) needs --hva_pbc=false: " *
+                            "Cade et al.'s construction is for open boundaries; use --hva_qubit_circuit=per_term for periodic bonds"))
     end
     return NamedTuple(o)
 end
@@ -1128,7 +1351,7 @@ end
 function _print_result(name, opt, r)
     println("\n--- $name, optimize=$opt ---")
     println("  two-qubit gates     : $(r.n_two_qubit)")
-    println("  single-qubit gates  : $(r.n_single_qubit)")
+    println("  single-qubit gates  : $(something(r.n_single_qubit, "not modelled"))")
     println("  depth               : $(r.depth)   [schedule: $(r.order_strategy)]")
     b = r.bounds
     println("  depth bounds        : sequential $(b.sequential), critical path of the given order $(b.critical_path), " *
@@ -1136,7 +1359,11 @@ function _print_result(name, opt, r)
             (get(r, :n_fused, 0) > 0 ? " (bounds are before merging, so the merged depth can fall below them)" : ""))
     println("  free parameters     : $(r.n_parameters)")
     println("  gates (factors)     : $(r.n_excitations)  $(join(("$k=$v" for (k, v) in sort(collect(r.counts_by_kind))), ", "))")
-    if haskey(r, :n_tunneling)
+    if haskey(r, :native_depth)
+        println("  native gates        : $(r.n_native_two_qubit) two-qubit gates (Cade's units: FSWAP, hop, FSWAP-hop, on-site; " *
+                "the totals above count 2 CNOTs per native gate)")
+        println("  native depth        : $(r.native_depth)")
+    elseif haskey(r, :n_tunneling)
         println("  native gates        : $(r.n_tunneling) tunneling + $(r.n_interaction) interaction ($(r.n_fused) merged away)")
     else
         println("  qubits / mean JW w  : $(r.n_qubits) / $(round(r.mean_support, digits=3)),  parametrized rotations $(r.n_rotations)")
@@ -1159,7 +1386,11 @@ if abspath(PROGRAM_FILE) == @__FILE__
             encodings = opts.encoding === :both ? (:yordanov, :fermionic) : (opts.encoding,)
             optimizes = opts.optimize == "both" ? (false, true) : (opts.optimize == "true",)
             for enc in encodings, opt in optimizes
-                if enc === :yordanov
+                if enc === :yordanov && opts.ansatz === :hva && isnothing(opts.coefficients_file) &&
+                   opts.hva_qubit_circuit === :swap_network
+                    r = cade_swap_network_cost(opts.lattice; num_exponentials=n_exp, row_axis=opts.snake_axis, param_map=param_map)
+                    _print_result("Cade et al. 2020 (Jordan–Wigner qubits, fermionic-swap network)", opt, r)
+                elseif enc === :yordanov
                     r = yordanov_encoding_cost(gates, N; optimize=opt, common..., parity_network=opts.parity_network,
                         jw_ordering=opts.jw_ordering, fuse_single_qubit=opts.fuse_single_qubit)
                     _print_result("Yordanov 2020 (Jordan–Wigner qubits)", opt, r)

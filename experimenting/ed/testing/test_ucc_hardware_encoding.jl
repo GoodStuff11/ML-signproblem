@@ -18,6 +18,9 @@ to leave the circuit unchanged:
   5. The unoptimized Yordanov two-qubit count of the momentum-space UCC gate set agrees with the
      independent Python enumeration in 68f6bef0eaaf5c0928a922c6/gate_count_scripts (Σ(2w+5)).
   6. Cost tables for the lattices used in the paper, and for a pruned (--target_fidelity) run.
+  11. The Cade et al. (PRB 102, 235122, 2020) fermionic-swap network for the HVA: every gate is a lattice
+     term on Jordan–Wigner-adjacent qubits and each term is applied once per layer; the qubit circuit
+     equals the fermionic operators on random states; depths against Cade Table I.
 
 Usage (from experimenting/ed):
   julia --project=.. testing/test_ucc_hardware_encoding.jl
@@ -34,7 +37,7 @@ include(joinpath(@__DIR__, "..", "ucc_hardware_encoding.jl"))
 using .Trotter.TamFermion: FGate, getReducedHilSpace, fgateToExpSector
 import .Trotter: load_saved_dict
 
-const REFERENCE_SCRIPTS = "/home/jek354/research/68f6bef0eaaf5c0928a922c6/gate_count_scripts"
+const REFERENCE_SCRIPTS = normpath(joinpath(@__DIR__, "..", "..", "gate_count_scripts"))   # moved from 68f6bef0eaaf5c0928a922c6/gate_count_scripts
 const N_FAILED = Ref(0)
 
 function check(name, ok::Bool, detail="")
@@ -441,6 +444,149 @@ function test_parameter_counts()
         occursin("free parameters     : 60\n", out) && occursin("gates (factors)     : 552 ", out))
 end
 
+# ─── 11. Cade et al. swap network for the HVA ──────────────────────────
+
+# Qubit-level simulation of the network: bit q of the index is the occupation of Jordan–Wigner position q.
+function _apply_qubit_op!(ψ, op, θ)
+    qa, qb = op.qubits
+    ma, mb = (1 << qa), (1 << qb)
+    if op.kind === :onsite
+        for i in 0:length(ψ)-1
+            (i & ma != 0 && i & mb != 0) && (ψ[i+1] *= cis(θ))
+        end
+        return ψ
+    end
+    abs(qa - qb) == 1 || error("non-adjacent qubit gate $op")
+    if op.kind in (:hop, :fswap_hop)               # exp(iθ(XX+YY)/2) on adjacent qubits: no string
+        for i in 0:length(ψ)-1
+            (i & ma != 0 && i & mb == 0) || continue
+            j = xor(i, ma | mb)
+            a, b = ψ[i+1], ψ[j+1]
+            ψ[i+1], ψ[j+1] = cos(θ) * a + im * sin(θ) * b, cos(θ) * b + im * sin(θ) * a
+        end
+    end
+    if op.kind in (:fswap, :fswap_hop)             # FSWAP: swap the two bits, -1 if both occupied
+        for i in 0:length(ψ)-1
+            if i & ma != 0 && i & mb != 0
+                ψ[i+1] = -ψ[i+1]
+            elseif i & ma != 0 && i & mb == 0
+                j = xor(i, ma | mb)
+                ψ[i+1], ψ[j+1] = ψ[j+1], ψ[i+1]
+            end
+        end
+    end
+    return ψ
+end
+
+# Fermionic reference: exp(iθ(c†_a c_b + h.c.)) and exp(iθ n_a n_b) on the Fock space with the fixed
+# Jordan–Wigner order of the network's initial positions (strings included); FSWAPs are relabellings.
+function _apply_fermionic_op!(ψ, op, θ, position)
+    op.kind === :fswap && return ψ
+    pa, pb = position[op.modes[1]+1], position[op.modes[2]+1]
+    ma, mb = (1 << pa), (1 << pb)
+    if op.kind === :onsite
+        for i in 0:length(ψ)-1
+            (i & ma != 0 && i & mb != 0) && (ψ[i+1] *= cis(θ))
+        end
+        return ψ
+    end
+    lo, hi = minmax(pa, pb)
+    between = ((1 << hi) - 1) & ~((1 << (lo + 1)) - 1)
+    for i in 0:length(ψ)-1
+        (i & ma != 0 && i & mb == 0) || continue
+        j = xor(i, ma | mb)
+        sgn = isodd(count_ones(i & between)) ? -1 : 1
+        a, b = ψ[i+1], ψ[j+1]
+        ψ[i+1], ψ[j+1] = cos(θ) * a + im * sgn * sin(θ) * b, cos(θ) * b + im * sgn * sin(θ) * a
+    end
+    return ψ
+end
+
+function test_cade_swap_network()
+    println("\n== 11. Cade et al. (PRB 102, 235122, 2020) swap network for the HVA ==")
+    # (a) every gate is a lattice term on Jordan–Wigner-adjacent qubits of one spin line, each term once per layer
+    ok_terms = true
+    for (Lx, Ly) in ((2, 2), (3, 2), (2, 3), (3, 3), (4, 3), (3, 4), (4, 4), (5, 4), (1, 4), (4, 1)), axis in (1, 2)
+        N = Lx * Ly
+        net = cade_swap_network((Lx, Ly); row_axis=axis, num_exponentials=2)
+        xy(s) = (div(s, Ly), s % Ly)
+        seen = Dict{Tuple{Symbol,Int,Int},Int}()
+        for op in net.ops
+            op.kind === :fswap && continue
+            a, b = op.modes
+            if op.bond === :onsite
+                ok_terms &= a < N && b == a + N
+                key = (:onsite, a, b)
+            else
+                (xa, ya), (xb, yb) = xy(a % N), xy(b % N)
+                ok_terms &= div(a, N) == div(b, N) && abs(xa - xb) + abs(ya - yb) == 1 &&
+                            div(op.qubits[1], N) == div(op.qubits[2], N) && abs(op.qubits[1] - op.qubits[2]) == 1
+                key = (:hop, minmax(a, b)...)
+            end
+            seen[key] = get(seen, key, 0) + 1
+        end
+        n_bonds = 2 * ((Lx - 1) * Ly + Lx * (Ly - 1))
+        ok_terms &= length(seen) == N + n_bonds && all(==(2), values(seen))
+    end
+    check("every gate acts on Jordan–Wigner-adjacent qubits (or is an on-site phase), and every on-site term and " *
+          "every open-boundary bond of both spins is applied exactly once per layer (10 lattices x 2 row axes, 2 layers)", ok_terms)
+
+    # (b) the network implements the fermionic operators it claims (FSWAP bookkeeping and signs)
+    ok_state = true
+    rng_state = Ref(UInt64(12345))
+    rnd() = (rng_state[] = rng_state[] * 0x5851F42D4C957F2D + 0x14057B7EF767814F; (rng_state[] >> 11) / 2.0^53)
+    for (Lx, Ly) in ((3, 2), (2, 3), (4, 2), (3, 3)), axis in (1, 2)
+        net = cade_swap_network((Lx, Ly); row_axis=axis, num_exponentials=2)
+        dim = 1 << (2 * Lx * Ly)
+        ψ0 = [complex(rnd() - 0.5, rnd() - 0.5) for _ in 1:dim]
+        ψ0 ./= norm(ψ0)
+        θs = [2π * rnd() for _ in net.ops]
+        ψq, ψf = copy(ψ0), copy(ψ0)
+        for (op, θ) in zip(net.ops, θs)
+            _apply_qubit_op!(ψq, op, θ)
+            _apply_fermionic_op!(ψf, op, θ, net.position)
+        end
+        err = norm(ψq - ψf)
+        println("    $(Lx)x$(Ly), rows along axis $axis: |ψ_qubit - ψ_fermion| = $(round(err, sigdigits=3)) ($(length(net.ops)) gates, depth $(net.depth))")
+        ok_state &= err < 1e-10
+    end
+    check("qubit circuit (FSWAP, adjacent hops, combined FSWAP-hops, on-site phases) = the fermionic hops and on-site " *
+          "terms in network order, on random states (3x2, 2x3, 4x2, 3x3; both row axes; 2 layers)", ok_state)
+
+    # (c) depth per layer against Cade Table I and Sec. I C
+    ok_even, ok_odd, rows = true, true, String[]
+    for nx in 2:7, ny in 2:5
+        d = cade_swap_network((nx, ny); row_axis=1).depth
+        cade = iseven(nx) ? 2nx + 1 : 2nx + 2
+        iseven(nx) ? (ok_even &= d == cade) : (ok_odd &= d <= cade)
+        ny == 2 && push!(rows, "n_x=$nx: $d (Cade $cade)")
+    end
+    println("    native depth per layer: ", join(rows, ", "))
+    check("even n_x: native depth per layer = 2n_x + 1, as in Cade Table I (n_x = 2..7, n_y = 2..5)", ok_even)
+    check("odd n_x: native depth per layer <= Cade's 2n_x + 2 (the explicit network reaches 2n_x + 1)", ok_odd)
+    t = [(4, 4) => 9, (4, 5) => 9, (6, 6) => 13]
+    check("Table I examples (fully connected): 4x4 -> 9, 4x5 -> 9, 6x6 -> 13",
+        all(cade_swap_network(L; row_axis=1).depth == d for (L, d) in t))
+    check("3x3: 57 native two-qubit gates per layer (Cade Sec. I C: 9 + 2x3x(6+2) = 57)",
+        length(cade_swap_network((3, 3); row_axis=1).ops) == 57)
+    c = cade_swap_network_cost((4, 3); num_exponentials=12,
+        param_map=last(enumerate_ferm_excitations_HVA((4, 3); use_pbc=false, tie=:full)))
+    println("    HVA 4x3, 12 layers: $(c.n_native_two_qubit) native gates, native depth $(c.native_depth); " *
+            "CNOT level $(c.n_two_qubit) / depth $(c.depth); $(c.n_parameters) parameters; $(c.order_strategy)")
+    check("HVA 4x3, 12 layers: rows along the length-3 axis, native depth 12 x 7 = 84, 60 parameters",
+        c.native_depth == 84 && c.n_parameters == 60 && c.settings.row_axis == 2)
+
+    # (d) command line
+    script = joinpath(@__DIR__, "..", "ucc_hardware_encoding.jl")
+    jl, project = Base.julia_cmd(), joinpath(@__DIR__, "..", "..")
+    out = read(ignorestatus(`$jl --project=$project $script --lattice=4x3 --ansatz=hva --hva_pbc=false --antihermitian=false --num_exponentials=12 --encoding=yordanov --optimize=true`), String)
+    println(join(("    " * l for l in split(out, '\n') if occursin("native", l) || occursin("depth  ", l)), "\n"))
+    check("CLI --ansatz=hva --encoding=yordanov uses the swap network by default and prints its native and CNOT-level depth",
+        occursin("Cade et al. 2020", out) && occursin("native depth        : 84", out) && occursin("depth               : 168 ", out))
+    p = run(pipeline(ignorestatus(`$jl --project=$project $script --lattice=4x2 --ansatz=hva --antihermitian=false --encoding=yordanov`); stdout=devnull, stderr=devnull))
+    check("CLI rejects --hva_pbc=true with the swap network (Cade's construction is for open boundaries)", p.exitcode != 0)
+end
+
 function (@main)(ARGS)
     log_path = make_log_path(joinpath(@__DIR__, ".."), "test_ucc_hardware_encoding")
     with_logging(log_path) do
@@ -453,6 +599,7 @@ function (@main)(ARGS)
         test_orderings_and_depth()
         test_command_line()
         test_parameter_counts()
+        test_cade_swap_network()
         println("\n", N_FAILED[] == 0 ? "ALL CHECKS PASSED" : "$(N_FAILED[]) CHECK(S) FAILED")
     end
     return N_FAILED[] == 0 ? 0 : 1
