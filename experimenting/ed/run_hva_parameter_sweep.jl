@@ -48,6 +48,19 @@ Options:
                                              with "eigenstate" u_idx=8 is U=2.0. The `U` column
                                              in the CSV records the actual value either way.
   --custom_ref_state=<value> Reference state ("slater" or a basis index). Default: "slater".
+  --target_bc=<bc>           Boundary conditions of the target (and reference) Hamiltonian. Default: periodic.
+                             "periodic" -- the momentum-sector ED states of <folder>, lifted to real space
+                                           (the lattice is a torus; the HVA may have open bonds, see --hva_pbc).
+                             "open"     -- ground states of the open-boundary Hubbard model, computed here
+                                           in the real-space (n_up, n_dn) sector with
+                                           TamFermion.HubbardRealSpace(...; use_pbc=false) and KrylovKit
+                                           (the setting of Cade et al., PRB 102, 235122 (2020)). The target
+                                           is the ground state at U_values[u_idx] and the reference the ground
+                                           state at U_values[1]; requires --ref=eigenstate, forces
+                                           --hva_pbc=false (it is an error to pass --hva_pbc=true), and only
+                                           <folder>'s U grid and electron numbers are read from the data.
+                                           The lowest eigenvalues are printed so a degenerate ground state is
+                                           visible (fidelity to one member of a degenerate pair is ambiguous).
   --control                  Also run the standard momentum-conserving Trotter ansatz
                              (antihermitian, 1 layer) as a calibration row. This should
                              reproduce the stored repeat_optimization_*.csv numbers.
@@ -101,6 +114,7 @@ using Lattices
 using Optimization
 using OptimizationOptimJL
 using OptimizationOptimisers
+using KrylovKit
 
 include("data_path.jl")
 include("logging.jl")
@@ -131,6 +145,7 @@ function parse_arguments(args::Vector{String})
     seed = 20260915
     use_gpu = false
     out_path = nothing
+    target_bc = :periodic
     positional = String[]
 
     for arg in args
@@ -175,6 +190,10 @@ function parse_arguments(args::Vector{String})
             seed = parse(Int, split(arg, "=", limit=2)[2])
         elseif arg == "--use_gpu" || startswith(arg, "--use_gpu=")
             use_gpu = occursin("=", arg) ? parse(Bool, split(arg, "=", limit=2)[2]) : true
+        elseif startswith(arg, "--target_bc=")
+            v = String(split(arg, "=", limit=2)[2])
+            v in ("periodic", "open") || error("Invalid --target_bc entry: '$v'. Valid: periodic, open.")
+            target_bc = Symbol(v)
         elseif startswith(arg, "--out=")
             out_path = String(split(arg, "=", limit=2)[2])
         else
@@ -198,12 +217,31 @@ function parse_arguments(args::Vector{String})
 
     if isnothing(out_path)
         safe = replace(folder_arg, r"[^A-Za-z0-9]+" => "_")
-        out_path = joinpath(@__DIR__, "benchmarks", "hva_parameter_sweep_$(safe)_u$(u_idx).csv")
+        out_path = joinpath(@__DIR__, "benchmarks", "hva_parameter_sweep_$(safe)_u$(u_idx)" *
+                                                    (target_bc === :open ? "_obc" : "") * ".csv")
     end
 
     return (; folder, folder_arg, u_idx, ties, layers, runs, run_start, run_end,
         maxiters, initialization_samples, losses, hva_pbc, custom_ref_state_arg,
-        ref_mode, control, seed, use_gpu, out_path)
+        ref_mode, control, seed, use_gpu, out_path, target_bc)
+end
+
+"""
+    lowest_eigenpairs(H; howmany=3) -> (values, vectors)
+
+Lowest eigenvalues and eigenvectors of the real symmetric sparse Hamiltonian `H` (KrylovKit Lanczos,
+`:SR`), sorted ascending. The vectors are returned as `ComplexF64` (the optimizer's datatype) and
+normalized; the residual ‖Hψ − Eψ‖ of the lowest is checked to be below 1e-8.
+"""
+function lowest_eigenpairs(H; howmany::Integer=3)
+    x0 = normalize!(randn(size(H, 1)))
+    vals, vecs, info = KrylovKit.eigsolve(H, x0, howmany, :SR; ishermitian=true, tol=1e-12, krylovdim=60, maxiter=500)
+    info.converged >= 1 || error("lowest_eigenpairs: Lanczos did not converge ($(info.converged) converged)")
+    order = sortperm(real.(vals))
+    vals, vecs = real.(vals[order]), [ComplexF64.(normalize(vecs[i])) for i in order]
+    res = norm(H * vecs[1] - vals[1] * vecs[1])
+    res < 1e-8 || error("lowest_eigenpairs: ground-state residual $res")
+    return vals, vecs
 end
 
 function (@main)(ARGS)
@@ -220,6 +258,7 @@ function (@main)(ARGS)
         println("initialization_samples: $(cfg.initialization_samples)")
         println("runs:                   $(cfg.run_start):$(cfg.run_end) of $(cfg.runs)")
         println("reference:              $(cfg.ref_mode)")
+        println("target_bc:              $(cfg.target_bc)")
         println("output CSV:             $(cfg.out_path)")
         if cfg.use_gpu
             CUDA.functional() || error("--use_gpu was given but CUDA is not functional on this node")
@@ -242,7 +281,14 @@ function (@main)(ARGS)
                     "(no Slater row prepended, so u_idx is shifted by one vs --ref=slater)")
         end
 
-        hva_pbc = if !isnothing(cfg.hva_pbc)
+        if cfg.target_bc === :open
+            cfg.ref_mode === :eigenstate || error("--target_bc=open requires --ref=eigenstate")
+            cfg.hva_pbc === true && error("--target_bc=open forces an open-boundary HVA; do not pass --hva_pbc=true")
+        end
+        hva_pbc = if cfg.target_bc === :open
+            println("--target_bc=open: HVA bonds are open to match the target")
+            false
+        elseif !isnothing(cfg.hva_pbc)
             cfg.hva_pbc
         else
             auto = all(L -> L <= 2 || iseven(L), Lvec)
@@ -272,25 +318,45 @@ function (@main)(ARGS)
 
         # ---- real space: the HVA's home --------------------------------------
         basis_real, _, _ = Trotter.realspace_basis(Lvec, (n_up, n_dn))
+        pbc_target = cfg.target_bc === :periodic
         H_hop_r = Trotter.TamFermion.HubbardRealSpace(1.0, 0.0, Lvec, (n_up, n_dn);
-            use_pbc=true, returnBasis=false)
+            use_pbc=pbc_target, returnBasis=false)
         H_int_r = Trotter.TamFermion.HubbardRealSpace(0.0, 1.0, Lvec, (n_up, n_dn);
-            use_pbc=true, returnBasis=false)
+            use_pbc=pbc_target, returnBasis=false)
         H_real = H_hop_r + target_u * H_int_r
 
-        vecs_r = Trotter.momentum_sector_to_realspace(state_vecs, basis_mom, Lvec, (n_up, n_dn))
-        s1_r = vecs_r[ref_row, :]
-        s2_r = vecs_r[target_row, :]
-        println("real-space dimension: $(length(s1_r))")
+        if pbc_target
+            vecs_r = Trotter.momentum_sector_to_realspace(state_vecs, basis_mom, Lvec, (n_up, n_dn))
+            s1_r = vecs_r[ref_row, :]
+            s2_r = vecs_r[target_row, :]
+            println("real-space dimension: $(length(s1_r))")
 
-        for (label, vm, vr) in (("reference", s1_m, s1_r), ("target", s2_m, s2_r))
-            chk = Trotter.check_realspace_transform(vm, vr, H_mom, H_real; label=label)
-            @printf("  transform check (%s): |psi| %.12f -> %.12f ; <H> %.10f -> %.10f\n",
-                label, chk.norm_mom, chk.norm_real, chk.energy_mom, chk.energy_real)
+            for (label, vm, vr) in (("reference", s1_m, s1_r), ("target", s2_m, s2_r))
+                chk = Trotter.check_realspace_transform(vm, vr, H_mom, H_real; label=label)
+                @printf("  transform check (%s): |psi| %.12f -> %.12f ; <H> %.10f -> %.10f\n",
+                    label, chk.norm_mom, chk.norm_real, chk.energy_mom, chk.energy_real)
+            end
+
+            ed_energy = real(dot(s2_m, H_mom * s2_m))
+            println("Exact ED ground energy at U=$target_u: $ed_energy")
+        else
+            println("real-space dimension: $(size(H_real, 1)) (open-boundary target, computed here)")
+            ref_u = U_values[1]
+            vals_ref, vecs_ref = lowest_eigenpairs(H_hop_r + ref_u * H_int_r)
+            vals_tgt, vecs_tgt = lowest_eigenpairs(H_real)
+            s1_r, s2_r = vecs_ref[1], vecs_tgt[1]
+            @printf("  open-boundary reference, U = %g: lowest eigenvalues %s (gap %.3e)\n",
+                ref_u, string(round.(vals_ref; sigdigits=12)), vals_ref[2] - vals_ref[1])
+            @printf("  open-boundary target,    U = %g: lowest eigenvalues %s (gap %.3e)\n",
+                target_u, string(round.(vals_tgt; sigdigits=12)), vals_tgt[2] - vals_tgt[1])
+            for (label, v) in (("reference", vals_ref), ("target", vals_tgt))
+                v[2] - v[1] < 1e-8 && println("  WARNING: the open-boundary $label ground state is degenerate; " *
+                                              "the fidelity below is to one arbitrary member of the multiplet")
+            end
+            @printf("  reference-target overlap |<ref|target>|^2 = %.6f\n", abs2(dot(s1_r, s2_r)))
+            ed_energy = vals_tgt[1]
+            println("Exact open-boundary ground energy at U=$target_u: $ed_energy")
         end
-
-        ed_energy = real(dot(s2_m, H_mom * s2_m))
-        println("Exact ED ground energy at U=$target_u: $ed_energy")
 
         # ---- CSV -------------------------------------------------------------
         mkpath(dirname(cfg.out_path))
