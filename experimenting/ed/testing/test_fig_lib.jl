@@ -4,6 +4,9 @@ test_fig_lib.jl
 Verifies fig_lib.jl's panel-label / annotation API and that every notebook and script
 that makes a figure with `create_fig` takes it from fig_lib.jl:
 
+ 0. Colour maps: cmap1-cmap4 return L colours; cmap2 is MATLAB's parula and cmap3 is
+    plasma, both stopping at YELLOW_CUTOFF (short of their bright-yellow ends); cmap4 is
+    the full RdYlBu_r (blue -> red). Saves cmap_swatches.png to check them by eye.
  1. API on a synthetic figure: `panel_axes` orders the panels row by row, left to right
     (nested GridLayouts included) whatever order they were created in; `label_panels!`
     writes "(a)", "(b)", ... in that order, by default in the margin just above-left of
@@ -103,6 +106,49 @@ Ghostscript's txtwrite it decodes characters outside Unicode's basic plane, such
 calligraphic letters of \\mathcal{F} and \\mathcal{H}.
 """
 pypdf_text(python, path) = read(`$python -I -c "import pypdf, sys; print(''.join(p.extract_text() for p in pypdf.PdfReader(sys.argv[1]).pages))" $path`, String)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# 0: colour maps
+# ─────────────────────────────────────────────────────────────────────────────
+rgb(c) = round.((Float64(c.r), Float64(c.g), Float64(c.b)); digits=4)
+brightness(c) = Float64(c.r + c.g + c.b) / 3
+
+function test_cmaps(output_dir)
+    cs = Makie.ColorSchemes
+    @testset "colour maps" begin
+        @test all(L -> all(f -> length(f(L)) == L, (cmap1, cmap2, cmap3, cmap4)), (2, 5, 9))
+        # cmap2 is parula: starts at its dark blue, stops at the 0.85 point, short of the yellow end
+        @test length(PARULA.colors) == 64
+        @test rgb(cmap2(5)[1]) == (0.2081, 0.1663, 0.5292)
+        @test rgb(cmap2(5)[end]) == rgb(PARULA[YELLOW_CUTOFF])
+        @test rgb(PARULA[1.0]) == (0.9763, 0.9831, 0.0538)
+        # cmap3 is plasma, truncated the same way
+        @test rgb(cmap3(5)[1]) == rgb(cs.plasma[0.0])
+        @test rgb(cmap3(5)[end]) == rgb(cs.plasma[YELLOW_CUTOFF])
+        # truncated ends are darker than the bright-yellow ends they replace
+        @test brightness(cmap2(5)[end]) < brightness(PARULA[1.0])
+        @test brightness(cmap3(5)[end]) < brightness(cs.plasma[1.0])
+        # cmap4 is RdYlBu_r: full range, blue first, red last
+        c4 = cmap4(5)
+        @test rgb(c4[1]) == rgb(cs.RdYlBu[1.0]) && rgb(c4[end]) == rgb(cs.RdYlBu[0.0])
+        @test c4[1].b > c4[1].r && c4[end].r > c4[end].b
+        for (name, f) in (("cmap2", cmap2), ("cmap3", cmap3), ("cmap4", cmap4))
+            println("  $name(5) = ", join(map(rgb, f(5)), "  "))
+        end
+    end
+
+    # swatch figure for checking by eye: each palette at L = 9
+    fig = Figure(size=(600, 420))
+    for (i, (name, f)) in enumerate((("cmap1 (roma)", cmap1), ("cmap2 (parula, to $YELLOW_CUTOFF)", cmap2),
+        ("cmap3 (plasma, to $YELLOW_CUTOFF)", cmap3), ("cmap4 (RdYlBu_r)", cmap4)))
+        ax = Axis(fig[i, 1]; title=name, height=50)
+        hidedecorations!(ax); hidespines!(ax)
+        barplot!(ax, 1:9, ones(9); color=f(9), gap=0.05)
+    end
+    path = joinpath(output_dir, "cmap_swatches.png")
+    save(path, fig)
+    println("  colour-map swatches: $path")
+end
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 1 + 2: API on a synthetic figure, and selectable text in its PDF
@@ -265,7 +311,7 @@ function test_audit()
     fig4_names = toplevel_definitions(fig4_src)
 
     @testset "fig_lib.jl general plotting only, everything figure-4 in fig4_lib.jl" begin
-        @test sort(collect(lib_names)) == sort([:cmap1, :cmap2, :get_figsize, :create_fig, :LEGEND_ARGS,
+        @test sort(collect(lib_names)) == sort([:PARULA, :YELLOW_CUTOFF, :cmap1, :cmap2, :cmap3, :cmap4, :get_figsize, :create_fig, :LEGEND_ARGS,
             :PANEL_AXIS_TYPES, :grid_path, :panel_axes, :corner_geometry, :place_corner_text!,
             :label_panels!, :annotate_panel!])
         println("  fig_lib.jl defines: $(sort(collect(lib_names)))")
@@ -454,6 +500,7 @@ function (@main)(ARGS)
         config = parse_cli_args(ARGS)
         println("Writing test figures to: $(config.output_dir)")
         @testset "fig_lib.jl" begin
+            @testset "colour maps" test_cmaps(config.output_dir)
             @testset "API + selectable PDF text" test_api(config.output_dir, config.pypdf_python)
             @testset "notebooks/scripts use fig_lib.jl / fig4_lib.jl" test_audit()
             @testset "each library loads on its own" test_standalone(config.output_dir)
