@@ -143,7 +143,18 @@ function get_gpu_gate_ops(gates, N::Int, basis::AbstractVector{<:Integer}; antih
         error("CUDA not loaded or available")
     end
 
-    cache_key = hash((length(gates), N, length(basis), antihermitian, datatype, stream_tau))
+    # The key must identify the gates in their order and the basis, not just their sizes: a
+    # permuted gate list (warm-start gate-order candidates, legacy orders) or another basis of the
+    # same dimension must not reuse these operators.
+    # Every element is hashed (Base's array hash samples large arrays).
+    h = hash((length(gates), N, length(basis), antihermitian, datatype, stream_tau))
+    for g in gates
+        h = hash((UInt64(g.cre_up), UInt64(g.ann_up), UInt64(g.cre_dn), UInt64(g.ann_dn)), h)
+    end
+    for b in basis
+        h = hash(b, h)
+    end
+    cache_key = h
     if haskey(_GPU_GATE_OPS_CACHE, cache_key)
         return _GPU_GATE_OPS_CACHE[cache_key]
     end

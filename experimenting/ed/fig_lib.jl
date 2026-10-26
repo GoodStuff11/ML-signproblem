@@ -84,12 +84,21 @@ const PARULA = Makie.ColorSchemes.ColorScheme([Makie.RGB(c...) for c in [
 
 # Parula and plasma end in a bright yellow that barely shows on white paper, so their
 # palettes stop at this fraction of the colour map (gold/orange) instead of at 1.
-const YELLOW_CUTOFF = 0.85
+const YELLOW_CUTOFF = 0.95
 
 cmap1(L) = [Makie.ColorSchemes.roma[z] for z in range(0, 1, length=L)]
 cmap2(L) = [PARULA[z] for z in range(0, YELLOW_CUTOFF, length=L)]
 cmap3(L) = [Makie.ColorSchemes.plasma[z] for z in range(0, YELLOW_CUTOFF, length=L)]
 cmap4(L) = [Makie.ColorSchemes.RdYlBu[z] for z in range(1, 0, length=L)]  # RdYlBu_r: blue -> red
+
+
+const LEGEND_ARGS = Dict(:rowgap => -8, :padding => (3, 3, 0, 0))
+const AXIS_ARGS = Dict(
+    :xgridvisible=>false,
+    :ygridvisible=>false,
+    :xtickalign=>1.0,
+    :ytickalign=>1.0
+)
 
 """
     get_figsize(num_cols, height_mm=55.0) -> (width_px, height_px)
@@ -125,12 +134,12 @@ function create_fig(num_cols::Int, height_mm::Float64=55.0; aspect=nothing, kwar
     ax_aspect = (aspect == :auto || isnothing(aspect)) ? nothing : aspect
     ax = Axis(fig[1, 1];
         aspect=ax_aspect,
+        AXIS_ARGS...,
         kwargs...
     )
     return fig, ax
 end
 
-const LEGEND_ARGS = Dict(:rowgap => -8, :padding => (3, 3, 0, 0))
 set_theme!(theme_latexfonts(), fontsize=10)
 # set_theme!(font = "Arial", fontsize = 10)
 
@@ -166,29 +175,34 @@ by grid position). This is the order `label_panels!` assigns (a), (b), ... in.
 panel_axes(fig::Figure) = sort([b for b in fig.content if b isa PANEL_AXIS_TYPES]; by=grid_path)
 
 # (anchor in relative axis coordinates, text alignment, offset in px pointing into the axis)
-function corner_geometry(corner::Symbol, pad::Real)
+function corner_geometry(corner::Symbol, padx::Real, pady::Real)
     c = string(corner)
     (length(c) == 2 && c[1] in "lcr" && c[2] in "bct") ||
         error("corner must be one of :lb, :lc, :lt, :cb, :cc, :ct, :rb, :rc, :rt (given: :$corner)")
-    h = Dict('l' => (0.0, :left, pad), 'c' => (0.5, :center, 0), 'r' => (1.0, :right, -pad))[c[1]]
-    v = Dict('b' => (0.0, :bottom, pad), 'c' => (0.5, :center, 0), 't' => (1.0, :top, -pad))[c[2]]
+    h = Dict('l' => (0.0, :left, padx), 'c' => (0.5, :center, padx), 'r' => (1.0, :right, -padx))[c[1]]
+    v = Dict('b' => (0.0, :bottom, pady), 'c' => (0.5, :center, pady), 't' => (1.0, :top, -pady))[c[2]]
     return (h[1], v[1]), (h[2], v[2]), (h[3], v[3])
 end
 
 # Draw `str` at `corner` of `ax`: inside the plot area (`placement=:inside`, a text!
 # plot that does not change the layout or the axis limits) or in the layout margin just
 # outside that corner (`placement=:outside`, a Label that the layout makes room for).
-function place_corner_text!(ax, str, corner::Symbol, placement::Symbol, pad::Real; kwargs...)
+function place_corner_text!(ax, str, corner::Symbol, placement::Symbol, padx::Real, pady::Real; kwargs...)
     if placement == :inside
-        anchor, align, offset = corner_geometry(corner, pad)
+        anchor, align, offset = corner_geometry(corner, padx, pady)
         plt = text!(ax, anchor...; text=str, space=:relative, align=align, offset=offset, kwargs...)
         translate!(plt, 0, 0, 10)  # draw above the data, even data plotted afterwards
         return plt
     elseif placement == :outside
-        sides = Dict(:lt => (TopLeft(), :right, :bottom, (0, pad, pad, 0)),
-                     :rt => (TopRight(), :left, :bottom, (pad, 0, pad, 0)),
-                     :lb => (BottomLeft(), :right, :top, (0, pad, 0, pad)),
-                     :rb => (BottomRight(), :left, :top, (pad, 0, 0, pad)))
+        sides = Dict(:lt => (TopLeft(), :right, :bottom, (0, padx, pady, 0)),
+                     :rt => (TopRight(), :left, :bottom, (padx, 0, pady, 0)),
+                     :lb => (BottomLeft(), :right, :top, (0, padx, 0, pady)),
+                     :rb => (BottomRight(), :left, :top, (padx, 0, 0, pady)),
+                     :ct => (Top(), :center, :bottom, (0, padx, pady, 0)),
+                     :cb => (Bottom(), :center, :top, (0, padx, 0, pady)),
+                     :lc => (Left(), :right, :center, (0, padx, pady, 0)),
+                     :rc => (Right(), :left, :center, (padx, 0, pady, 0)),
+                     )
         haskey(sides, corner) || error("placement=:outside needs corner :lt, :rt, :lb or :rb (given: :$corner)")
         side, halign, valign, padding = sides[corner]
         gc = ax.layoutobservables.gridcontent[]
@@ -222,13 +236,13 @@ panel has been added. Returns the created text plots (`:inside`) or Labels (`:ou
 - `kwargs`: text attributes, e.g. `fontsize=12`, `font=:bold`, `color=:gray30`.
 """
 function label_panels!(fig::Figure; axes=panel_axes(fig), labels=nothing, start::Char='a',
-    format=l -> "($l)", corner=:lt, placement::Symbol=:outside, pad::Real=4, kwargs...)
+    format=l -> "($l)", corner=:lt, placement::Symbol=:outside, pad::Real=4, padx::Real=pad, pady::Real=pad, kwargs...)
     n = length(axes)
     texts = isnothing(labels) ? [format(start + (i - 1)) for i in 1:n] : labels
     length(texts) == n || error("got $(length(texts)) labels for $n panels")
     corners = corner isa Symbol ? fill(corner, n) : corner
     length(corners) == n || error("got $(length(corners)) corners for $n panels")
-    return [place_corner_text!(ax, t, c, placement, pad; kwargs...) for (ax, t, c) in zip(axes, texts, corners)]
+    return [place_corner_text!(ax, t, c, placement, padx, pady; kwargs...) for (ax, t, c) in zip(axes, texts, corners)]
 end
 
 """
@@ -243,9 +257,9 @@ label at :lt). With `at=(x, y)` it goes at that point instead, in relative axis 
 (`space=:data`), with `align` choosing which point of the text sits at `at`.
 `kwargs` are text attributes, e.g. `fontsize=12`, `color=:gray30`.
 """
-function annotate_panel!(ax, str; corner::Symbol=:lb, placement::Symbol=:inside, pad::Real=6,
+function annotate_panel!(ax, str; corner::Symbol=:lb, placement::Symbol=:inside, pad::Real=6, padx::Real=pad, pady::Real=pad,
     at=nothing, space::Symbol=:relative, align=(:left, :bottom), kwargs...)
-    isnothing(at) && return place_corner_text!(ax, str, corner, placement, pad; kwargs...)
+    isnothing(at) && return place_corner_text!(ax, str, corner, placement, padx, pady; kwargs...)
     plt = text!(ax, at...; text=str, space=space, align=align, kwargs...)
     translate!(plt, 0, 0, 10)
     return plt

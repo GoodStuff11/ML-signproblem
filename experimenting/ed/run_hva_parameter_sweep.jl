@@ -56,8 +56,13 @@ Options:
                                            TamFermion.HubbardRealSpace(...; use_pbc=false) and KrylovKit
                                            (the setting of Cade et al., PRB 102, 235122 (2020)). The target
                                            is the ground state at U_values[u_idx] and the reference the ground
-                                           state at U_values[1]; requires --ref=eigenstate, forces
-                                           --hva_pbc=false (it is an error to pass --hva_pbc=true), and only
+                                           state at U_values[1]: with --ref=eigenstate the lowest U of the data
+                                           (0.25), with --ref=slater U = 0, i.e. the open-boundary
+                                           non-interacting ground state, which is a single Slater determinant
+                                           when it is non-degenerate (checked; a degenerate U = 0 ground state
+                                           is an error). u_idx follows --ref as above (slater: 9 => U = 2,
+                                           61 => U = 15). Forces --hva_pbc=false (it is an error to pass
+                                           --hva_pbc=true), and only
                                            <folder>'s U grid and electron numbers are read from the data.
                                            The lowest eigenvalues are printed so a degenerate ground state is
                                            visible (fidelity to one member of a degenerate pair is ambiguous).
@@ -282,7 +287,6 @@ function (@main)(ARGS)
         end
 
         if cfg.target_bc === :open
-            cfg.ref_mode === :eigenstate || error("--target_bc=open requires --ref=eigenstate")
             cfg.hva_pbc === true && error("--target_bc=open forces an open-boundary HVA; do not pass --hva_pbc=true")
         end
         hva_pbc = if cfg.target_bc === :open
@@ -341,8 +345,14 @@ function (@main)(ARGS)
             println("Exact ED ground energy at U=$target_u: $ed_energy")
         else
             println("real-space dimension: $(size(H_real, 1)) (open-boundary target, computed here)")
-            ref_u = U_values[1]
+            ref_u = U_values[1]                     # 0.0 with --ref=slater (load_ED_data prepends it)
+            cfg.ref_mode === :slater && ref_u != 0 && error("--ref=slater expected U_values[1] = 0, got $ref_u")
             vals_ref, vecs_ref = lowest_eigenpairs(H_hop_r + ref_u * H_int_r)
+            if cfg.ref_mode === :slater
+                vals_ref[2] - vals_ref[1] < 1e-8 && error("the open-boundary U = 0 ground state is degenerate " *
+                    "(gap $(vals_ref[2] - vals_ref[1])), so it is not a unique Slater determinant; use --ref=eigenstate")
+                println("  reference: the open-boundary non-interacting (U = 0) ground state, a single Slater determinant")
+            end
             vals_tgt, vecs_tgt = lowest_eigenpairs(H_real)
             s1_r, s2_r = vecs_ref[1], vecs_tgt[1]
             @printf("  open-boundary reference, U = %g: lowest eigenvalues %s (gap %.3e)\n",
