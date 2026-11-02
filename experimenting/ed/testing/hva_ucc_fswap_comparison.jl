@@ -14,8 +14,8 @@ Jordan–Wigner qubits whose strings are removed with fermionic swaps (fSWAPs).
        costs the full layer. The greedy router breaks ties by input order, so the kept excitations are fed in the
        enumeration order that table used (enumerate_ferm_excitations(2, Lvec; conserve_mom, conserve_sz)); in the
        coefficient files' order the counts move by up to ~10%.
-  HVA: Cade et al.'s fermionic-swap network (`cade_swap_network_cost`, open bonds), read from the jw_cnot and
-       jw_depth columns of data-summary/hva_ucc_fermionic_comparison.csv (eigenstate reference), so that CSV must
+  HVA: Cade et al.'s fermionic-swap network (`cade_swap_network_cost`, open bonds), read from the jw_fswap,
+       jw_fswap_hop (fSWAPs fused with a hopping term; both counted as fSWAPs), jw_cnot and jw_depth columns of data-summary/hva_ucc_fermionic_comparison.csv (eigenstate reference), so that CSV must
        be current (run hva_ucc_fermionic_comparison.jl first).
 The periodic 4x2 case of testing/hva_ucc_4x2_periodic_comparison.jl is not included: cade_swap_network_cost builds
 open bonds only.
@@ -29,7 +29,7 @@ Arguments:
   --targets=<list> (optional): comma-separated target fidelities F*. Default: 0.95,0.99. Each must be a value
                   present in hva_ucc_fermionic_comparison.csv's F_target column (the HVA side is read from it).
 Prints the PASS/FAIL check and one table row per (system, U, F*): UCC angles kept, fSWAPs, CNOTs, CNOT depth;
-HVA layers, CNOTs, CNOT depth; depth ratio UCC/HVA. Log in testing/logs/<date>/.
+HVA layers, fSWAPs, CNOTs, CNOT depth. Log in testing/logs/<date>/.
 =#
 
 module Cmp
@@ -95,7 +95,8 @@ function run(targets)
         for Fstar in targets
             h = hva[(hva.system .== label) .& (hva.U .== U) .& (hva.F_target .== Fstar), :]
             nrow(h) == 1 || error("$label U=$U F*=$Fstar: expected one HVA row in the CSV, found $(nrow(h))")
-            hv = (layers=h.layers_costed[1], cnot=h.jw_cnot[1], depth=h.jw_depth[1])
+            # fSWAPs of the swap network: plain fSWAPs plus fSWAPs fused with a hopping term
+            hv = (layers=h.layers_costed[1], fswap=h.jw_fswap[1] + h.jw_fswap_hop[1], cnot=h.jw_cnot[1], depth=h.jw_depth[1])
             if S.l0 > 1 - Fstar
                 push!(rows, (label, U, Fstar, nothing, hv))
                 continue
@@ -110,11 +111,10 @@ function run(targets)
             push!(rows, (label, U, Fstar, (K=hi, P=length(S.A), fswap=r.n_fswap, cnot=r.n_two_qubit, depth=r.depth), hv))
         end
     end
-    println("\nsystem | U/t | F* | UCC angles | fSWAPs | UCC CNOTs | UCC depth | HVA layers | HVA CNOTs | HVA depth | depth ratio")
+    println("\nsystem | U/t | F* | UCC angles | UCC fSWAPs | UCC CNOTs | UCC depth | HVA layers | HVA fSWAPs | HVA CNOTs | HVA depth")
     for (label, U, Fstar, u, hv) in rows
         ucc = isnothing(u) ? "— | — | — | —" : "$(u.K)/$(u.P) | $(u.fswap) | $(u.cnot) | $(u.depth)"
-        ratio = isnothing(u) ? "—" : @sprintf("%.1f", u.depth / hv.depth)
-        println("$label | $(Int(U)) | $Fstar | $ucc | $(hv.layers) | $(hv.cnot) | $(hv.depth) | $ratio")
+        println("$label | $(Int(U)) | $Fstar | $ucc | $(hv.layers) | $(hv.fswap) | $(hv.cnot) | $(hv.depth)")
     end
 end
 
