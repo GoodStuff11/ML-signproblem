@@ -581,11 +581,21 @@ passed through `sortGatesByIJ` — the emitted order *is* the ansatz:
    coefficient, so it is not a correctness issue, but it means an optimized
    coefficient is `-2 U dt`, not `U dt`);
 2. for each lattice axis `a = 1:ndim` (axis 1 is horizontal), the hopping bonds
-   of parity 0 then the bonds of parity 1.
+   of parity 0 then the bonds of parity 1, then — only on a periodic axis of odd
+   length `L > 2` — the wrap bonds `(L-1, 0)` as a third group.
 
 A bond's parity is the parity of its source site's coordinate along that axis, so
 parity-0 bonds are `(0,1),(2,3),…` and parity-1 bonds are `(1,2),(3,4),…`. Within
-one parity group the bonds have disjoint support and therefore commute.
+one group the bonds have disjoint support and therefore commute.
+
+A periodic ring of odd length admits no 2-colouring of its bonds: the wrap bond
+`(L-1, 0)` has an even source coordinate but shares site 0 with `(0,1)`. It is
+therefore taken out of parity group 0 and placed in its own group (a minimal
+3-colouring), which under `tie=:full` carries its own coefficient — one
+coefficient per commuting group, as in the "per edge color" HVA of Bosse &
+Montanaro (PRB 106, 165130 (2022)) and the per-group HVA of Cade et al.
+(PRB 102, 235122 (2020)). Axes of even length or length <= 2 are unchanged
+(same gates, same order), so results from those lattices are reproducible.
 
 Each bond emits **two** gates, spin-up then spin-down, because an `FGate` is a
 single product operator and cannot represent a sum over spin channels. `param_map`
@@ -593,13 +603,11 @@ is what ties them back together.
 
 `tie` selects the returned `param_map`:
 - `:full` (default) — one coefficient for the on-site block and one per
-  (axis, parity) hopping block, shared across both spin channels.
+  (axis, group) hopping block (2 groups per axis, 3 on a periodic axis of odd
+  length > 2), shared across both spin channels.
 - `:none` — `collect(1:length(gates))`, every gate independent.
 - `:spin` — one coefficient per site for the on-site block, and one per bond
   shared by that bond's up/down pair.
-
-`use_pbc=true` throws for an axis of odd length > 2: a periodic ring of odd length
-admits no 2-colouring into commuting halves.
 
 A length-2 periodic axis also double-counts: `circshift` by 1 on a length-2
 axis maps coord 0 -> 1 and coord 1 -> 0, so parity-0 and parity-1 pick up the
@@ -624,16 +632,6 @@ function enumerate_ferm_excitations_HVA(Lvec;
     N = prod(dims)
     ndim = length(dims)
 
-    if use_pbc
-        for (a, L) in enumerate(dims)
-            if L > 2 && isodd(L)
-                throw(ArgumentError(
-                    "use_pbc=true with odd length L=$L on axis $a: a periodic ring " *
-                    "of odd length cannot be 2-coloured into commuting bond groups."))
-            end
-        end
-    end
-
     sitebit(s::Integer) = DtMb(1) << DtMb(s - 1)
 
     gates = FGate[]
@@ -653,7 +651,12 @@ function enumerate_ferm_excitations_HVA(Lvec;
     block = 1
     nbond = 0
     for a in 1:ndim
-        for parity in 0:1
+        L = dims[a]
+        # A periodic axis of odd length > 2 is an odd ring: its bonds need
+        # three commuting groups. The wrap bond (source coord L-1, which is
+        # even) shares site 0 with bond (0,1), so it gets its own group 2.
+        odd_ring = use_pbc && L > 2 && isodd(L)
+        for parity in (odd_ring ? (0, 1, 2) : (0, 1))
             block += 1
             for i in 1:N
                 j = neighbors[a, i]
@@ -664,7 +667,8 @@ function enumerate_ferm_excitations_HVA(Lvec;
                 # itself. There is no such bond; skip it.
                 j == i && continue
                 coords = unravel_c(i - 1, dims)         # 0-based
-                (coords[a] % 2) == parity || continue
+                group = (odd_ring && coords[a] == L - 1) ? 2 : coords[a] % 2
+                group == parity || continue
                 nbond += 1
                 # Canonicalise to (cre_up, cre_dn) <= (ann_up, ann_dn). Swapping
                 # cre/ann leaves τ_g = C†_I C_J + C†_J C_I unchanged.

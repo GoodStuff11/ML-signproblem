@@ -64,9 +64,9 @@ Arguments:
                      - "spin": one coefficient per site, and one per bond shared by its up/down pair.
                      - "none": every gate independent (no sharing).
   --hva_pbc=<bool> (optional, --ansatz=hva only): Periodic bonds in the ansatz. Default: true, which
-                     matches the periodic Hubbard Hamiltonian the ED data was produced with. Throws
-                     for a periodic axis of odd length > 2 (no 2-colouring into commuting halves);
-                     pass --hva_pbc=false there to fall back to an open-boundary ansatz.
+                     matches the periodic Hubbard Hamiltonian the ED data was produced with. A
+                     periodic axis of odd length > 2 gets a third hopping group (the wrap bond).
+                     --hva_pbc=false gives an open-boundary ansatz.
   --match_dof[=<mode>] (optional, --ansatz=hva only): Ignore --num_exponentials as the HVA layer
                      count and instead derive the number of HVA layers whose total free-parameter
                      count matches the STANDARD ansatz at --num_exponentials layers. <mode> is one

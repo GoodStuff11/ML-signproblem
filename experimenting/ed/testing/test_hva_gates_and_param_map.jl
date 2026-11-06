@@ -146,8 +146,10 @@ function (@main)(ARGS)
         end
     end
 
-    @testset "odd periodic axis is rejected" begin
-        @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); use_pbc=true)
+    @testset "odd periodic axis gets a third (wrap) group; bad tie is rejected" begin
+        # 3x2 periodic: axis 1 is an odd ring (3 groups), axis 2 has length 2 (2 groups).
+        _, pmap = TamFermion.enumerate_ferm_excitations_HVA((3, 2); use_pbc=true, tie=:full)
+        @test maximum(pmap) == 1 + 3 + 2
         @test_throws ArgumentError TamFermion.enumerate_ferm_excitations_HVA((3, 2); tie=:nonsense)
     end
 

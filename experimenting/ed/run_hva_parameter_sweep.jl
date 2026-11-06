@@ -36,9 +36,13 @@ Options:
   --maxiters=<n>             Maximum iterations per optimizer stage. Default: 1000.
   --initialization_samples=<n>  Multi-start random samples per run. Default: 1.
   --loss=<list>              Comma-separated subset of "overlap,energy". Default: overlap.
-  --hva_pbc=<bool>           Periodic bonds in the ansatz. Default: true when every lattice
-                             axis is even (or length <= 2), false otherwise -- a periodic
-                             axis of odd length > 2 cannot be 2-coloured and would throw.
+  --hva_pbc=<bool>           Periodic bonds in the ansatz (only with --target_bc=periodic).
+                             Default: true, matching the periodic target. A periodic axis of
+                             odd length > 2 gets three commuting hopping groups (even bonds,
+                             odd bonds, the wrap bond), each with its own coefficient under
+                             --tie=full. false gives an open-boundary HVA on a periodic target
+                             (a deliberate boundary mismatch; before 2026-11-06 this was the
+                             silent default on odd lattices).
   --ref=<slater|eigenstate>  Which state the circuit starts from. Default: slater.
                              "slater"     -- a single Slater determinant, prepended as row 1
                                              of the ED data (U_values then starts at 0.0).
@@ -50,7 +54,7 @@ Options:
   --custom_ref_state=<value> Reference state ("slater" or a basis index). Default: "slater".
   --target_bc=<bc>           Boundary conditions of the target (and reference) Hamiltonian. Default: periodic.
                              "periodic" -- the momentum-sector ED states of <folder>, lifted to real space
-                                           (the lattice is a torus; the HVA may have open bonds, see --hva_pbc).
+                                           (the lattice is a torus; the HVA is periodic unless --hva_pbc=false).
                              "open"     -- ground states of the open-boundary Hubbard model, computed here
                                            in the real-space (n_up, n_dn) sector with
                                            TamFermion.HubbardRealSpace(...; use_pbc=false) and KrylovKit
@@ -295,11 +299,9 @@ function (@main)(ARGS)
         elseif !isnothing(cfg.hva_pbc)
             cfg.hva_pbc
         else
-            auto = all(L -> L <= 2 || iseven(L), Lvec)
-            println("--hva_pbc not given; using $auto " *
-                    (auto ? "(every axis is even or length <= 2)" :
-                     "(an odd axis > 2 admits no 2-colouring into commuting bond groups)"))
-            auto
+            println("--hva_pbc not given; using true to match the periodic target " *
+                    "(an odd axis > 2 gets a third, wrap-bond hopping group)")
+            true
         end
 
         has_prepended_ref = (state_vecs isa AbstractMatrix) &&

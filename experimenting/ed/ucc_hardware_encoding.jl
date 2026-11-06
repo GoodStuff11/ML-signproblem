@@ -49,8 +49,8 @@ Circuit options:
                         Valid options: "full", "spin", "none" (see enumerate_ferm_excitations_HVA).
                         Sharing changes the reported free-parameter count, not the gate count or depth.
   --hva_pbc=<true|false> (optional, --ansatz=hva only): periodic bonds (`use_pbc`). Default: true.
-                        enumerate_ferm_excitations_HVA rejects true for an odd axis length > 2
-                        (e.g. 3x2); use false there. --hva_qubit_circuit=swap_network needs false.
+                        On an odd axis length > 2 (e.g. 3x2) true adds a third hopping group (the
+                        wrap bond). --hva_qubit_circuit=swap_network needs false.
   --hva_qubit_circuit=<circuit> (optional, --ansatz=hva with a Yordanov encoding only): how the HVA is
                         compiled for Jordan–Wigner qubits. Default: "swap_network".
                         Valid options:
