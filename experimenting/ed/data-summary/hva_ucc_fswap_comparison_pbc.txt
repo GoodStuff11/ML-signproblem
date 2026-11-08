@@ -1,0 +1,93 @@
+HVA boundary conditions: periodic (HVA side from data-summary/hva_ucc_fermionic_comparison_pbc.csv)
+┌ Warning: Replacing docs for `Main.Cmp.HardwareExcitation :: Union{}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.classify_excitation :: Tuple{Any, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.circuit_excitations :: Tuple{AbstractVector, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.free_parameter_count :: Tuple{Vector{Main.Cmp.HardwareExcitation}}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.schedule_blocks :: Tuple{Vector{Vector{Int64}}, Vector{Int64}, Vector{Vector{Int64}}, Integer, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.depth_bounds :: Tuple{Vector{Vector{Int64}}, Vector{Int64}, Vector{Vector{Int64}}, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.packing_priorities :: Tuple{Vector{Vector{Int64}}, Vector{Int64}, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.yordanov_excitation_cost :: Tuple{Symbol, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.total_jw_support :: Tuple{Any, Any}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.jw_ordering_positions :: Tuple{Symbol, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.optimize_jw_ordering :: Tuple{Vector{Main.Cmp.HardwareExcitation}, Integer, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.yordanov_encoding_cost :: Tuple{AbstractVector, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.SwapNetworkOp :: Union{}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.cade_swap_network :: Tuple{Any}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.swap_network_support :: Tuple{Main.Cmp.SwapNetworkOp}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.swap_network_cnot_cost :: Tuple{Main.Cmp.SwapNetworkOp}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.cade_swap_network_cost :: Tuple{Any}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.pair_tunneling_pairings :: Tuple{Main.Cmp.HardwareExcitation, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.fermionic_native_layers :: Union{Tuple{Main.Cmp.HardwareExcitation}, Tuple{Main.Cmp.HardwareExcitation, Any}}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.NativeFermionicCircuit :: Union{}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.can_fuse :: Tuple{Main.Cmp.NativeFermionicCircuit, Tuple{Symbol, Int64, Int64}}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.append_native! :: Tuple{Main.Cmp.NativeFermionicCircuit, Tuple{Symbol, Int64, Int64}}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.native_depth :: Tuple{Vector{Tuple{Symbol, Int64, Int64}}, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.compile_fermionic :: Tuple{Vector{Main.Cmp.HardwareExcitation}, AbstractVector{Int64}, Integer, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.fermionic_encoding_cost :: Tuple{AbstractVector, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.ucc_hardware_cost_table :: Tuple{AbstractVector, Integer}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.parse_ucc_hardware_arguments :: Tuple{Vector{String}}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: Replacing docs for `Main.Cmp.load_cli_circuit :: Tuple{Any}` in module `Main.Cmp`
+└ @ Base.Docs docs/Docs.jl:249
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(3, 3)_4x2 U=15.0: gate list trotter_N=8_ref_slater_antihermitian_target_fidelity=0.95_shared.jld2 reproduces the saved loss 0.00029838384648328553 (got 0.00029838384648284144)
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(3, 3)_3x2 U=15.0: gate list trotter_N=6_ref_slater_antihermitian_shared.jld2 reproduces the saved loss 2.582368066050833e-7 (got 2.582368059389495e-7)
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(3, 3)_3x3 U=2.0: gate list trotter_N=9_ref_slater_antihermitian_shared.jld2 reproduces the saved loss 6.382099092705484e-5 (got 6.382099092794302e-5)
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(3, 3)_3x3 U=15.0: gate list trotter_N=9_ref_slater_antihermitian_shared.jld2 reproduces the saved loss 0.0017248611644663514 (got 0.0017248611644665734)
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(5, 4)_4x3 U=2.0: gate list trotter_N=12_ref_slater_antihermitian_shared.jld2 reproduces the saved loss 3.459553230311663e-5 (got 3.459553230134027e-5)
+CHECK full 4x3 layer routed: 1092 excitations, 418 fSWAPs, 15032 CNOTs: PASS (encoding table: 1092 / 418 / 15,032)
+┌ Warning: type Main.Trotter.TamFermion.FGate does not exist in workspace; reconstructing
+└ @ JLD2 ~/.julia/packages/JLD2/ADycq/src/data/reconstructing_datatypes.jl:588
+N=(5, 4)_4x3 U=15.0: gate list trotter_N=12_ref_slater_antihermitian_shared.jld2 reproduces the saved loss 0.02745147670322623 (got 0.02745147670322512)
+
+system | U/t | F* | UCC angles | UCC fSWAPs | UCC CNOTs | UCC depth | HVA layers | HVA fSWAPs | HVA CNOTs | HVA depth | HVA string hops (CNOTs)
+4x2 (3,3) | 15 | 0.95 | 167/300 | 78 | 2327 | 1690 | 2 | 96 | 256 | 36 | 0 (0)
+4x2 (3,3) | 15 | 0.99 | 204/300 | 95 | 2842 | 2094 | 4 | 192 | 512 | 72 | 0 (0)
+3x2 (3,3) | 15 | 0.95 | 38/114 | 19 | 532 | 372 | 2 | 48 | 144 | 28 | 0 (0)
+3x2 (3,3) | 15 | 0.99 | 67/114 | 29 | 929 | 697 | 3 | 72 | 216 | 42 | 0 (0)
+3x3 (3,3) | 2 | 0.95 | 46/432 | 49 | 696 | 452 | 2 | 72 | 384 | 94 | 12 (156)
+3x3 (3,3) | 2 | 0.99 | 256/432 | 142 | 3612 | 2491 | 2 | 72 | 384 | 94 | 12 (156)
+3x3 (3,3) | 15 | 0.95 | 220/432 | 139 | 3138 | 2196 | 2 | 72 | 384 | 94 | 12 (156)
+3x3 (3,3) | 15 | 0.99 | 285/432 | 138 | 3981 | 2777 | 4 | 144 | 768 | 188 | 24 (312)
+4x3 (5,4) | 2 | 0.95 | 208/1092 | 241 | 3186 | 1993 | 2 | 96 | 540 | 130 | 12 (228)
+4x3 (5,4) | 2 | 0.99 | 510/1092 | 363 | 7356 | 4447 | 3 | 144 | 810 | 195 | 18 (342)
+4x3 (5,4) | 15 | 0.95 | 641/1092 | 357 | 9047 | 5757 | 7 | 336 | 1890 | 455 | 42 (798)
+4x3 (5,4) | 15 | 0.99 | — | — | — | — | 12 | 576 | 3240 | 780 | 72 (1368)
+exit 0

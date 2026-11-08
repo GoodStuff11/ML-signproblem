@@ -25,15 +25,29 @@ excitation circuits (`yordanov_encoding_cost`: CNOTs, parametrized and fixed sin
 layers), the HVA with Cade et al.'s fermionic-swap network (`cade_swap_network_cost`: native FSWAP, FSWAP+hop,
 hop and on-site gates, 2 CNOTs each; single-qubit gates not modelled). Besides the CSV, the script writes the
 two tables (fermionic register, Jordan–Wigner qubits) to <out>.md.
-Caveat: the UCC target is the periodic (torus) ground state in a momentum sector; the HVA target here is the
-open-boundary ground state, a different state. The periodic-target HVA plateaus on odd axes (open bonds), so
-the open-boundary data are the HVA's natural, favourable setting.
+Caveat (--hva_bc=open): the UCC target is the periodic (torus) ground state in a momentum sector; the HVA target
+there is the open-boundary ground state, a different state.
+--hva_bc=periodic compares like with like: the HVA is the periodic HVA (enumerate_ferm_excitations_HVA(...;
+use_pbc=true), a third wrap-bond hopping group on an odd axis) trained on the same periodic momentum-sector target
+as the UCC layer (sweeps benchmarks/hva_parameter_sweep_*_pbchva, and the 4x2 sweep without suffix, whose HVA was
+already periodic), costed with the periodic HVA gates on the register and with the periodic swap network
+(cade_swap_network_cost(...; periodic=true): row wrap bonds fused into FSWAPs, column wrap bonds as hops carrying
+their Jordan–Wigner string) on qubits. It adds the 4x2 (3,3) U = 15 case; that folder's default
+`_shared.jld2` gate list does not reproduce its coefficients' loss, so `ucc_setup` falls back to the
+`_target_fidelity=0.95_shared.jld2` gate list (as testing/hva_ucc_4x2_periodic_comparison.jl does).
 
 Usage (from experimenting/ed):
-  julia --project=.. hva_ucc_fermionic_comparison.jl [--targets=0.95,0.99] [--out=data-summary/hva_ucc_fermionic_comparison.csv]
+  julia --project=.. hva_ucc_fermionic_comparison.jl [--hva_bc=open|periodic] [--targets=0.95,0.99] [--out=<csv>]
 Arguments:
+  --hva_bc=<bc> (optional): boundary conditions of the HVA and its target. Default: open.
+                  "open"     -- open-boundary target, open HVA, open swap network (Cade et al.'s setting); the cases
+                                3x2 (3,3) U=15, 3x3 (3,3) U=2,15, 4x3 (5,4) U=2,15 (eigenstate and Slater references
+                                on 4x3), sweeps *_obc.
+                  "periodic" -- periodic target (the UCC layer's), periodic HVA, periodic swap network; the same cases
+                                plus 4x2 (3,3) U=15, sweeps *_pbchva (4x2: hva_parameter_sweep_N_3_3_4x2_u60_eigref).
   --targets=<list> (optional): comma-separated target fidelities F*. Default: 0.95,0.99.
   --out=<path> (optional): output CSV, relative to experimenting/ed. Default: data-summary/hva_ucc_fermionic_comparison.csv
+                  for open, data-summary/hva_ucc_fermionic_comparison_pbc.csv for periodic.
                   The Markdown tables go to the same path with extension .md.
 Writes one CSV row per (system, U, F*, series) and prints a summary table.
 =#
@@ -63,19 +77,39 @@ const CASES = [
                                                  ("slater", "hva_parameter_sweep_N_5_4_4x3_u61_slaterref_obc")]),
 ]
 
+# periodic HVA on the UCC layer's periodic target (run_hva_parameter_sweep.jl defaults; jobs/submit_hva_sweep_pbc_odd.sh)
+const CASES_PERIODIC = [
+    ("4x2 (3,3)", "N=(3, 3)_4x2", (4, 2), 15.0, [("eigenstate", "hva_parameter_sweep_N_3_3_4x2_u60_eigref")]),
+    ("3x2 (3,3)", "N=(3, 3)_3x2", (3, 2), 15.0, [("eigenstate", "hva_parameter_sweep_N_3_3_3x2_u60_eigref_pbchva")]),
+    ("3x3 (3,3)", "N=(3, 3)_3x3", (3, 3), 2.0,  [("eigenstate", "hva_parameter_sweep_N_3_3_3x3_u8_eigref_pbchva")]),
+    ("3x3 (3,3)", "N=(3, 3)_3x3", (3, 3), 15.0, [("eigenstate", "hva_parameter_sweep_N_3_3_3x3_u60_eigref_pbchva")]),
+    ("4x3 (5,4)", "N=(5, 4)_4x3", (4, 3), 2.0,  [("eigenstate", "hva_parameter_sweep_N_5_4_4x3_u8_eigref_pbchva"),
+                                                 ("slater", "hva_parameter_sweep_N_5_4_4x3_u9_slater_pbchva")]),
+    ("4x3 (5,4)", "N=(5, 4)_4x3", (4, 3), 15.0, [("eigenstate", "hva_parameter_sweep_N_5_4_4x3_u60_eigref_pbchva"),
+                                                 ("slater", "hva_parameter_sweep_N_5_4_4x3_u61_slaterref_pbchva")]),
+]
+cases(bc) = bc === :periodic ? CASES_PERIODIC : CASES
+
 function parse_arguments(args)
     targets = [0.95, 0.99]
-    out = joinpath("data-summary", "hva_ucc_fermionic_comparison.csv")
+    out = nothing
+    bc = :open
     for a in args
         if startswith(a, "--targets=")
             targets = parse.(Float64, split(split(a, "=", limit=2)[2], ","))
         elseif startswith(a, "--out=")
             out = split(a, "=", limit=2)[2]
+        elseif startswith(a, "--hva_bc=")
+            v = split(a, "=", limit=2)[2]
+            v in ("open", "periodic") || error("Invalid --hva_bc: '$v'. Valid: open, periodic.")
+            bc = Symbol(v)
         else
             error("unknown argument $a")
         end
     end
-    return targets, out
+    out = something(out, joinpath("data-summary", bc === :periodic ? "hva_ucc_fermionic_comparison_pbc.csv" :
+                                                                    "hva_ucc_fermionic_comparison.csv"))
+    return targets, out, bc
 end
 
 # two-mode (tunneling + interaction) and single-mode (phase) gate counts and native depth, in the trained gate
@@ -88,31 +122,46 @@ counts(c) = (two_mode_given=c.g.n_two_qubit, single_mode_given=c.g.n_single_qubi
 jw_ucc(gates, N; kw...) = (r = yordanov_encoding_cost(gates, N; optimize=true, gate_order=:best, kw...);
     (jw_cnot=r.n_two_qubit, jw_rot_1q=r.n_rotations, jw_fixed_1q=r.n_single_qubit - r.n_rotations, jw_depth=r.depth,
      jw_fswap=missing, jw_fswap_hop=missing, jw_hop=missing, jw_onsite=missing))
-jw_hva(Lvec, L, pm) = (r = cade_swap_network_cost(Lvec; num_exponentials=L, param_map=pm); k = r.counts_by_kind;
+jw_hva(Lvec, L, pm; periodic=false) = (r = cade_swap_network_cost(Lvec; num_exponentials=L, param_map=pm, periodic=periodic);
+    k = r.counts_by_kind;
     (jw_cnot=r.n_two_qubit, jw_rot_1q=missing, jw_fixed_1q=missing, jw_depth=r.depth,
-     jw_fswap=get(k, :fswap, 0), jw_fswap_hop=get(k, :fswap_hop, 0), jw_hop=get(k, :hop, 0), jw_onsite=get(k, :onsite, 0)))
+     jw_fswap=get(k, :fswap, 0), jw_fswap_hop=get(k, :fswap_hop, 0), jw_hop=get(k, :hop, 0), jw_onsite=get(k, :onsite, 0),
+     jw_string_hop=r.n_string_hop, jw_string_hop_cnot=r.n_string_hop_cnots, jw_row_axis=r.settings.row_axis))
 cost(gates, N; kw...) = (g = fermionic_encoding_cost(gates, N; optimize=true, gate_order=:given, kw...),
                          b = fermionic_encoding_cost(gates, N; optimize=true, gate_order=:best, kw...))
 
 function ucc_setup(folder, Lvec, U)
     N = prod(Lvec); dir = joinpath(DATA, folder); col = round(Int, U / 0.25)
     f = joinpath(dir, "trotter_N=$(N)_ref_slater_antihermitian_u_$(col).jld2")
-    shared = Trotter.load_saved_dict(replace(f, r"_u_\d+\.jld2$" => "_shared.jld2"))
-    FG = Trotter.TamFermion.FGate
-    gates = [g isa FG ? g : FG(g.cre_up, g.ann_up, g.cre_dn, g.ann_dn) for g in shared["gates"]]
     d = Trotter.load_saved_dict(f)
-    haskey(d, "gate_keys") && (gates = gates[gate_permutation(d["gate_keys"], gate_keys(gates))])
     A = Float64.(d["coefficients"])
     saved_loss = Float64(d["metrics"]["loss"][end])
     _, sv, idx, _ = load_ED_data(dir; verbose=false, sign_convention=:spin_first, use_slater_reference=true)
     basis = Trotter.get_basis_sector(idx, collect(Lvec), N)
     ref = ComplexF64.(sv[1, :])
-    infid(Akeep, row) = (psi = Trotter.apply_unitary(Akeep, gates, ref, basis, N, 1; antihermitian=true, use_gpu=false);
-                         t = sv[row, :]; 1 - abs2(dot(t, psi)) / (norm(t)^2 * norm(psi)^2))
-    losses = [(row, infid(A, row)) for row in (col, col + 1) if row <= size(sv, 1)]
-    row, l0 = losses[argmin([abs(l - saved_loss) for (_, l) in losses])]
-    abs(l0 - saved_loss) < 1e-6 || error("$folder U=$U: no target row reproduces the saved loss $saved_loss (got $losses)")
-    return (; N, gates, A, row, infid, l0)
+    FG = Trotter.TamFermion.FGate
+    # the gate list is the folder's `_shared.jld2`; when that does not reproduce the saved loss (4x2: the file was
+    # rewritten after the coefficients were saved), the `_target_fidelity=0.95_shared.jld2` one is tried
+    tried = String[]
+    for shared_name in (replace(basename(f), r"_u_\d+\.jld2$" => "_shared.jld2"),
+                        replace(basename(f), r"_u_\d+\.jld2$" => "_target_fidelity=0.95_shared.jld2"))
+        sf = joinpath(dir, shared_name)
+        isfile(sf) || continue
+        shared = Trotter.load_saved_dict(sf)
+        gates = [g isa FG ? g : FG(g.cre_up, g.ann_up, g.cre_dn, g.ann_dn) for g in shared["gates"]]
+        haskey(d, "gate_keys") && (gates = gates[gate_permutation(d["gate_keys"], gate_keys(gates))])
+        length(gates) == length(A) || (push!(tried, "$shared_name: $(length(gates)) gates vs $(length(A)) coefficients"); continue)
+        infid = (Akeep, row) -> (psi = Trotter.apply_unitary(Akeep, gates, ref, basis, N, 1; antihermitian=true, use_gpu=false);
+                                 t = sv[row, :]; 1 - abs2(dot(t, psi)) / (norm(t)^2 * norm(psi)^2))
+        losses = [(row, infid(A, row)) for row in (col, col + 1) if row <= size(sv, 1)]
+        row, l0 = losses[argmin([abs(l - saved_loss) for (_, l) in losses])]
+        if abs(l0 - saved_loss) < 1e-6
+            println("$folder U=$U: gate list $shared_name reproduces the saved loss $saved_loss (got $l0)")
+            return (; N, gates, A, row, infid, l0)
+        end
+        push!(tried, "$shared_name: got $losses")
+    end
+    error("$folder U=$U: no gate list reproduces the saved loss $saved_loss ($(join(tried, "; ")))")
 end
 
 function ucc_row(label, folder, Lvec, U, Fstar, S)
@@ -134,10 +183,11 @@ function ucc_row(label, folder, Lvec, U, Fstar, S)
         counts(c)..., jw_ucc(S.gates, S.N; coefficients=Ak)...))
 end
 
-function hva_rows(label, Lvec, U, series, Fstar)
+function hva_rows(label, Lvec, U, series, Fstar; bc=:open)
     rows = []
     N = prod(Lvec)
-    gates, pm = enumerate_ferm_excitations_HVA(Lvec; use_pbc=false, tie=:full)
+    periodic = bc === :periodic
+    gates, pm = enumerate_ferm_excitations_HVA(Lvec; use_pbc=periodic, tie=:full)
     for (ref, sweep) in series
         dir = joinpath(BENCH, sweep)
         df = reduce(vcat, [CSV.read(joinpath(dir, f), DataFrame) for f in readdir(dir) if endswith(f, ".csv")]; cols=:union)
@@ -150,12 +200,15 @@ function hva_rows(label, Lvec, U, series, Fstar)
         q = curve_fit((x, p) -> p[1] .+ p[2] .* x, log.(Float64.(df.n_layers)), log.(df.infidelity), [0.0, -1.0]).param
         L_fit = q[2] < 0 ? exp((log(eps) - q[1]) / q[2]) : missing
         L = ceil(Int, coalesce(L_raw, L_fit, NaN))
-        base = (series="HVA", reference=ref, target="open boundary (position space)")
+        per_layer = unique(df.n_params .÷ df.n_layers)
+        per_layer == [maximum(pm)] || error("$label U=$U $sweep: sweep has $per_layer parameters per layer, the " *
+                                            "$(bc) HVA has $(maximum(pm)) -- wrong boundary conditions?")
+        base = (series="HVA", reference=ref, target=periodic ? "periodic (same as UCC)" : "open boundary (position space)")
         c = cost(gates, N; num_exponentials=L, antihermitian=false, param_map=pm)
         push!(rows, merge(base, (status=ismissing(L_raw) ? "from fit (not reached in sweep)" : "ok",
             layers_raw=L_raw, layers_fit=L_fit, layers_costed=L, F_achieved=missing, threshold=missing,
             params=L * (df.n_params[1] ÷ df.n_layers[1]), params_total=missing,
-            counts(c)..., jw_hva(Lvec, L, pm)...,
+            counts(c)..., jw_hva(Lvec, L, pm; periodic=periodic)...,
             sweep_layers="$(minimum(df.n_layers))-$(maximum(df.n_layers))", fit_exponent=q[2])))
     end
     return rows
@@ -165,14 +218,16 @@ fmtn(x) = ismissing(x) ? "—" : string(x)
 size_label(r) = r.series == "HVA" ? "$(r.layers_costed) layer$(r.layers_costed == 1 ? "" : "s") ($(r.params) angles)" : "1 layer, $(r.params) of $(r.params_total) angles"
 ansatz_label(r) = r.series == "HVA" ? "HVA ($(r.reference) ref.)" : "UCC, pruned"
 
-function markdown_tables(rows)
+function markdown_tables(rows; bc=:open)
     io = IOBuffer()
     ok = [r for r in eachrow(rows) if r.status != "" && !startswith(r.status, "full layer below")]
     unreachable = [r for r in eachrow(rows) if startswith(r.status, "full layer below")]
     println(io, "# Hardware cost at matched target fidelity: pruned UCC layer vs HVA\n")
     println(io, "Generated by `experimenting/ed/hva_ucc_fermionic_comparison.jl`; data in the CSV of the same name. UCC: momentum-space layer, ",
-        "periodic target, Slater reference, raw truncation to the fewest angles with F ≥ F*. HVA: open-boundary target and open HVA ",
-        "(Cade et al.'s setting), layers from the sweep or its power-law fit. Best gate order in both tables.\n")
+        "periodic target, Slater reference, raw truncation to the fewest angles with F ≥ F*. HVA: ",
+        bc === :periodic ? "the same periodic target, periodic HVA (wrap-bond group on odd axes), periodic swap network on qubits" :
+                           "open-boundary target and open HVA (Cade et al.'s setting)",
+        ", layers from the sweep or its power-law fit. Best gate order in both tables.\n")
     println(io, "## Fermionic tweezer register (González-Cuadra et al. 2023)\n")
     println(io, "| System | U/t | F* | Ansatz | Circuit size | Tunneling gates (two-mode) | Interaction gates (two-mode) | Phase gates (single-mode) | Depth (native layers) |")
     println(io, "|---|---|---|---|---|---|---|---|---|")
@@ -194,15 +249,16 @@ end
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "hva_ucc_fermionic_comparison")
     with_logging(log_path) do
-        targets, out = parse_arguments(ARGS)
+        targets, out, bc = parse_arguments(ARGS)
+        println("HVA boundary conditions: $bc")
         rows = DataFrame()
-        for (label, folder, Lvec, U, series) in CASES
+        for (label, folder, Lvec, U, series) in cases(bc)
             S = ucc_setup(folder, Lvec, U)
             println("$label U=$U: target row $(S.row), full-layer infidelity $(S.l0)")
             for Fstar in targets
             meta = (system=label, U=U, F_target=Fstar)
             push!(rows, merge(meta, ucc_row(label, folder, Lvec, U, Fstar, S)); cols=:union)
-            for r in hva_rows(label, Lvec, U, series, Fstar)
+            for r in hva_rows(label, Lvec, U, series, Fstar; bc=bc)
                 push!(rows, merge(meta, r); cols=:union)
             end
             end
@@ -210,7 +266,7 @@ function (@main)(ARGS)
         path = joinpath(@__DIR__, out)
         CSV.write(path, rows)
         md = replace(path, r"\.csv$" => ".md")
-        write(md, markdown_tables(rows))
+        write(md, markdown_tables(rows; bc=bc))
         println("wrote $path\nwrote $md\n")
         print(read(md, String))
         show(stdout, MIME("text/plain"), select(rows, intersect(["system", "U", "F_target", "series", "reference", "status",

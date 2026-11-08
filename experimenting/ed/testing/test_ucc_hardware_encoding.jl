@@ -584,7 +584,7 @@ function test_cade_swap_network()
     check("CLI --ansatz=hva --encoding=yordanov uses the swap network by default and prints its native and CNOT-level depth",
         occursin("Cade et al. 2020", out) && occursin("native depth        : 84", out) && occursin("depth               : 168 ", out))
     p = run(pipeline(ignorestatus(`$jl --project=$project $script --lattice=4x2 --ansatz=hva --antihermitian=false --encoding=yordanov`); stdout=devnull, stderr=devnull))
-    check("CLI rejects --hva_pbc=true with the swap network (Cade's construction is for open boundaries)", p.exitcode != 0)
+    check("CLI accepts --hva_pbc=true (default) with the swap network (periodic wrap bonds, see test_cade_swap_network_periodic.jl)", p.exitcode == 0)
 end
 
 function (@main)(ARGS)

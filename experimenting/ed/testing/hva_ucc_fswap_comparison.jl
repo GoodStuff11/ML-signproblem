@@ -14,29 +14,32 @@ Jordan–Wigner qubits whose strings are removed with fermionic swaps (fSWAPs).
        costs the full layer. The greedy router breaks ties by input order, so the kept excitations are fed in the
        enumeration order that table used (enumerate_ferm_excitations(2, Lvec; conserve_mom, conserve_sz)); in the
        coefficient files' order the counts move by up to ~10%.
-  HVA: Cade et al.'s fermionic-swap network (`cade_swap_network_cost`, open bonds), read from the jw_fswap,
-       jw_fswap_hop (fSWAPs fused with a hopping term; both counted as fSWAPs), jw_cnot and jw_depth columns of data-summary/hva_ucc_fermionic_comparison.csv (eigenstate reference), so that CSV must
-       be current (run hva_ucc_fermionic_comparison.jl first).
-The periodic 4x2 case of testing/hva_ucc_4x2_periodic_comparison.jl is not included: cade_swap_network_cost builds
-open bonds only.
+  HVA: Cade et al.'s fermionic-swap network (`cade_swap_network_cost`), read from the jw_fswap,
+       jw_fswap_hop (fSWAPs fused with a hopping term; both counted as fSWAPs), jw_cnot and jw_depth columns of
+       data-summary/hva_ucc_fermionic_comparison.csv (--hva_bc=open: open bonds, open target) or
+       data-summary/hva_ucc_fermionic_comparison_pbc.csv (--hva_bc=periodic: periodic HVA on the UCC layer's periodic
+       target, periodic swap network whose column wrap bonds are hops with their Jordan–Wigner string, column
+       jw_string_hop), eigenstate reference, so that CSV must be current (run
+       `hva_ucc_fermionic_comparison.jl --hva_bc=<same>` first). --hva_bc=periodic also has the 4x2 (3,3) case.
 
 Check (PASS/FAIL line): the full 4x3 (5,4) layer routed this way reproduces the encoding table's 418 fSWAPs and
 15,032 CNOTs (data-summary/ucc_fswap_routing.csv, strategy route).
 
 Usage (from experimenting/ed):
-  julia --project=.. testing/hva_ucc_fswap_comparison.jl [--targets=0.95,0.99]
+  julia --project=.. testing/hva_ucc_fswap_comparison.jl [--hva_bc=open|periodic] [--targets=0.95,0.99]
 Arguments:
+  --hva_bc=<bc> (optional): "open" (default) or "periodic"; which HVA comparison CSV and case list to use (see above).
   --targets=<list> (optional): comma-separated target fidelities F*. Default: 0.95,0.99. Each must be a value
                   present in hva_ucc_fermionic_comparison.csv's F_target column (the HVA side is read from it).
 Prints the PASS/FAIL check and one table row per (system, U, F*): UCC angles kept, fSWAPs, CNOTs, CNOT depth;
-HVA layers, fSWAPs, CNOTs, CNOT depth. Log in testing/logs/<date>/.
+HVA layers, fSWAPs, CNOTs, CNOT depth (periodic: also the string hops and their CNOTs). Log in testing/logs/<date>/.
 =#
 
 module Cmp
 include(joinpath(@__DIR__, "..", "hva_ucc_fermionic_comparison.jl"))
 include(joinpath(@__DIR__, "..", "ucc_fswap_routing.jl"))
 end
-using .Cmp: ucc_setup, CASES, circuit_excitations, route_string_free, routed_cost, make_log_path, with_logging
+using .Cmp: ucc_setup, cases, circuit_excitations, route_string_free, routed_cost, make_log_path, with_logging
 using .Cmp.CSV, .Cmp.DataFrames, Printf
 
 const ED_DIR = normpath(joinpath(@__DIR__, ".."))
@@ -49,14 +52,19 @@ const LATTICE_OF_N = Dict(6 => (3, 2), 8 => (4, 2), 9 => (3, 3), 12 => (4, 3))
 """
 function parse_cli_args(args)
     targets = [0.95, 0.99]
+    bc = :open
     for a in args
         if startswith(a, "--targets=")
             targets = parse.(Float64, split(split(a, "=", limit=2)[2], ","))
+        elseif startswith(a, "--hva_bc=")
+            v = split(a, "=", limit=2)[2]
+            v in ("open", "periodic") || error("Invalid --hva_bc: '$v'. Valid: open, periodic.")
+            bc = Symbol(v)
         else
             error("Unknown command line argument: $a")
         end
     end
-    return targets
+    return targets, bc
 end
 
 mkey(e) = (Tuple(sort(collect(e.creators))), Tuple(sort(collect(e.annihilators))))
@@ -76,12 +84,14 @@ function routed(gates, N, A, rank)
     return merge(routed_cost(ops, 2N), (n_exc=length(exc),))
 end
 
-function run(targets)
-    hva = CSV.read(joinpath(ED_DIR, "data-summary", "hva_ucc_fermionic_comparison.csv"), DataFrame)
+function run(targets, bc)
+    csv = bc === :periodic ? "hva_ucc_fermionic_comparison_pbc.csv" : "hva_ucc_fermionic_comparison.csv"
+    println("HVA boundary conditions: $bc (HVA side from data-summary/$csv)")
+    hva = CSV.read(joinpath(ED_DIR, "data-summary", csv), DataFrame)
     hva = hva[(hva.series .== "HVA") .& (hva.reference .== "eigenstate"), :]
     ranks = Dict{Int,Dict}()
     rows = []
-    for (label, folder, Lvec, U, _) in CASES
+    for (label, folder, Lvec, U, _) in cases(bc)
         S = ucc_setup(folder, Lvec, U)
         rank = get!(() -> enumeration_rank(S.N), ranks, S.N)
         if label == "4x3 (5,4)" && U == 2.0
@@ -96,7 +106,9 @@ function run(targets)
             h = hva[(hva.system .== label) .& (hva.U .== U) .& (hva.F_target .== Fstar), :]
             nrow(h) == 1 || error("$label U=$U F*=$Fstar: expected one HVA row in the CSV, found $(nrow(h))")
             # fSWAPs of the swap network: plain fSWAPs plus fSWAPs fused with a hopping term
-            hv = (layers=h.layers_costed[1], fswap=h.jw_fswap[1] + h.jw_fswap_hop[1], cnot=h.jw_cnot[1], depth=h.jw_depth[1])
+            hv = (layers=h.layers_costed[1], fswap=h.jw_fswap[1] + h.jw_fswap_hop[1], cnot=h.jw_cnot[1], depth=h.jw_depth[1],
+                  strings=("jw_string_hop" in names(h) ? coalesce(h.jw_string_hop[1], 0) : 0),
+                  string_cnot=("jw_string_hop_cnot" in names(h) ? coalesce(h.jw_string_hop_cnot[1], 0) : 0))
             if S.l0 > 1 - Fstar
                 push!(rows, (label, U, Fstar, nothing, hv))
                 continue
@@ -111,10 +123,10 @@ function run(targets)
             push!(rows, (label, U, Fstar, (K=hi, P=length(S.A), fswap=r.n_fswap, cnot=r.n_two_qubit, depth=r.depth), hv))
         end
     end
-    println("\nsystem | U/t | F* | UCC angles | UCC fSWAPs | UCC CNOTs | UCC depth | HVA layers | HVA fSWAPs | HVA CNOTs | HVA depth")
+    println("\nsystem | U/t | F* | UCC angles | UCC fSWAPs | UCC CNOTs | UCC depth | HVA layers | HVA fSWAPs | HVA CNOTs | HVA depth | HVA string hops (CNOTs)")
     for (label, U, Fstar, u, hv) in rows
         ucc = isnothing(u) ? "— | — | — | —" : "$(u.K)/$(u.P) | $(u.fswap) | $(u.cnot) | $(u.depth)"
-        println("$label | $(Int(U)) | $Fstar | $ucc | $(hv.layers) | $(hv.fswap) | $(hv.cnot) | $(hv.depth)")
+        println("$label | $(Int(U)) | $Fstar | $ucc | $(hv.layers) | $(hv.fswap) | $(hv.cnot) | $(hv.depth) | $(hv.strings) ($(hv.string_cnot))")
     end
 end
 
@@ -122,6 +134,6 @@ function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "hva_ucc_fswap_comparison")
     with_logging(log_path) do
         cd(ED_DIR)
-        run(parse_cli_args(ARGS))
+        run(parse_cli_args(ARGS)...)
     end
 end
