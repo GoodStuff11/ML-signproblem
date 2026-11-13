@@ -123,8 +123,9 @@ for r in rows:
 
 print("\n== 3. caption = Overleaf caption (git HEAD) + the S^2 sentence, nothing else changed ==")
 S2_SENTENCE = (r" The total spin $S$ of the target state is given by its eigenvalue $S(S+1)$ of "
-               r"$\hat{\mathbf{S}}^2=\big(\sum_i\hat{\mathbf{S}}_i\big)^2$, where $\hat{\mathbf{S}}_i$ "
-               r"is the spin operator on site $i$.")
+               r"$\mathbf{S}^2$, where $\mathbf{S}=\tfrac12\sum_i\sum_{\sigma\sigma'}c^\dagger_{i\sigma}"
+               r"\boldsymbol{\sigma}_{\sigma\sigma'}c_{i\sigma'}$ and $\boldsymbol{\sigma}=(\sigma^x,\sigma^y,"
+               r"\sigma^z)$ is the vector of Pauli matrices.")
 old = subprocess.run(["git", "-C", OVERLEAF, "show", "HEAD:system_table.tex"], capture_output=True, text=True, check=True).stdout
 new = open(os.path.join(ED, "system_table.tex")).read()
 cap = lambda s: re.search(r"\\caption\{(.*)\}\n", s).group(1)
