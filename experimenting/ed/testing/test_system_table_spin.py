@@ -121,13 +121,41 @@ print("\n== 2. S column of system_table.csv ==")
 for r in rows:
     print(f"{r['system']:16s} Sz={r['Sz']:4s} S={r['S_ground_state']:8s} in_figures={r['in_figures']}  {r['notes']}")
 
-print("\n== 3. caption identical to the Overleaf copy (git HEAD) ==")
+print("\n== 3. caption = Overleaf caption (git HEAD) + the S^2 sentence, nothing else changed ==")
+S2_SENTENCE = (r" The total spin $S$ of the target state is given by its eigenvalue $S(S+1)$ of "
+               r"$\hat{\mathbf{S}}^2=\big(\sum_i\hat{\mathbf{S}}_i\big)^2$, where $\hat{\mathbf{S}}_i$ "
+               r"is the spin operator on site $i$.")
 old = subprocess.run(["git", "-C", OVERLEAF, "show", "HEAD:system_table.tex"], capture_output=True, text=True, check=True).stdout
 new = open(os.path.join(ED, "system_table.tex")).read()
 cap = lambda s: re.search(r"\\caption\{(.*)\}\n", s).group(1)
-same = cap(old) == cap(new)
+same = S2_SENTENCE in cap(new) and cap(new).replace(S2_SENTENCE, "", 1) == cap(old)
 fails += not same
-print(f"caption identical: {same}  ({len(cap(new))} chars)")
+print(f"caption = Overleaf caption + S^2 sentence: {same}  ({len(cap(new))} chars)")
+
+print("\n== 4. spin-crossing U in the footnotes (real-space ED bisection) ==")
+# Below the crossing the (n_up, n_dn) ground level has S > Sz, so the (n_up+1, n_dn-1) sector has
+# the same ground energy; above it, that sector lies higher. Bisect on that, to 1e-7 in U.
+tex_foot = re.findall(r"\\textsuperscript\{\d+\} (.*)", new)
+for r in rows:
+    m = re.search(r"U~([0-9.]+)", r["notes"])
+    if not m or r["in_figures"] != "True":
+        continue
+    Lx, Ly, nu, nd = int(r["Lx"]), int(r["Ly"]), int(r["n_up"]), int(r["n_dn"])
+    gap = lambda U: ground_energy(Lx, Ly, nu + 1, nd - 1, U) - ground_energy(Lx, Ly, nu, nd, U)
+    est = float(m.group(1)); lo, hi = est - 0.5, est + 0.5
+    S_lo, S_hi = [Fraction(p) for p in r["S_ground_state"].split("->")]
+    rising = S_lo > S_hi            # high spin below the crossing: gap 0 below, > 0 above
+    assert (gap(lo) < 1e-9) == rising and (gap(hi) < 1e-9) != rising
+    while hi - lo > 1e-7:
+        mid = (lo + hi) / 2
+        if (gap(mid) < 1e-9) == rising: lo = mid
+        else: hi = mid
+    Uc = (lo + hi) / 2
+    quoted = [float(x) for f in tex_foot for x in re.findall(r"U/t\\approx([0-9.]+)", f) if "total spin" in f]
+    ok = len(quoted) == 1 and f"{quoted[0]:.4g}" == f"{Uc:.4g}"
+    fails += not ok
+    print(f"{r['system']:16s} bisection U_c = {Uc:.7f} (4 s.f. {Uc:.4g}); footnote quotes {quoted}; "
+          f"linear-interpolation estimate in notes {est}  {'OK' if ok else 'FAIL'}")
 
 print(f"\n{'ALL CHECKS PASSED' if fails == 0 else f'{fails} CHECK(S) FAILED'}")
 sys.exit(fails != 0)

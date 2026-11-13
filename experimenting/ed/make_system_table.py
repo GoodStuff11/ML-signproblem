@@ -58,7 +58,7 @@ import h5py, numpy as np, os, glob, csv, re
 # =============================================================================
 
 CAPTION = r"""
-Table describing the Hubbard ground states examined. $N=L_x\times L_y$ is the number of sites, and $n_\uparrow$ and $n_\downarrow$ are the number of spin up and down electrons respectively, with an overall magnetization $S_z=(n_\uparrow-n_\downarrow)/2$. The optimization is performed at fixed $(n_\uparrow, n_\downarrow)$, with unresolved total spin $S$, and fixed momentum sector $\mathbf{K}=2\pi(n_x/L_x,n_y/L_y)$ for integers $(n_x, n_y)$. The momentum sectors that contain a state degenerate to the ground state for all interaction strengths $U$ are listed, along with the dimension of the subspace $\text{dim}\mathcal{H}_\mathbf{K}$ (which will elsewhere be denoted as $\text{dim}\mathcal{H}$), the dimension of the full Hilbert space $\text{dim}\mathcal{H}_{n_\uparrow n_\downarrow}$ and the number of independent parameters in one layer of the ansatz $P$, where $P=\tfrac14\big(3N^3-6N^2+(g+2)N\big)$ and $g=2^{\#\{d:\,L_d\ \mathrm{even}\}}$.
+Table describing the Hubbard ground states examined. $N=L_x\times L_y$ is the number of sites, and $n_\uparrow$ and $n_\downarrow$ are the number of spin up and down electrons respectively, with an overall magnetization $S_z=(n_\uparrow-n_\downarrow)/2$. The total spin $S$ of the target state is given by its eigenvalue $S(S+1)$ of $\hat{\mathbf{S}}^2=\big(\sum_i\hat{\mathbf{S}}_i\big)^2$, where $\hat{\mathbf{S}}_i$ is the spin operator on site $i$. The optimization is performed at fixed $(n_\uparrow, n_\downarrow)$, with unresolved total spin $S$, and fixed momentum sector $\mathbf{K}=2\pi(n_x/L_x,n_y/L_y)$ for integers $(n_x, n_y)$. The momentum sectors that contain a state degenerate to the ground state for all interaction strengths $U$ are listed, along with the dimension of the subspace $\text{dim}\mathcal{H}_\mathbf{K}$ (which will elsewhere be denoted as $\text{dim}\mathcal{H}$), the dimension of the full Hilbert space $\text{dim}\mathcal{H}_{n_\uparrow n_\downarrow}$ and the number of independent parameters in one layer of the ansatz $P$, where $P=\tfrac14\big(3N^3-6N^2+(g+2)N\big)$ and $g=2^{\#\{d:\,L_d\ \mathrm{even}\}}$.
 """
 
 # One footnote per system, keyed by the data folder name ("N=(nu, nd)_LxxLy"). A system in the
@@ -67,8 +67,10 @@ Table describing the Hubbard ground states examined. $N=L_x\times L_y$ is the nu
 # sectors of different dimension; see the CSV's `notes` column) but no entry here, the script
 # warns and uses the automatic text.
 FOOTNOTES = {
+    # U/t = 5.898059 from the real-space ED bisection in testing/test_system_table_spin.py (check 4);
+    # the script's own grid-interpolated estimate (CSV notes) is 5.900.
     "N=(4, 3)_3x3": r"""
-The total spin of the ground state in the $(0,1)$ sector changes from $S=\tfrac{3}{2}$ to $S=\tfrac{1}{2}$ at $U/t\approx5.900$.
+The total spin of the ground state in the $(0,1)$ sector changes from $S=\tfrac{3}{2}$ to $S=\tfrac{1}{2}$ at $U/t\approx5.898$.
 """,
     "N=(6, 6)_4x4": r"""
 The degenerate ground-state changes momentum sectors from $\{(0,0),\,(0,2),\,(2,0)\}$ to $\{(0,0),\,(2,2)\}$ at $U/t\approx4.936$. The $(0,0)$ sector has a level crossing within the momentum sector.
