@@ -27,8 +27,34 @@ Arguments:
   --antihermitian (optional): Use real-antihermitian generators instead of i * real-hermitian. Default: false.
   --custom_ref_state=<value> (optional): Use a custom reference state as a Slater determinant.
                      Valid options:
-                     - "slater": The Slater determinant ground state of the tight-binding model.
+                     - "slater": the Slater determinant with the largest weight |c_i|^2 in the weak-coupling
+                       (smallest stored U) state selected by --reference_target (reference_slater_index).
                      - [integer]: Use the Slater determinant at this specific 1-based basis index.
+
+Target state (ground vs excited states):
+  --sector=<int> (optional): Flat momentum-sector key of the ED file to target (the <k> of data/energies/<k>,
+                     k = q_x*L_y + q_y). Default: chosen automatically (the ground-state sector for
+                     --target_state=lowest; the sector holding the smallest |E - sigma| at the most U values for
+                     --target_state=min_abs_energy). A sector other than the ground-state one together with
+                     --target_state=lowest targets the lowest state of that momentum, a slightly excited state.
+  --target_state=<mode> (optional): Which stored state of the sector is the target at each U. Default: "lowest".
+                     - "lowest": the sector's lowest state at the smallest U, followed to every other U by maximum
+                       overlap (the ground state when the sector is the ground-state sector).
+                     - "min_abs_energy": at every U, the stored state with the smallest |E - sigma| (sigma from the
+                       file's metadata/eig_sigma; 0 = eigenvalue of smallest magnitude, a highly excited state).
+                       Needs an ED file written with the ED pipeline's --sigma option (e.g. the
+                       "N=(4, 4)_4x3_excited_sigma0" folder); a lowest-state file has no such states.
+  --zero_mode_tol=<float> (optional, --target_state=min_abs_energy only): States with |E - sigma| <= this are
+                     exact (degenerate) zero modes and are skipped; the target is the closest state above it.
+                     Default: 1e-8. 0 includes the zero modes.
+  --reference_target=<mode> (optional): Which weak-coupling state the --custom_ref_state=slater reference is the
+                     dominant Slater determinant of. Default: "weak_ground_state".
+                     - "weak_ground_state": the ground state of the sector at the smallest stored U. Not available
+                       for --sigma files (they do not store the lowest state).
+                     - "weak_connected": the target state's own member at the smallest stored U (identical to
+                       weak_ground_state for --target_state=lowest).
+  Non-default choices of these options add "sector=<k>", "target=<mode>", "zmtol=<v>" and/or "reftarget=<mode>" to the
+  saved-file prefix, so excited-state runs never resume from or overwrite ground-state files in the same folder.
   --use_gpu=<bool> (optional): Enable GPU acceleration for overlap loss and gradient calculations.
                      Uses dynamic strided gradient checkpointing (rematerialization) to automatically
                      fit computations within available GPU VRAM without risking Out-Of-Memory (OOM) crashes.
@@ -167,6 +193,8 @@ function parse_arguments(args::Vector{String})
     hva_tie = :full
     hva_pbc = true
     match_dof_mode = nothing
+    target_cli = Dict{Symbol,Any}(:sector => nothing, :target_state => :lowest,
+        :reference_target => :weak_ground_state, :zero_mode_tol => 1e-8)
     opt_cli = Dict{Symbol,Any}(
         :stages => [(opt=:LBFGS,)], :lbfgs_memory => 30, :stall_window => 50, :stall_rtol => 0.005,
         :multi_start_iters => 30, :basin_hops => 0, :hop_scale => 0.1, :hop_mode => :rms,
@@ -197,6 +225,20 @@ function parse_arguments(args::Vector{String})
             end
         elseif startswith(arg, "--custom_ref_state=")
             custom_ref_state_arg = split(arg, "=", limit=2)[2]
+        elseif startswith(arg, "--sector=")
+            target_cli[:sector] = parse(Int, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--target_state=")
+            val = Symbol(split(arg, "=", limit=2)[2])
+            val in (:lowest, :min_abs_energy) ||
+                error("Invalid --target_state option: '$val'. Valid options are: 'lowest', 'min_abs_energy'.")
+            target_cli[:target_state] = val
+        elseif startswith(arg, "--zero_mode_tol=")
+            target_cli[:zero_mode_tol] = parse(Float64, split(arg, "=", limit=2)[2])
+        elseif startswith(arg, "--reference_target=")
+            val = Symbol(split(arg, "=", limit=2)[2])
+            val in (:weak_ground_state, :weak_connected) ||
+                error("Invalid --reference_target option: '$val'. Valid options are: 'weak_ground_state', 'weak_connected'.")
+            target_cli[:reference_target] = val
         elseif arg == "--use_gpu" || arg == "--use_gpu=true"
             use_gpu = true
         elseif arg == "--use_gpu=false"
@@ -306,13 +348,28 @@ function parse_arguments(args::Vector{String})
         datatype = ComplexF64
     end
 
-    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli
+    return folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli, target_cli
+end
+
+"""
+    target_prefix_parts(target_cli) -> Vector{String}
+
+Saved-file prefix markers for non-default target choices (`--sector`, `--target_state`,
+`--reference_target`); empty for the ground-state defaults, so existing filenames are unchanged.
+"""
+function target_prefix_parts(target_cli)
+    parts = String[]
+    !isnothing(target_cli[:sector]) && push!(parts, "sector=$(target_cli[:sector])")
+    target_cli[:target_state] !== :lowest && push!(parts, "target=$(target_cli[:target_state])")
+    target_cli[:zero_mode_tol] != 1e-8 && push!(parts, "zmtol=$(target_cli[:zero_mode_tol])")
+    target_cli[:reference_target] !== :weak_ground_state && push!(parts, "reftarget=$(target_cli[:reference_target])")
+    return parts
 end
 
 function (@main)(ARGS)
     log_path = make_log_path(@__DIR__, "run_trotter_scan_optimization")
     with_logging(log_path) do
-        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli = parse_arguments(ARGS)
+        folder, u_start, u_end, maxiters, loss_type, num_exponentials, antihermitian, custom_ref_state_arg, use_gpu, datatype, grow_from_exponentials, grow_mode, target_fidelity, run_label, ansatz, hva_tie, hva_pbc, match_dof_mode, opt_cli, target_cli = parse_arguments(ARGS)
 
         println("Number of threads: $(Threads.nthreads())")
         println("Optimizer options: " * join(["$k=$v" for (k, v) in sort(collect(opt_cli), by=first)], ", "))
@@ -322,7 +379,11 @@ function (@main)(ARGS)
 
         # 1. Load ED data (loads indexer if JLD2, or we can use it to build the sector basis)
         U_values, state_vecs, indexer, _, N_elec, spin_conserved, _, sign_convention =
-            load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=custom_ref_state_arg == "slater")
+            load_ED_data(folder; verbose=true, sign_convention=:spin_first, use_slater_reference=custom_ref_state_arg == "slater",
+                sector=target_cli[:sector], target_state=target_cli[:target_state],
+                reference_target=target_cli[:reference_target], zero_mode_tol=target_cli[:zero_mode_tol])
+        println("Target: sector=$(something(target_cli[:sector], "auto")), target_state=$(target_cli[:target_state]), " *
+                "reference_target=$(target_cli[:reference_target])")
 
         n_up, n_dn = N_elec
 
@@ -460,6 +521,8 @@ function (@main)(ARGS)
         # coefficients saved under the standard (label-less) prefix.
         ansatz_suffix_parts = ansatz === :hva ?
                               ["hva_tie=$(hva_tie)" * (hva_pbc ? "" : "_obc")] : String[]
+        # Excited-state targets get their own namespace too (empty for the ground-state defaults).
+        append!(ansatz_suffix_parts, target_prefix_parts(target_cli))
 
         # Prepend the ansatz marker to any suffix built below, so every prefix this script
         # derives (grow-from, pruned, alternates) stays inside its own ansatz's namespace.

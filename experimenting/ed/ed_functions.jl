@@ -188,20 +188,6 @@ function find_best_energy_sector_su2(all_E::Vector, arg2=nothing, data=nothing; 
 end
 
 """
-    get_slater_ground_state(data, sector::Int)
-
-Find the index corresponding to a single Slater determinant ground state of the tight-binding
-model for the given momentum sector. It selects the Slater determinant that has the lowest
-tight-binding kinetic energy and has a non-negligible overlap (overlap probability > 0.1)
-with the interacting ground state.
-
-Note: Unlike `get_su2_ground_state` (which can return a linear combination of Slater determinants),
-this function returns a single Slater determinant state index.
-
-Supports both HDF5 files (`data` is an open HDF5 file object) and JLD2 data dictionaries.
-"""
-
-"""
     parse_custom_ref(custom_ref)
 
 Parse custom reference state specification. Returns an `Int` index or `nothing`.
@@ -240,138 +226,173 @@ function compute_single_spin_energies(L::AbstractVector{<:Integer}; ordering::Sy
 end
 
 """
-    find_best_slater_index(energies, state_prob, H_dim, get_E_func; threshold=0.1)
+    reference_slater_index(target_state::AbstractVector) -> Int
 
-Find the Slater determinant index that minimizes tight-binding kinetic energy among high-overlap basis states,
-breaking kinetic energy ties by picking the Slater determinant with maximum ground-state probability.
+Reference Slater determinant for a target state: the 1-based basis index
+`argmax_i |target_state[i]|^2`, i.e. the momentum-basis Slater determinant with the
+largest overlap with `target_state`. No other criterion (no kinetic-energy ranking, no
+overlap threshold) is applied.
+
+Which state is passed in decides what the reference means; see `weak_reference_state`:
+the weak-coupling ground state of the sector (ground-state runs) or the weak-coupling
+eigenstate connected to the target (excited-state runs).
 """
-function find_best_slater_index(energies::Vector{Float64}, state_prob::Vector{Float64}, H_dim::Int, get_E_func::Function; threshold::Float64=0.1)
-    indices_of_interest = findall(state_prob .> threshold * maximum(state_prob))
-    best_idx = -1
-    min_E = Inf
-    max_prob = -1.0
+reference_slater_index(target_state::AbstractVector) = argmax(abs2.(target_state))
 
-    for idx in 1:H_dim
-        if idx in indices_of_interest
-            E = get_E_func(idx, energies)
-            prob = state_prob[idx]
-            if E < min_E - 1e-5
-                min_E = E
-                max_prob = prob
-                best_idx = idx
-            elseif abs(E - min_E) <= 1e-5
-                if prob > max_prob
-                    max_prob = prob
-                    best_idx = idx
-                end
-            end
-        end
-    end
-    return best_idx
+"""
+    read_eig_target(data) -> (eig_target::String, sigma::Float64)
+
+Which eigenpairs an ED HDF5 file stores per sector, from `metadata/eig_target` and
+`metadata/eig_sigma` (written by UCC_Hubbard's XDiag pipeline, see
+`.agent_docs/ed_file_formats.md`):
+- `("lowest", 0.0)`: the m lowest eigenpairs per sector. Files written before these
+  fields existed hold the lowest eigenpairs and also return this.
+- `("closest_to_sigma", σ)`: the m eigenpairs closest to σ (σ = 0: smallest |E|).
+For a JLD2 dictionary (`data isa Dict`) always `("lowest", 0.0)`.
+"""
+function read_eig_target(data)
+    data isa Dict && return ("lowest", 0.0)
+    haskey(data, "metadata/eig_target") || return ("lowest", 0.0)
+    target = String(read(data, "metadata/eig_target"))
+    sigma = target == "lowest" ? 0.0 : Float64(read(data, "metadata/eig_sigma"))
+    return (target, sigma)
 end
 
 """
-    get_slater_ground_state_jld2(data::Dict, sector::Int; custom_ref=true)
+    target_state_indices(evecs, energies, U_values; target_state=:lowest, sigma=0.0,
+                         zero_mode_tol=1e-8) -> Vector{Int}
 
-Find the index corresponding to a single Slater determinant ground state of the tight-binding
-model for the given momentum sector in a JLD2 data dictionary.
+For each U point, the index (into the stored states of one sector) of the TARGET state.
+`evecs` has shape `(H_dim, n_states, n_U)` and `energies` `(n_states, n_U)` (the Julia
+layout of `data/evecs/<k>` and `data/energies/<k>`).
+
+`target_state` options:
+- `:lowest`: the lowest state of the sector at the smallest U, followed to the other U
+  values by maximum wavefunction overlap (`select_continuous_state_indices` with
+  `order = sortperm(U_values)`). This is the ground state of the sector, or, in a
+  sector that does not contain the global ground state, the lowest excitation with that
+  total momentum.
+- `:min_abs_energy`: at every U independently, the stored state with the smallest
+  |E - sigma| among the states with |E - sigma| > `zero_mode_tol` (sigma = 0: the
+  eigenvalue of smallest magnitude, a highly excited mid-spectrum state). Use with files
+  written by the ED pipeline's `--sigma` option.
+  `zero_mode_tol` (default 1e-8) skips EXACT zero modes (|E - sigma| ≤ zero_mode_tol).
+  For the Hubbard model at sigma = 0 these exist (e.g. 4x3 (4,4): 2 in sector q=(0,0) at
+  U = 0.25), are degenerate (so a fidelity target among them is not unique) and do not
+  depend on generic many-body mixing; the default therefore targets the closest
+  non-zero-mode state. `zero_mode_tol = 0` (or negative) includes them.
 """
-function get_slater_ground_state_jld2(data::Dict, sector::Int; custom_ref=true)
+function target_state_indices(evecs::AbstractArray{<:Any,3}, energies::AbstractMatrix, U_values;
+    target_state::Symbol=:lowest, sigma::Real=0.0, zero_mode_tol::Real=1e-8)
+    if target_state === :lowest
+        return select_continuous_state_indices(evecs, energies; order=sortperm(U_values))
+    elseif target_state === :min_abs_energy
+        return map(axes(energies, 2)) do u
+            dist = abs.(view(energies, :, u) .- sigma)
+            allowed = findall(>(zero_mode_tol), dist)
+            isempty(allowed) && error("U index $u: all $(length(dist)) stored states have |E - sigma| ≤ " *
+                                      "zero_mode_tol=$zero_mode_tol; store more states (larger m) or lower zero_mode_tol.")
+            allowed[argmin(dist[allowed])]
+        end
+    else
+        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy.")
+    end
+end
+
+"""
+    weak_reference_state(evecs, energies, U_values, state_idx; reference_target=:weak_ground_state,
+                         eig_target="lowest") -> Vector
+
+The weak-coupling eigenstate whose dominant Slater determinant becomes the reference
+(`reference_slater_index`). "Weak coupling" is the smallest U stored in the file,
+`iw = argmin(U_values)`.
+
+`reference_target` options:
+- `:weak_ground_state`: the lowest stored state of the sector at `iw`, i.e. the ground
+  state of the weakly interacting Hamiltonian in this sector. Requires a file that stores
+  the lowest eigenpairs (`eig_target == "lowest"`); a `"closest_to_sigma"` file does not
+  contain it and this raises an error.
+- `:weak_connected`: the target state's own member at `iw`, `evecs[:, state_idx[iw], iw]`,
+  where `state_idx` comes from `target_state_indices`. For `target_state=:lowest` this
+  is the state at weak coupling that the target is followed from by continuity, and it
+  equals the `:weak_ground_state` choice. For `target_state=:min_abs_energy` it is the
+  smallest-|E - sigma| eigenstate at weak coupling.
+"""
+function weak_reference_state(evecs::AbstractArray{<:Any,3}, energies::AbstractMatrix, U_values,
+    state_idx::AbstractVector{<:Integer}; reference_target::Symbol=:weak_ground_state,
+    eig_target::AbstractString="lowest")
+    iw = argmin(U_values)
+    if reference_target === :weak_ground_state
+        eig_target == "lowest" ||
+            error("reference_target=:weak_ground_state needs the lowest state of the sector, " *
+                  "but this file stores the eigenpairs closest to sigma (eig_target=$eig_target). " *
+                  "Use reference_target=:weak_connected.")
+        return evecs[:, argmin(view(energies, :, iw)), iw]
+    elseif reference_target === :weak_connected
+        return evecs[:, state_idx[iw], iw]
+    else
+        error("Unknown reference_target=$(repr(reference_target)); valid options are " *
+              ":weak_ground_state, :weak_connected.")
+    end
+end
+
+"""
+    get_slater_ground_state(data, sector::Int; custom_ref=true, verbose=true,
+                            reference_target=:weak_ground_state, target_state=:lowest) -> Int
+
+1-based basis index of the reference Slater determinant for momentum sector `sector`:
+`reference_slater_index(weak_reference_state(...))`, the Slater determinant with the
+largest weight in the chosen weak-coupling state (see `weak_reference_state` for
+`reference_target` and `target_state_indices` for `target_state`). With the defaults this
+is the dominant Slater determinant of the sector's weakly interacting ground state.
+
+`custom_ref`: an integer (or integer string) is returned unchanged as the index; any
+other value (`true`, `"slater"`) means "compute it".
+
+Supports open HDF5 files and JLD2 data dictionaries. A JLD2 dictionary stores only the
+lowest state of each sector per U, so there both `reference_target` choices give the
+same state, and only `target_state=:lowest` is accepted.
+"""
+function get_slater_ground_state(data, sector::Int; custom_ref=true, verbose=true,
+    reference_target::Symbol=:weak_ground_state, target_state::Symbol=:lowest, zero_mode_tol::Real=1e-8)
     parsed = parse_custom_ref(custom_ref)
     !isnothing(parsed) && return parsed
 
-    meta_data = data["meta_data"]
-    sites_list = meta_data["sites"]
-    clean_coord(c) = Coordinate(c.coordinates...)
-    L = if isa(sites_list, AbstractString)
-        parsed_dim = parse_lattice_dimension(sites_list)
-        if !isnothing(parsed_dim)
-            parsed_dim
-        else
-            error("Could not parse lattice dimensions from sites string: '$sites_list'")
-        end
-    else
-        [maximum(clean_coord(c).coordinates[a] for c in sites_list) for a in 1:length(clean_coord(sites_list[1]).coordinates)]
-    end
-
-    indexer = data["indexer"]
-    idxr = indexer isa Vector ? indexer[sector] : indexer
-    H_dim = length(idxr.inv_comb_dict)
-
-    all_full_eig_vecs = data["all_full_eig_vecs"]
-    target_vecs = all_full_eig_vecs[sector]
-    state_prob = (size(target_vecs, 1) == H_dim) ? abs.(target_vecs[:, 1]) : abs.(target_vecs[1, :])
-
-    single_spin_energies = compute_single_spin_energies(L)
-
-    return find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
-        up_set_raw, dn_set_raw = idxr.inv_comb_dict[idx]
-        E_up = sum(energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in up_set_raw)
-        E_dn = sum(energies[(clean_coord(c).coordinates[2]-1)*L[1]+clean_coord(c).coordinates[1]] for c in dn_set_raw)
-        return E_up + E_dn
-    end)
-end
-
-"""
-    get_slater_ground_state_h5(data, sector::Int; custom_ref=true)
-
-Find the index corresponding to a single Slater determinant ground state of the tight-binding
-model for the given momentum sector in an open HDF5 file object.
-"""
-function get_slater_ground_state_h5(data, sector::Int; custom_ref=true, verbose=true)
-    parsed = parse_custom_ref(custom_ref)
-    !isnothing(parsed) && return parsed
-
-    verbose && println("Computing slater ground state for sector $sector")
-
-    L = read(data, "metadata/Lvec")
-    state_prob = abs.(read(data, "data/evecs/$sector")[:, 1, 1])
-
-    labels_path = haskey(data, "metadata/basis_labels/$sector") ? "metadata/basis_labels/$sector" : "metadata/slater_labels/$sector"
-    separate_spins_stored = (read(data, labels_path) isa Dict)
-
-    if !separate_spins_stored
-        slater_labels = read(data, labels_path)
-        H_dim = size(slater_labels, 2)
-    else
-        slater_labels_up = read(data, "$labels_path/up")
-        slater_labels_down = read(data, "$labels_path/dn")
-        H_dim = size(slater_labels_up, 2)
-    end
-
-    single_spin_energies = if haskey(data, "metadata/kvecs")
-        kvecs = read(data, "metadata/kvecs")
-        [-2.0 * sum(cos(2π * kvecs[a, o+1] / L[a]) for a in 1:length(L)) for o in 0:(size(kvecs, 2)-1)]
-    else
-        compute_single_spin_energies(L; ordering=:row_major)
-    end
-
-    idx = find_best_slater_index(single_spin_energies, state_prob, H_dim, (idx, energies) -> begin
-        if !separate_spins_stored
-            if slater_labels[1] isa UInt
-                E_up = sum(Float64.(digits(slater_labels[1, idx], base=2, pad=prod(L))) .* energies)
-                E_dn = sum(Float64.(digits(slater_labels[2, idx], base=2, pad=prod(L))) .* energies)
-            else
-                E_up = sum(energies[k+1] for k in slater_labels[:, idx, 1])
-                E_dn = sum(energies[k+1] for k in slater_labels[:, idx, 2])
-            end
-        else
-            E_up = sum(energies[k+1] for k in slater_labels_up[:, idx])
-            E_dn = sum(energies[k+1] for k in slater_labels_down[:, idx])
-        end
-        return E_up + E_dn
-    end)
-
-    verbose && println("best slater ground state: $idx")
-    return idx
-end
-
-function get_slater_ground_state(data, sector::Int; custom_ref=true, verbose=true)
     if data isa Dict
-        return get_slater_ground_state_jld2(data, sector; custom_ref=custom_ref)
+        target_state === :lowest ||
+            error("JLD2 ED data stores only the lowest state per sector; target_state=$(repr(target_state)) is unavailable.")
+        reference_target in (:weak_ground_state, :weak_connected) ||
+            error("Unknown reference_target=$(repr(reference_target)).")
+        U_values = Float64.(data["meta_data"]["U_values"])
+        idxr = data["indexer"] isa Vector ? data["indexer"][sector] : data["indexer"]
+        H_dim = length(idxr.inv_comb_dict)
+        vecs = data["all_full_eig_vecs"][sector]
+        iw = argmin(U_values)
+        weak_state = size(vecs, 1) == H_dim ? vecs[:, iw] : vecs[iw, :]
     else
-        return get_slater_ground_state_h5(data, sector; custom_ref=custom_ref, verbose=verbose)
+        U_values = Float64.(read(data, "data/uvec"))
+        energies = real.(read(data, "data/energies/$sector"))   # (n_states, n_U)
+        eig_target, sigma = read_eig_target(data)
+        if reference_target === :weak_ground_state
+            # Only one vector is needed: read just that slice of the (possibly large) dataset.
+            iw = argmin(U_values)
+            eig_target == "lowest" ||
+                error("reference_target=:weak_ground_state needs the lowest state of the sector, " *
+                      "but this file stores the eigenpairs closest to sigma. Use reference_target=:weak_connected.")
+            weak_state = data["data/evecs/$sector"][:, argmin(view(energies, :, iw)), iw]
+        else
+            evecs = read(data, "data/evecs/$sector")
+            state_idx = target_state_indices(evecs, energies, U_values; target_state=target_state, sigma=sigma,
+                zero_mode_tol=zero_mode_tol)
+            weak_state = weak_reference_state(evecs, energies, U_values, state_idx;
+                reference_target=reference_target, eig_target=eig_target)
+        end
     end
+
+    idx = reference_slater_index(weak_state)
+    verbose && println("Reference Slater determinant for sector $sector ($reference_target): index $idx, " *
+                       "weight |c|^2 = $(abs2(weak_state[idx]) / sum(abs2, weak_state))")
+    return idx
 end
 
 """
@@ -666,12 +687,16 @@ Load exact diagonalization (ED) data from HDF5 files in the specified `folder`.
 # Keyword Arguments (via `kwargs...`)
 - `omit_indexer::Bool=false`: If true, do not construct or return a `CombinationIndexer`.
 - `sign_convention::Symbol=:spin_first`: Jordan-Wigner sign convention (`:spin_first` or `:coordinate_first`).
-- `use_slater_reference::Bool=true`: If true, prepend a pure Slater determinant reference state as the first row of `target_vecs`.
+- `use_slater_reference::Bool=true`: If true, prepend a pure Slater determinant reference state as the first row of `target_vecs`. An integer (or integer string) uses that 1-based basis index as the reference instead of computing it.
 - `su2_symmetry::Bool=false`: If true, filter momentum sectors to only those that possess a Slater ground state with doubly occupied sites (SU(2) singlet).
+- `sector::Union{Nothing,Int}=nothing`: Flat momentum-sector key (the `<k>` of `data/energies/<k>`, row-major `k = q_x*L_y + q_y`) to load. `nothing` chooses it automatically: for `target_state=:lowest` the sector holding the ground state at the most U values (`find_best_energy_sector`); for `:min_abs_energy` the sector holding the smallest |E - sigma| at the most U values. Pass a non-ground-state sector with `target_state=:lowest` to target the lowest excitation of that momentum (a slightly excited state).
+- `target_state::Symbol=:lowest`: Which stored state of the sector is the target at each U; `:lowest` or `:min_abs_energy`, see `target_state_indices`. `:lowest` requires a file with `eig_target == "lowest"`, `:min_abs_energy` one with `eig_target == "closest_to_sigma"`.
+- `reference_target::Symbol=:weak_ground_state`: Which weak-coupling state's dominant Slater determinant is the reference; `:weak_ground_state` or `:weak_connected`, see `weak_reference_state`.
+- `zero_mode_tol::Real=1e-8`: For `target_state=:min_abs_energy`, states with |E - sigma| ≤ zero_mode_tol (exact, degenerate zero modes) are never targets; ≤ 0 includes them. See `target_state_indices`.
 
 # Returns
 - `U_values::Vector{Float64}`: List of interaction strength values.
-- `target_vecs::Matrix{ComplexF64}`: Eigenvectors for the selected momentum sector (optionally with the reference state prepended at row 1).
+- `target_vecs::Matrix{ComplexF64}`: Target eigenvectors for the selected momentum sector, one row per U (optionally with the reference state prepended at row 1).
 - `indexer::Union{CombinationIndexer, Nothing}`: Subspace indexer mapping states to indices.
 - `precomputed_structures::Dict`: Placeholder for precomputed structures.
 - `N::Tuple{Int, Int}`: Electron counts (nup, ndown).
@@ -683,6 +708,14 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
     omit_indexer = get(kwargs, :omit_indexer, false)
     use_slater_reference = get(kwargs, :use_slater_reference, true)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
+    sector_request = get(kwargs, :sector, nothing)
+    target_state = Symbol(get(kwargs, :target_state, :lowest))
+    reference_target = Symbol(get(kwargs, :reference_target, :weak_ground_state))
+    zero_mode_tol = Float64(get(kwargs, :zero_mode_tol, 1e-8))
+    target_state in (:lowest, :min_abs_energy) ||
+        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy.")
+    reference_target in (:weak_ground_state, :weak_connected) ||
+        error("Unknown reference_target=$(repr(reference_target)); valid options are :weak_ground_state, :weak_connected.")
 
     valid_files = [f for f in readdir(folder) if occursin("HubbardED", f)]
     if isempty(valid_files)
@@ -726,8 +759,29 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
         kvecs = convert.(Int, read(data, "metadata/qvecs"))
 
         key_labels = [parse(Int, k) for k in keys(data["data/energies"])]
-        all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels]
-        k_min = find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry, verbose=verbose)
+        eig_target, eig_sigma = read_eig_target(data)
+        if target_state === :lowest && eig_target != "lowest"
+            error("target_state=:lowest needs the lowest eigenpairs, but $file_path stores the eigenpairs " *
+                  "closest to sigma=$eig_sigma (eig_target=$eig_target). Use target_state=:min_abs_energy.")
+        end
+        if target_state === :min_abs_energy && eig_target == "lowest"
+            error("target_state=:min_abs_energy needs a file of eigenpairs closest to sigma (ED pipeline --sigma), " *
+                  "but $file_path stores the lowest eigenpairs of each sector.")
+        end
+        k_min = if sector_request !== nothing
+            sector_request in key_labels ||
+                error("sector=$sector_request not stored in $file_path; available sectors: $(sort(key_labels))")
+            Int(sector_request)
+        elseif target_state === :lowest
+            all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels]
+            find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry, verbose=verbose)
+        else
+            # tally, per U, which sector holds the smallest |E - sigma| (zero modes excluded)
+            dist_k(k) = (d = abs.(real.(read(data, "data/energies/$(k)")) .- eig_sigma);
+                         d[d .<= zero_mode_tol] .= Inf; vec(minimum(d; dims=1)))
+            all_dist = [dist_k(k) for k in key_labels]
+            find_best_energy_sector(all_dist, U_values; labels=key_labels, verbose=verbose)
+        end
 
         if verbose
             println([
@@ -740,7 +794,12 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
         evecs_dataset = read(data, "data/evecs/$(k_min)")
         H_dim = size(evecs_dataset, 1)
         energies_k_min = real.(read(data, "data/energies/$(k_min)"))
-        state_idx = select_continuous_state_indices(evecs_dataset, energies_k_min; order=sortperm(U_values))
+        state_idx = target_state_indices(evecs_dataset, energies_k_min, U_values; target_state=target_state,
+            sigma=eig_sigma, zero_mode_tol=zero_mode_tol)
+        if verbose
+            println("Sector $k_min, target_state=$target_state: target energies per U = ",
+                    [energies_k_min[state_idx[u], u] for u in eachindex(U_values)])
+        end
         raw_evecs = reduce(hcat, evecs_dataset[:, state_idx[u], u] for u in eachindex(U_values)) # shape (H_dim, n_U)
         for u in 1:size(raw_evecs, 2)
             n = norm(raw_evecs[:, u])
@@ -752,9 +811,16 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
 
         use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
         if use_slater_ref
-            slater_index = get_slater_ground_state(data, k_min; custom_ref=use_slater_reference, verbose=verbose)
-            if slater_index == -1
-                error("No Slater ground state could be found in sector $k_min.")
+            parsed_ref = parse_custom_ref(use_slater_reference)
+            slater_index = if !isnothing(parsed_ref)
+                parsed_ref
+            else
+                weak_state = weak_reference_state(evecs_dataset, energies_k_min, U_values, state_idx;
+                    reference_target=reference_target, eig_target=eig_target)
+                idx = reference_slater_index(weak_state)
+                verbose && println("Reference Slater determinant ($reference_target): index $idx, weight |c|^2 = ",
+                                   abs2(weak_state[idx]) / sum(abs2, weak_state))
+                idx
             end
             reference_state = zeros(ComplexF64, H_dim)
             reference_state[slater_index] = 1.0
@@ -769,7 +835,9 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
             return U_values, target_vecs, nothing, Dict(), N, spin_conserved, use_symmetry, native_sign, Lvec, order_native
         end
 
-        selected_k_idx = findall(key_labels .== k_min)[1]
+        # qvecs columns follow the NUMERIC sector order, while keys(data["data/energies"]) is
+        # lexicographic ("0","1","10","11","2",...): index by position in the sorted keys.
+        selected_k_idx = findfirst(==(k_min), sort(key_labels))
         k_sector = Tuple(kvecs[:, selected_k_idx] .+ 1)
 
         lattice = Square(tuple(Lvec...), Periodic())
@@ -819,6 +887,12 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     use_slater_reference = get(kwargs, :use_slater_reference, false)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
     omit_indexer = get(kwargs, :omit_indexer, false)
+    sector_request = get(kwargs, :sector, nothing)
+    # JLD2 files store only the lowest state per sector, so only the defaults are possible
+    Symbol(get(kwargs, :target_state, :lowest)) === :lowest ||
+        error("JLD2 ED data stores only the lowest state per sector; target_state must be :lowest.")
+    Symbol(get(kwargs, :reference_target, :weak_ground_state)) in (:weak_ground_state, :weak_connected) ||
+        error("Unknown reference_target; valid options are :weak_ground_state, :weak_connected.")
 
     U_values = Float64.(meta_data["U_values"])
     all_full_eig_vecs = dic["all_full_eig_vecs"]
@@ -837,8 +911,13 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     spin_conserved = !isa(meta_data["electron count"], Number) # True if tuple (N_up, N_down)
     use_symmetry = false
 
-    # Find lowest energy sector 
-    k_min = find_best_energy_sector(all_E, U_values; verbose=verbose, data=dic, su2_symmetry=su2_symmetry)
+    # Find lowest energy sector (or use the requested one; JLD2 sectors are 1-based list indices)
+    k_min = if sector_request !== nothing
+        1 <= sector_request <= length(all_E) || error("sector=$sector_request out of range 1:$(length(all_E))")
+        Int(sector_request)
+    else
+        find_best_energy_sector(all_E, U_values; verbose=verbose, data=dic, su2_symmetry=su2_symmetry)
+    end
 
     # Select the eigenvectors for this sector
     target_vecs = all_full_eig_vecs[k_min]
@@ -868,9 +947,6 @@ function load_jld2_ED_data(file_path::String; verbose=false, kwargs...)
     use_slater_ref = (use_slater_reference !== false && use_slater_reference !== nothing)
     if use_slater_ref
         slater_index = get_slater_ground_state(dic, k_min; custom_ref=use_slater_reference, verbose=verbose)
-        if slater_index == -1
-            error("No Slater ground state could be found in sector $k_min.")
-        end
         reference_state = zeros(ComplexF64, H_dim)
         reference_state[slater_index] = 1.0
         target_vecs = vcat(transpose(reference_state), target_vecs) # shape (n_U + 1, H_dim)
@@ -999,8 +1075,9 @@ the basis will not be transformed to change conventions.
 
 # Keyword Arguments (via `kwargs...`)
 - `sign_convention::Symbol`: The desired Jordan-Wigner sign convention (`:spin_first` or `:coordinate_first`). Defaults to `:spin_first`.
-- `use_slater_reference::Bool`: Prepend a pure Slater determinant reference state as the first row of `target_vecs`. Defaults to `true` for HDF5 and `false` for JLD2.
+- `use_slater_reference::Bool`: Prepend a pure Slater determinant reference state as the first row of `target_vecs`. Defaults to `true` for HDF5 and `false` for JLD2. The reference is `reference_slater_index` (argmax of |c_i|^2) of the weak-coupling state chosen by `reference_target`.
 - `su2_symmetry::Bool=false`: If true, filter momentum sectors to only those that possess a Slater ground state with doubly occupied sites (SU(2) singlet).
+- `sector`, `target_state`, `reference_target`: which momentum sector and which of its stored states are the targets, and which weak-coupling state defines the reference Slater determinant; see `load_h5_ED_data`. Defaults (`nothing`, `:lowest`, `:weak_ground_state`) give the ground-state behaviour. JLD2 data accepts only `target_state=:lowest`.
 
 # Returns
 A tuple containing:
