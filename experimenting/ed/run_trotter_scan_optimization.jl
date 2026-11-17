@@ -43,7 +43,12 @@ Target state (ground vs excited states):
                      - "min_abs_energy": at every U, the stored state with the smallest |E - sigma| (sigma from the
                        file's metadata/eig_sigma; 0 = eigenvalue of smallest magnitude, a highly excited state).
                        Needs an ED file written with the ED pipeline's --sigma option (e.g. the
-                       "N=(4, 4)_4x3_excited_sigma0" folder); a lowest-state file has no such states.
+                       "N=(4, 4)_4x3_excited_sigma0" folder); a lowest-state file has no such states. The chosen
+                       state is a DIFFERENT eigenstate at every U (consecutive-U overlaps ~1e-10).
+                     - "tracked": the one state stored per U in a file from UCC_Hubbard's TrackHubbardED_XDiag.jl
+                       (e.g. "N=(4, 4)_4x3_excited_tracked"): an eigenstate followed continuously in U (seeded at the
+                       smallest U as the smallest non-zero |E - sigma| state; consecutive-U overlaps ~0.999).
+                       Use with --reference_target=weak_connected.
   --zero_mode_tol=<float> (optional, --target_state=min_abs_energy only): States with |E - sigma| <= this are
                      exact (degenerate) zero modes and are skipped; the target is the closest state above it.
                      Default: 1e-8. 0 includes the zero modes.
@@ -229,8 +234,8 @@ function parse_arguments(args::Vector{String})
             target_cli[:sector] = parse(Int, split(arg, "=", limit=2)[2])
         elseif startswith(arg, "--target_state=")
             val = Symbol(split(arg, "=", limit=2)[2])
-            val in (:lowest, :min_abs_energy) ||
-                error("Invalid --target_state option: '$val'. Valid options are: 'lowest', 'min_abs_energy'.")
+            val in (:lowest, :min_abs_energy, :tracked) ||
+                error("Invalid --target_state option: '$val'. Valid options are: 'lowest', 'min_abs_energy', 'tracked'.")
             target_cli[:target_state] = val
         elseif startswith(arg, "--zero_mode_tol=")
             target_cli[:zero_mode_tol] = parse(Float64, split(arg, "=", limit=2)[2])

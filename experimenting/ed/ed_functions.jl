@@ -281,11 +281,18 @@ layout of `data/evecs/<k>` and `data/energies/<k>`).
   U = 0.25), are degenerate (so a fidelity target among them is not unique) and do not
   depend on generic many-body mixing; the default therefore targets the closest
   non-zero-mode state. `zero_mode_tol = 0` (or negative) includes them.
+- `:tracked`: the single stored state at every U, for files written by UCC_Hubbard's
+  `TrackHubbardED_XDiag.jl` (`eig_target == "tracked"`): one eigenstate followed
+  continuously in U with substeps (overlap >= 0.95 per substep; consecutive grid-point
+  overlaps ~0.999), seeded at the smallest U as the smallest non-zero |E - sigma| state.
 """
 function target_state_indices(evecs::AbstractArray{<:Any,3}, energies::AbstractMatrix, U_values;
     target_state::Symbol=:lowest, sigma::Real=0.0, zero_mode_tol::Real=1e-8)
     if target_state === :lowest
         return select_continuous_state_indices(evecs, energies; order=sortperm(U_values))
+    elseif target_state === :tracked
+        size(energies, 1) == 1 || error("target_state=:tracked expects one stored state per U, found $(size(energies, 1))")
+        return ones(Int, size(energies, 2))
     elseif target_state === :min_abs_energy
         return map(axes(energies, 2)) do u
             dist = abs.(view(energies, :, u) .- sigma)
@@ -295,7 +302,7 @@ function target_state_indices(evecs::AbstractArray{<:Any,3}, energies::AbstractM
             allowed[argmin(dist[allowed])]
         end
     else
-        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy.")
+        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy, :tracked.")
     end
 end
 
@@ -690,7 +697,7 @@ Load exact diagonalization (ED) data from HDF5 files in the specified `folder`.
 - `use_slater_reference::Bool=true`: If true, prepend a pure Slater determinant reference state as the first row of `target_vecs`. An integer (or integer string) uses that 1-based basis index as the reference instead of computing it.
 - `su2_symmetry::Bool=false`: If true, filter momentum sectors to only those that possess a Slater ground state with doubly occupied sites (SU(2) singlet).
 - `sector::Union{Nothing,Int}=nothing`: Flat momentum-sector key (the `<k>` of `data/energies/<k>`, row-major `k = q_x*L_y + q_y`) to load. `nothing` chooses it automatically: for `target_state=:lowest` the sector holding the ground state at the most U values (`find_best_energy_sector`); for `:min_abs_energy` the sector holding the smallest |E - sigma| at the most U values. Pass a non-ground-state sector with `target_state=:lowest` to target the lowest excitation of that momentum (a slightly excited state).
-- `target_state::Symbol=:lowest`: Which stored state of the sector is the target at each U; `:lowest` or `:min_abs_energy`, see `target_state_indices`. `:lowest` requires a file with `eig_target == "lowest"`, `:min_abs_energy` one with `eig_target == "closest_to_sigma"`.
+- `target_state::Symbol=:lowest`: Which stored state of the sector is the target at each U; `:lowest`, `:min_abs_energy` or `:tracked`, see `target_state_indices`. `:tracked` requires (and is required by) files with `eig_target == "tracked"`. `:lowest` requires a file with `eig_target == "lowest"`, `:min_abs_energy` one with `eig_target == "closest_to_sigma"`.
 - `reference_target::Symbol=:weak_ground_state`: Which weak-coupling state's dominant Slater determinant is the reference; `:weak_ground_state` or `:weak_connected`, see `weak_reference_state`.
 - `zero_mode_tol::Real=1e-8`: For `target_state=:min_abs_energy`, states with |E - sigma| ≤ zero_mode_tol (exact, degenerate zero modes) are never targets; ≤ 0 includes them. See `target_state_indices`.
 
@@ -712,8 +719,8 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
     target_state = Symbol(get(kwargs, :target_state, :lowest))
     reference_target = Symbol(get(kwargs, :reference_target, :weak_ground_state))
     zero_mode_tol = Float64(get(kwargs, :zero_mode_tol, 1e-8))
-    target_state in (:lowest, :min_abs_energy) ||
-        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy.")
+    target_state in (:lowest, :min_abs_energy, :tracked) ||
+        error("Unknown target_state=$(repr(target_state)); valid options are :lowest, :min_abs_energy, :tracked.")
     reference_target in (:weak_ground_state, :weak_connected) ||
         error("Unknown reference_target=$(repr(reference_target)); valid options are :weak_ground_state, :weak_connected.")
 
@@ -764,14 +771,21 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
             error("target_state=:lowest needs the lowest eigenpairs, but $file_path stores the eigenpairs " *
                   "closest to sigma=$eig_sigma (eig_target=$eig_target). Use target_state=:min_abs_energy.")
         end
-        if target_state === :min_abs_energy && eig_target == "lowest"
+        if target_state === :min_abs_energy && eig_target != "closest_to_sigma"
             error("target_state=:min_abs_energy needs a file of eigenpairs closest to sigma (ED pipeline --sigma), " *
-                  "but $file_path stores the lowest eigenpairs of each sector.")
+                  "but $file_path has eig_target=$eig_target.")
+        end
+        if (target_state === :tracked) != (eig_target == "tracked")
+            error("target_state=:tracked must be used exactly with tracked files (TrackHubbardED_XDiag.jl); " *
+                  "$file_path has eig_target=$eig_target, target_state=$target_state.")
         end
         k_min = if sector_request !== nothing
             sector_request in key_labels ||
                 error("sector=$sector_request not stored in $file_path; available sectors: $(sort(key_labels))")
             Int(sector_request)
+        elseif target_state === :tracked
+            length(key_labels) == 1 || error("tracked file with several sectors: pass sector=")
+            key_labels[1]
         elseif target_state === :lowest
             all_E = [real.(read(data, "data/energies/$(k)"))[1, :] for k in key_labels]
             find_best_energy_sector(all_E, U_values; labels=key_labels, data=data, su2_symmetry=su2_symmetry, verbose=verbose)

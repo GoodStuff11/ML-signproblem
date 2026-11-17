@@ -26,6 +26,9 @@ Parts:
   E. "N=(4, 4)_4x3_excited_sigma0" (if present; --skip-excited skips it): target_state=
      :min_abs_energy picks the smallest non-zero |E| per U, zero-mode counts, residuals,
      weak_ground_state refused, weak_connected reference.
+  F. "N=(4, 4)_4x3_excited_tracked" (if present): target_state=:tracked, residuals,
+     consecutive-U overlaps of the targets, per-substep overlaps recorded during tracking,
+     seed = smallest non-zero |E| state at U=0.25, refusals of mismatched options.
 """
 
 using Lattices, LinearAlgebra, Combinatorics, SparseArrays, Statistics, Random, JLD2, HDF5, Zygote, Test
@@ -47,6 +50,7 @@ end
 const ROOT = "/home/jek354/research/data/new_data/data_h5_fixed"
 const F43 = joinpath(ROOT, "N=(4, 4)_4x3")
 const F43X = joinpath(ROOT, "N=(4, 4)_4x3_excited_sigma0")
+const F43T = joinpath(ROOT, "N=(4, 4)_4x3_excited_tracked")
 
 """OLD reference rule (removed from ed_functions.jl), for comparison only."""
 function old_reference_index(data, sector)
@@ -206,6 +210,47 @@ function (@main)(ARGS)
                 println("  zero_mode_tol=0: target energies at U=0.25, 4, 9.75: $Ez")
             else
                 println("\n=== E. skipped (excited-state folder not present yet) ===")
+            end
+
+            # ── F ───────────────────────────────────────────────────────────────────────
+            if isdir(F43T) && any(f -> startswith(f, "HubbardED"), readdir(F43T))
+                println("\n=== F. 4x3 (4,4) very excited, TRACKED (sector 0, seed = smallest non-zero |E| at U=0.25) ===")
+                ft = joinpath(F43T, only(filter(f -> startswith(f, "HubbardED"), readdir(F43T))))
+                h5open(ft) do d
+                    println("  file $(basename(ft)): eig_target=$(read(d, "metadata/eig_target")), sectors=$(keys(d["data/energies"])), " *
+                            "states per U=$(size(read(d, "data/energies/0"), 1))")
+                    mo = read(d, "data/track_min_overlap")
+                    println("  per-substep overlap during tracking: min $(minimum(mo)); substeps per grid interval: " *
+                            "$(Int.(extrema(read(d, "data/track_n_substeps")[2:end])))")
+                    @test read(d, "metadata/eig_target") == "tracked"
+                    @test minimum(mo) >= 0.95
+                end
+                @test_throws ErrorException load_ED_data(F43T; omit_indexer=true)                                  # :lowest refused
+                @test_throws ErrorException load_ED_data(F43T; omit_indexer=true, target_state=:min_abs_energy)    # refused
+                @test_throws ErrorException load_ED_data(F43T; omit_indexer=true, target_state=:tracked)           # weak_ground_state refused
+                @test_throws ErrorException load_ED_data(F43X; omit_indexer=true, sector=0, target_state=:tracked) # sigma0 file refused
+                Ut, svt, idxt, _, _, _, _, _ = load_ED_data(F43T; verbose=true, sign_convention=:spin_first, use_slater_reference=true,
+                    target_state=:tracked, reference_target=:weak_connected)
+                @test idxt.k == (1, 1)
+                Eht, Eit = momentum_hamiltonian_parts(idxt, Lvec, N)
+                Et = h5open(d -> vec(real.(read(d, "data/energies/0"))), ft)
+                check_targets("tracked targets", Ut, svt, Eht, Eit, vcat(NaN, Et); uidx=2:length(Ut))
+                cons = [abs(dot(svt[u, :], svt[u+1, :])) for u in 2:length(Ut)-1]
+                println("  consecutive-U overlaps of the loaded targets: min $(minimum(cons)) (U $(Ut[1+argmin(cons)])->$(Ut[2+argmin(cons)])), median $(median(cons))")
+                println("  target energies at U=0.25, 4, 8, 15: $(Et[[1, 16, 32, 60]])")
+                @test minimum(cons) > 0.9
+                # the seed is the smallest non-zero |E| state of the sigma=0 file at U=0.25
+                if isdir(F43X)
+                    Ex = h5open(d -> real.(read(d, "data/energies/0"))[:, 1], joinpath(F43X, only(filter(f -> startswith(f, "HubbardED"), readdir(F43X)))))
+                    dd = abs.(Ex); dd[dd .<= 1e-8] .= Inf
+                    println("  seed energy $(Et[1]) vs smallest non-zero |E| at U=0.25 in the sigma=0 file: $(Ex[argmin(dd)])")
+                    @test abs(Et[1] - Ex[argmin(dd)]) < 1e-9
+                end
+                reft = argmax(abs2.(svt[1, :]))
+                println("  reference (weak_connected) index $reft; weight in the U=0.25 target: $(abs2(svt[2, reft]))")
+                @test abs2(svt[2, reft]) ≈ maximum(abs2.(svt[2, :]))
+            else
+                println("\n=== F. skipped (tracked folder not present yet) ===")
             end
         end
     end
