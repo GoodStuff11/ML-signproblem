@@ -47,10 +47,20 @@ function permutation_parity(a::Vector)
 end
 
 """
-    find_best_energy_sector(all_E::Vector, U_values=nothing; labels=nothing, verbose=false, data=nothing, su2_symmetry=false, atol=1e-6)
+    find_best_energy_sector(all_E::Vector, U_values=nothing; labels=nothing, verbose=false, data=nothing, su2_symmetry=false, atol=1e-6, tiebreak_keys=nothing)
 
 Identify the momentum sector (or file) that most consistently yields the lowest ground state energy
 across interaction strength parameters (U_values).
+
+Rule: at every U, each candidate within `atol` of that U's lowest energy gets one tally; the
+candidate with the most tallies is chosen. Ties in the tally (e.g. the exactly degenerate
+mirror sectors q and -q, which tie at every U) are broken by the SMALLEST tie-break key: by
+default the integer label itself (the flat sector index k = q_x*L_y + q_y, i.e. the
+lexicographically smallest momentum), or the candidate's position when labels are absent or
+not integers; pass `tiebreak_keys` (one per candidate) to override, e.g. the sector index stored
+in each file when the candidates are files. Before 2026-11-17 ties were broken by Julia `Dict`
+iteration (hash) order, which is arbitrary: for 4x3 (5,4) it chose sector 2, q=(0,2), and the
+paper's 4x3 (5,4) data were produced in that sector (testing/check_paper_sector_54.jl).
 
 # Arguments
 - `all_E::Vector`: Vector of ground state energy vectors, one per candidate sector/file.
@@ -62,6 +72,7 @@ across interaction strength parameters (U_values).
 - `data`: HDF5 file handle or dictionary metadata, required if `su2_symmetry=true` or for tie-breaking.
 - `su2_symmetry::Bool=false`: If true, filter candidate sectors to those possessing doubly-occupied SU(2) singlet ground states.
 - `atol::Real=1e-6`: Absolute energy tolerance for tallying approximately degenerate ground states.
+- `tiebreak_keys=nothing`: Optional ordering keys (one per element of `all_E`); among candidates tied in the tally the one with the smallest key is chosen.
 
 # Returns
 - The label (or 1-based index) of the selected optimal sector/file.
@@ -73,7 +84,8 @@ function find_best_energy_sector(
     verbose=false,
     data=nothing,
     su2_symmetry=false,
-    atol=1e-6
+    atol=1e-6,
+    tiebreak_keys=nothing
 )
     # 1. Handle flexible argument ordering if data was passed as second positional argument
     if !(U_values isa AbstractVector) && U_values !== nothing && data === nothing
@@ -154,11 +166,20 @@ function find_best_energy_sector(
         end
     end
 
-    # 5. Select sector with maximum ground state tally (picks arbitrarily in case of ties)
+    # 5. Select sector with maximum ground state tally; ties -> smallest tie-break key
+    #    (see docstring). Dict iteration order is never used.
     if verbose
         println("k-value counts: $counts")
     end
-    k_min = argmax(counts)
+    key_of(i) = tiebreak_keys !== nothing ? tiebreak_keys[i] :
+                (labels !== nothing && labels[i] isa Integer) ? labels[i] : i
+    max_count = maximum(values(counts))
+    tied = [i for (i, c) in counts if c == max_count]
+    k_min = tied[argmin([key_of(i) for i in tied])]
+    if verbose && length(tied) > 1
+        println("tie between $(labels === nothing ? tied : labels[tied]) ($(max_count) tallies each); " *
+                "chose the smallest tie-break key")
+    end
 
     if verbose
         println("Selected ground state symmetry sector: $k_min")
@@ -752,7 +773,10 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
                 end
             end
         end
-        find_best_energy_sector(all_file_E, U_val_ref; labels=valid_files, verbose=verbose)
+        # ties between files -> smallest sector index stored in the file (not the filename string)
+        file_keys = [h5open(d -> minimum(parse(Int, k) for k in keys(d["data/energies"])), joinpath(folder, f), "r")
+                     for f in valid_files]
+        find_best_energy_sector(all_file_E, U_val_ref; labels=valid_files, verbose=verbose, tiebreak_keys=file_keys)
     else
         valid_files[1]
     end
