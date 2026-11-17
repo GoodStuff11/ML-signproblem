@@ -42,12 +42,13 @@ Target state (ground vs excited states):
                        overlap (the ground state when the sector is the ground-state sector).
                      - "min_abs_energy": at every U, the stored state with the smallest |E - sigma| (sigma from the
                        file's metadata/eig_sigma; 0 = eigenvalue of smallest magnitude, a highly excited state).
-                       Needs an ED file written with the ED pipeline's --sigma option (e.g. the
-                       "N=(4, 4)_4x3_excited_sigma0" folder); a lowest-state file has no such states. The chosen
+                       Needs an ED file written with the ED pipeline's --sigma option; a lowest-state
+                       file has no such states. The chosen
                        state is a DIFFERENT eigenstate at every U (consecutive-U overlaps ~1e-10).
                      - "tracked": the one state stored per U in a file from UCC_Hubbard's TrackHubbardED_XDiag.jl
-                       (e.g. "N=(4, 4)_4x3_excited_tracked"): an eigenstate followed continuously in U (seeded at the
-                       smallest U as the smallest non-zero |E - sigma| state; consecutive-U overlaps ~0.999).
+                       (e.g. "N=(5, 4)_4x3_excited_level4", the 4th excited level of the ground-state sector): an
+                       eigenstate followed continuously in U from its seed at the smallest U (--level n: the n-th
+                       distinct level above the ground level; --sigma s: the smallest non-zero |E - s| state).
                        Use with --reference_target=weak_connected.
   --zero_mode_tol=<float> (optional, --target_state=min_abs_energy only): States with |E - sigma| <= this are
                      exact (degenerate) zero modes and are skipped; the target is the closest state above it.
