@@ -730,7 +730,13 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
     end
 
     # Select the file with the lowest ground state energy across U values if multiple valid files exist
-    best_file = if length(valid_files) > 1
+    best_file = if sector_request !== nothing && length(valid_files) > 1
+        # requested sector: use the file that stores it (folders may hold one file per sector)
+        holders = [f for f in valid_files if h5open(d -> haskey(d, "data/energies/$(sector_request)"), joinpath(folder, f), "r")]
+        isempty(holders) && error("sector=$sector_request is not stored in any HubbardED file of $folder")
+        length(holders) == 1 || error("sector=$sector_request is stored in several files of $folder: $holders")
+        holders[1]
+    elseif length(valid_files) > 1
         all_file_E = Vector{Vector{Float64}}()
         local U_val_ref = nothing
         for f in valid_files

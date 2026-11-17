@@ -2,7 +2,7 @@
 #SBATCH --job-name=ED_4x3_54_tracked_sector2
 #SBATCH -p kim
 #SBATCH --time=7-00:00:00
-#SBATCH --mem=64G
+#SBATCH --mem=256G   # 64G was OOM-killed in the first factorization (job 752267, peak 67 GB)
 #SBATCH --cpus-per-task=4
 #SBATCH --mail-type=NONE
 #SBATCH --output=/home/jek354/research/ML-signproblem/jobs/ED_4x3_54_tracked_sector2.out
