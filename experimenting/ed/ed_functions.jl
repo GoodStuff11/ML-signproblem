@@ -1,3 +1,4 @@
+import TOML
 using HDF5
 using LinearAlgebra
 
@@ -738,6 +739,13 @@ function load_h5_ED_data(folder; verbose=false, kwargs...)
     su2_symmetry = get(kwargs, :su2_symmetry, false)
     sector_request = get(kwargs, :sector, nothing)
     target_state = Symbol(get(kwargs, :target_state, :lowest))
+    # A folder may record the sector its existing results were trained in (degenerate ground-state
+    # sectors; see .agent_docs/ed_file_formats.md). It is the default unless sector= is given.
+    sector_record = joinpath(folder, "momentum_sector.toml")
+    if sector_request === nothing && target_state === :lowest && isfile(sector_record)
+        sector_request = Int(TOML.parsefile(sector_record)["sector"])
+        verbose && println("Using the recorded momentum sector $sector_request from $sector_record")
+    end
     reference_target = Symbol(get(kwargs, :reference_target, :weak_ground_state))
     zero_mode_tol = Float64(get(kwargs, :zero_mode_tol, 1e-8))
     target_state in (:lowest, :min_abs_energy, :tracked) ||

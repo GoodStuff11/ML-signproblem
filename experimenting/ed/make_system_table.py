@@ -49,7 +49,7 @@ file; paste replacement text there (line breaks inside a block are ignored).
 
 Outputs: system_table.csv, system_table.tex  (alongside this script)
 """
-import h5py, numpy as np, os, glob, csv, re
+import h5py, numpy as np, os, glob, csv, re, tomllib
 
 # =============================================================================
 # CAPTION AND FOOTNOTES -- paste replacement text straight into these blocks.
@@ -218,7 +218,7 @@ rows = []
 for sysdir in sorted(os.listdir(ROOT)):
     d = os.path.join(ROOT, sysdir)
     fs = sorted(glob.glob(os.path.join(d, "HubbardED_XDiag_*.h5"))) if os.path.isdir(d) else []
-    if not fs or sysdir in SKIP:
+    if not fs or sysdir in SKIP or "_excited" in sysdir:   # excited-state folders are not ground-state systems
         continue
 
     uvec = None; sec = {}; fileE = {}; Lvec = nu = nd = None
@@ -268,6 +268,15 @@ for sysdir in sorted(os.listdir(ROOT)):
         inf = [q for q in qs if sec[q]['file'] == best_files[0]]
         tied = inf if len(inf) == 1 else tally([sec[q]['E0'] for q in inf], inf)
     used = sorted(tied)[0]
+    # A folder may record the sector its saved results were trained in (momentum_sector.toml,
+    # read by ed_functions.load_h5_ED_data too); it overrides the smallest-index default.
+    rec = os.path.join(os.path.dirname(sec[used]['path']), "momentum_sector.toml")
+    if os.path.exists(rec):
+        with open(rec, "rb") as fh:
+            q_rec = tuple(int(x) for x in tomllib.load(fh)["q"])
+        match = [q for q in tied if tuple(int(x) for x in q) == q_rec]
+        assert match, f"{rec}: recorded q={q_rec} is not among the degenerate sectors {sorted(tied)}"
+        used = match[0]
 
     Ns = Lvec[0] * Lvec[1]
     sz = Fraction(nu - nd, 2)

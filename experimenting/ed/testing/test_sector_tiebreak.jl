@@ -4,12 +4,15 @@
 Checks the tie-break of `find_best_energy_sector` (ties in the per-U ground-state tally go to the
 smallest sector index) and lists, for every ground-state folder in data_h5_fixed, the sector the
 OLD rule (Dict hash order, reimplemented here exactly) and the NEW rule select, following the same
-two paths as `load_h5_ED_data` (one file with all sectors / one file per sector).
+two paths as `load_h5_ED_data` (one file with all sectors / one file per sector). Then, for every
+folder with a `momentum_sector.toml` record, a DEFAULT load_ED_data (no sector=) must land in the
+recorded sector and reproduce the saved paper loss at u_idx 31; a folder without a record
+(N=(4, 4)_4x4) must follow the smallest-index rule.
 
 Usage (from experimenting/ed):  julia --project=.. testing/test_sector_tiebreak.jl
 """
 
-using Lattices, LinearAlgebra, Combinatorics, SparseArrays, JLD2, HDF5, Test
+using Lattices, LinearAlgebra, Combinatorics, SparseArrays, JLD2, HDF5, Test, TOML
 include(joinpath(@__DIR__, "..", "data_path.jl"))
 include(joinpath(@__DIR__, "..", "logging.jl"))
 include(joinpath(@__DIR__, "..", "utility_functions.jl"))
@@ -82,10 +85,32 @@ function (@main)(ARGS)
             end
             println("\ndefault sector changes in: $(isempty(changed) ? "none" : changed)")
 
-            # end to end through the loader: 4x3 (5,4) now defaults to sector 1, q=(0,1)
-            r = load_h5_ED_data(joinpath(ROOT, "N=(5, 4)_4x3"); use_slater_reference=false)
-            println("load_h5_ED_data default for N=(5, 4)_4x3: indexer k = $(r[3].k) (1-based q+1)")
-            @test r[3].k == (1, 2)
+            # end to end: folders with momentum_sector.toml load their recorded sector by default, and the
+            # saved paper coefficients reproduce their saved loss through that DEFAULT load
+            println("\nrecorded folders, default load_ED_data (no sector=):")
+            for folder in sort(readdir(ROOT; join=true))
+                rec = joinpath(folder, "momentum_sector.toml")
+                isfile(rec) || continue
+                k = TOML.parsefile(rec)["sector"]
+                U, sv, idxr, _, _, _, _, _ = load_ED_data(folder; verbose=false, sign_convention=:spin_first, use_slater_reference=true)
+                Lvec = parse_lattice_dimension(folder); N = prod(Lvec)
+                f = joinpath(folder, "trotter_N=$(N)_ref_slater_antihermitian_u_31.jld2")
+                d = JLD2.load(f)["dict"]
+                basis = Trotter.get_basis_sector(idxr, Lvec, N)
+                gates = Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=false)
+                tau = Trotter.fgateToTauSector(gates, N, basis; antihermitian=true)
+                leg = Trotter.gate_keys(Trotter.enumerate_ferm_excitations(2, Lvec; conserve_mom=true, conserve_sz=true, include_diagonal=false, sort_gates=false))
+                p = Trotter.gate_permutation(leg, Trotter.gate_keys(gates))
+                L = Trotter.adjoint_loss(d["coefficients"], gates[p], tau[p], sv[1, :], sv[31, :], basis, N; num_exponentials=1, antihermitian=true)
+                Ls = d["metrics"]["loss"][end]
+                println("  $(basename(folder)): record sector $k, loaded q=$(idxr.k .- 1), u_idx=31 loss $(round(L, sigdigits=6)) vs saved $(round(Ls, sigdigits=6))")
+                @test idxr.k .- 1 == Tuple(TOML.parsefile(rec)["q"])
+                @test abs(L - Ls) < 1e-6
+            end
+            # a folder without a record still follows the smallest-index rule
+            r = load_h5_ED_data(joinpath(ROOT, "N=(4, 4)_4x4"); use_slater_reference=false)
+            println("  N=(4, 4)_4x4 (no record, tied sectors 0,2,8): loaded indexer k = $(r[3].k) (1-based q+1)")
+            @test r[3].k == (1, 1)
         end
     end
     return 0
