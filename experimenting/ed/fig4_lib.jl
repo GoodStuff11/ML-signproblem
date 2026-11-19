@@ -632,9 +632,10 @@ function load_trotter_opt_energies_and_overlaps(
         if !isempty(get(met, "energy", []))
             energies[u_i] = met["energy"][end]
         end
+        run_loss_type = Symbol(get(d, "loss_type", loss_type))
         if !isempty(get(met, "loss", []))
             loss_val = met["loss"][end]
-            if get(d, "loss_type", loss_type) == :overlap
+            if run_loss_type == :overlap
                 overlaps[u_i] = 1.0 - loss_val
                 if isnan(energies[u_i])
                     energies[u_i] = loss_val
@@ -643,8 +644,11 @@ function load_trotter_opt_energies_and_overlaps(
                 energies[u_i] = loss_val
             end
         end
-        if !isempty(get(met, "overlap", []))
-            overlaps[u_i] = met["overlap"][end]
+        # metrics["overlap"] is the INFIDELITY 1 - |<target|U|ref>|^2 (optimize_unitary, since
+        # 2026-08-31). Energy-loss runs append the final one; overlap-loss runs only hold the
+        # reference state's initial infidelity there, so it is not read for them.
+        if run_loss_type == :energy && !isempty(get(met, "overlap", []))
+            overlaps[u_i] = 1.0 - met["overlap"][end]
         end
     end
     return energies, overlaps
